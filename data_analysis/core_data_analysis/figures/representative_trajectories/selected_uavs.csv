@@ -1,0 +1,7 @@
+split,category,uav_id,history_length,target_quantile,target_length,matched_train_length,age_difference
+train,short,UAV_0079,166,0.1,166.0,,
+train,median,UAV_0021,220,0.5,220.5,,
+train,long,UAV_0081,347,0.9,351.5000000000004,,
+test,short,UAV_0183,168,,,166.0,2.0
+test,median,UAV_0187,218,,,220.0,-2.0
+test,long,UAV_0196,358,,,347.0,11.0
