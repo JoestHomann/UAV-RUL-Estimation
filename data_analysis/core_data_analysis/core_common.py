@@ -66,7 +66,13 @@ def make_parser(
 
 
 def selected_channels(args: argparse.Namespace) -> list[str]:
-    return list(dict.fromkeys(args.channels))
+    return sort_telemetry_channels(args.channels)
+
+
+def sort_telemetry_channels(channels: Sequence[str]) -> list[str]:
+    """Return unique telemetry names in numeric channel order."""
+    unique = dict.fromkeys(channels)
+    return sorted(unique, key=lambda channel: int(channel.rsplit("_", 1)[1]))
 
 
 def load_dataset(

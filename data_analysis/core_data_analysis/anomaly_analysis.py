@@ -23,6 +23,7 @@ from core_common import (
     save_figure,
     save_table,
     selected_channels,
+    sort_telemetry_channels,
     style_axis,
 )
 
@@ -472,10 +473,9 @@ def plot_anomalies(
     output_dir,
     dpi: int,
 ) -> object:
-    train_summary = summary.loc[summary["split"] == "train"].sort_values(
-        "robust_extreme_rows_percent"
-    )
-    channels = train_summary["channel"].tolist()
+    train_summary = summary.loc[summary["split"] == "train"]
+    channels = sort_telemetry_channels(train_summary["channel"].tolist())
+    train_summary = train_summary.set_index("channel").loc[channels].reset_index()
     y = np.arange(len(channels))
     figure, axes = plt.subplots(1, 4, figsize=(20, 10), constrained_layout=True)
     axes[0].barh(y, train_summary["robust_extreme_rows_percent"], color=DARK_BLUE)
@@ -490,6 +490,8 @@ def plot_anomalies(
     axes[2].set_yticks(y, channels)
     axes[2].set_title("Candidate persistent shifts")
     axes[2].set_xlabel("Training UAVs (%)")
+    for axis in axes[:3]:
+        axis.invert_yaxis()
 
     top = priority.groupby("split", group_keys=False).head(top_uavs).copy()
     prefixes = top["split"].map({"train": "Train", "test": "Test"})

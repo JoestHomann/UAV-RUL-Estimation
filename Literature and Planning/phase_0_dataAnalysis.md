@@ -3,7 +3,7 @@
 
 Based on Lecture Notes:
 
-![Machine learning pipeline](../data_review/broad_data_review/figures/machine_learning_pipeline/machine_learning_pipeline.png)
+![Machine learning pipeline](../data_analysis/broad_data_review/figures/machine_learning_pipeline/machine_learning_pipeline.png)
 
 This file talks about the bullet points 1 to 5. Bullet point to is ignored as the dataset already exists.
 
@@ -14,7 +14,7 @@ Complete a reproducible data and validation audit before model development begin
 
 ## Broad Data Review
 
-![Training data preview](../data_review/broad_data_review/figures/data_overview/training_data_preview.png)
+![Training data preview](../data_analysis/broad_data_review/figures/data_overview/training_data_preview.png)
 
 The input data (train.csv) consists of 31 columns, the uav_id, the flight cycle of the UAV, 28 telemetry values and the RUL. These telemetry values need to be analyzed to what extent they correlate with the RUL. The training is therefore based on these values and the training cycle number but before that unnecessary telemetry data should be removed from the dataset.
 
@@ -28,7 +28,7 @@ The output data on the other hand, so the value the model should predict is simp
 ### Cycle-wise fleet-level telemetry trend analysis
 To find out which telemetry data is useful for us we can plot each telemetry column over its flight cycle number and check how they evolve.
 
-![Cycle-wise median and mean telemetry trends](../data_review/broad_data_review/figures/telemetry_over_cycles/telemetry_overview.png)
+![Cycle-wise median and mean telemetry trends](../data_analysis/broad_data_review/figures/telemetry_over_cycles/telemetry_overview.png)
 
 This plot shows the median (blue) and the average value of each telemetry channel (light blue) over the number of flight cycles.
 Here we can see that telemetry_03, telemetry_08, telemetry_14, telemetry_17, telemetry_20 and telemetry_27 stay constant over all UAVs and cycles. Therefore these channels are likely to be not useful for training the model.
@@ -51,7 +51,7 @@ In other words, here we see how much the data points vary in general for each te
 - Text: observation count, standard deviation, and IQR (Interquartile Range, measures the spread of the middle 50% of the data)
 
 
-![Telemetry descriptive statistics](../data_review/broad_data_review/figures/descriptive_statistics/descriptive_statistics.png)
+![Telemetry descriptive statistics](../data_analysis/broad_data_review/figures/descriptive_statistics/descriptive_statistics.png)
 
 
 **Findings:**
@@ -76,7 +76,7 @@ $$
 
 The training-derived boundaries are then applied unchanged to both the training and test datasets. Red points are training extremes, orange points are test extremes, and the dashed lines show the lower and upper boundaries. Looking at the extreme readings over flight cycle helps distinguish isolated sensor spikes from sustained UAV-specific operating regimes.
 
-![Extreme telemetry readings by flight cycle](../data_review/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png)
+![Extreme telemetry readings by flight cycle](../data_analysis/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png)
 
 **Findings:**
 
@@ -105,7 +105,7 @@ The plot describes the shape of each telemetry distribution across all recorded 
     - Zero: effectively constant channel.
 
 
-![Row-level telemetry statistics](../data_review/broad_data_review/figures/row_level_statistics/row_level_statistics.png)
+![Row-level telemetry statistics](../data_analysis/broad_data_review/figures/row_level_statistics/row_level_statistics.png)
 
 **Findings:**
 - Several channels are asymmetric or affected by extreme values, especially telemetry_07, 16, 18, 23, and 25. -> **Robust scaling** 
@@ -122,7 +122,7 @@ The UAV-level analysis first averages each telemetry channel within a UAV and th
 - Black diamond: mean across the 100 UAVs
 - Isolated dots: UAVs whose average differs substantially from the fleet
 
-![UAV-level telemetry statistics](../data_review/broad_data_review/figures/uav_level_statistics/uav_level_statistics.png)
+![UAV-level telemetry statistics](../data_analysis/broad_data_review/figures/uav_level_statistics/uav_level_statistics.png)
 
 This plot tells us about the following things:
 - Between-UAV variation: A wide distribution means UAVs operate at different average levels -> **Potential context feature**
@@ -150,7 +150,7 @@ Telemetry statistics are compared across cycles 1–50, 51–100, 101–200, and
 - n below each band: number of contributing rows.
 - Each subplot has its own vertical scale.
 
-![Telemetry statistics by flight-cycle age band](../data_review/broad_data_review/figures/age_band_statistics/age_band_statistics.png)
+![Telemetry statistics by flight-cycle age band](../data_analysis/broad_data_review/figures/age_band_statistics/age_band_statistics.png)
 
 
 **Findings:**
@@ -167,7 +167,7 @@ Telemetry statistics are compared across cycles 1–50, 51–100, 101–200, and
 
 Train and test history-length distributions show how much information is available at prediction time. The difference between the two distributions should guide the selection of test-like validation cutoffs. So it tells us how we must construct validation and training examples. The central point is that the **model must learn to predict from incomplete histories**, not only from complete run-to-failure sequences.
 
-![Train and test UAV history-length distributions](../data_review/broad_data_review/figures/history_length_distributions/history_length_distributions.png)
+![Train and test UAV history-length distributions](../data_analysis/broad_data_review/figures/history_length_distributions/history_length_distributions.png)
 
 
 **Findings:**
@@ -201,7 +201,7 @@ Train and test history-length distributions show how much information is availab
 
 Histograms and box plots expose skewness, clusters, operating regimes, spikes, saturation, and outliers. They support transformation choices and the anomaly-handling policy.
 
-![Telemetry histograms and box plots](../data_review/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png)
+![Telemetry histograms and box plots](../data_analysis/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png)
 
 **Findings:**
 
@@ -220,7 +220,7 @@ The plot divides each channel’s total variation into two sources:
 - Dark blue: variation within the same UAV over time
 - Light blue: variation between different UAVs’ average levels
 
-![Within-UAV versus between-UAV telemetry variance](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png)
+![Within-UAV versus between-UAV telemetry variance](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png)
 
 **Findings:**
 - Within-UAV dominated: telemetry_02, 04, 05, 07, 09, 10, 11, 13, 15, 16, 19, 21, 22, 23, 24, 25, and 28 -> **Potential sequence features: current value, slope, rolling statistics, recent change, and baseline deviation**
@@ -246,7 +246,7 @@ Flatline analysis measures consecutive exactly equal readings within each UAV. L
 - Right, yellow: percentage of UAVs containing a flatline of at least five cycles.
 - Right, orange: percentage of all rows belonging to those flatlines.
 
-![Telemetry flatline duration and prevalence](../data_review/broad_data_review/figures/flatline_duration/flatline_duration.png)
+![Telemetry flatline duration and prevalence](../data_analysis/broad_data_review/figures/flatline_duration/flatline_duration.png)
 
 **Findings:**
 - Fully constant: telemetry_20 and 27 -> **100% of their rows are flatlined; remove them**
@@ -259,30 +259,30 @@ Flatline analysis measures consecutive exactly equal readings within each UAV. L
 
 ### 1. Channel removal
 
-- Effectively constant: `telemetry_03`, `08`, `14`, `17`, `20`, and `27` -> **Remove them from the model because they contain no meaningful predictive variation. Keep the automated constant checks as data-quality gates.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png); [Flatline duration](#flatline-duration), [flatline plot](../data_review/broad_data_review/figures/flatline_duration/flatline_duration.png))
+- Effectively constant: `telemetry_03`, `08`, `14`, `17`, `20`, and `27` -> **Remove them from the model because they contain no meaningful predictive variation. Keep the automated constant checks as data-quality gates.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png); [Flatline duration](#flatline-duration), [flatline plot](../data_analysis/broad_data_review/figures/flatline_duration/flatline_duration.png))
 
 ### 2. Feature roles and engineering
 
-- Age-linked candidates: increasing `telemetry_12`, `13`, `15`, `19`, `21`, and `22`; decreasing `telemetry_06`, `11`, `16`, `23`, `24`, `25`, `26`, and `28` -> **Prioritize them for degradation-oriented sequence features, subject to within-UAV and grouped-validation confirmation.** (Source: [Age-band statistics](#age-band-statistics), [age-band plot](../data_review/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
-- Within-UAV dominated: `telemetry_02`, `04`, `05`, `07`, `09`, `10`, `11`, `13`, `15`, `16`, `19`, `21`, `22`, `23`, `24`, `25`, and `28` -> **Test current value, slope, rolling statistics, recent change, and deviation from an early-life baseline.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png))
-- Mixed within/between variation: `telemetry_06` and `12` -> **Use both prefix-derived UAV baselines and temporal-change features.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png))
-- Between-UAV dominated: `telemetry_01`, `18`, and `26` -> **Treat primarily as context or baseline features and verify that they generalize to unseen UAVs.** (Source: [UAV-level statistics](#uav-level-statistics), [UAV-level plot](../data_review/broad_data_review/figures/uav_level_statistics/uav_level_statistics.png); [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png))
-- Discrete or regime-like: `telemetry_05`, `07`, `16`, and `18` -> **Investigate operating-state, level, transition-count, and dwell-time features rather than assuming continuous degradation.** (Source: [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_review/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Flatline duration](#flatline-duration), [flatline plot](../data_review/broad_data_review/figures/flatline_duration/flatline_duration.png))
-- Age-stable but nonconstant: `telemetry_01`, `02`, `04`, `05`, `09`, and `10` -> **Do not treat them as primary age-degradation indicators; retain them only if context features or grouped validation add value.** (Source: [Age-band statistics](#age-band-statistics), [age-band plot](../data_review/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
+- Age-linked candidates: increasing `telemetry_12`, `13`, `15`, `19`, `21`, and `22`; decreasing `telemetry_06`, `11`, `16`, `23`, `24`, `25`, `26`, and `28` -> **Prioritize them for degradation-oriented sequence features, subject to within-UAV and grouped-validation confirmation.** (Source: [Age-band statistics](#age-band-statistics), [age-band plot](../data_analysis/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
+- Within-UAV dominated: `telemetry_02`, `04`, `05`, `07`, `09`, `10`, `11`, `13`, `15`, `16`, `19`, `21`, `22`, `23`, `24`, `25`, and `28` -> **Test current value, slope, rolling statistics, recent change, and deviation from an early-life baseline.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png))
+- Mixed within/between variation: `telemetry_06` and `12` -> **Use both prefix-derived UAV baselines and temporal-change features.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png))
+- Between-UAV dominated: `telemetry_01`, `18`, and `26` -> **Treat primarily as context or baseline features and verify that they generalize to unseen UAVs.** (Source: [UAV-level statistics](#uav-level-statistics), [UAV-level plot](../data_analysis/broad_data_review/figures/uav_level_statistics/uav_level_statistics.png); [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png))
+- Discrete or regime-like: `telemetry_05`, `07`, `16`, and `18` -> **Investigate operating-state, level, transition-count, and dwell-time features rather than assuming continuous degradation.** (Source: [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_analysis/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Flatline duration](#flatline-duration), [flatline plot](../data_analysis/broad_data_review/figures/flatline_duration/flatline_duration.png))
+- Age-stable but nonconstant: `telemetry_01`, `02`, `04`, `05`, `09`, and `10` -> **Do not treat them as primary age-degradation indicators; retain them only if context features or grouped validation add value.** (Source: [Age-band statistics](#age-band-statistics), [age-band plot](../data_analysis/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
 
 ### 3. Scaling, transformations, and anomaly handling
 
-- Strongly different channel scales -> **Use robust scaling for linear, neural, distance-based, and similar scale-sensitive models; tree-based models do not require scaling.** (Source: [Descriptive statistics](#descriptive-statistics), [descriptive-statistics plot](../data_review/broad_data_review/figures/descriptive_statistics/descriptive_statistics.png))
-- Skewed continuous channels: `telemetry_15`, `21`, `23`, `24`, `25`, `26`, and `28` -> **Test robust scaling or Yeo-Johnson transformation for linear and neural models; retain the transformation only if grouped validation improves.** (Source: [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_review/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Row-level statistics](#row-level-statistics), [row-level plot](../data_review/broad_data_review/figures/row_level_statistics/row_level_statistics.png))
-- Mostly isolated extremes: `telemetry_04`, `10`, and `11` -> **Test individual-spike and synchronized-event flags instead of automatically removing the rows.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_review/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
-- Mostly sustained UAV-specific extremes: `telemetry_01`, `18`, and `26` -> **Test regime flags because these patterns are more consistent with context or calibration differences than isolated sensor spikes.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_review/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
-- Mixed extremes: `telemetry_24` -> **Do not clip or remove automatically; test separate low- and high-extreme flags if validation supports them.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_review/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
+- Strongly different channel scales -> **Use robust scaling for linear, neural, distance-based, and similar scale-sensitive models; tree-based models do not require scaling.** (Source: [Descriptive statistics](#descriptive-statistics), [descriptive-statistics plot](../data_analysis/broad_data_review/figures/descriptive_statistics/descriptive_statistics.png))
+- Skewed continuous channels: `telemetry_15`, `21`, `23`, `24`, `25`, `26`, and `28` -> **Test robust scaling or Yeo-Johnson transformation for linear and neural models; retain the transformation only if grouped validation improves.** (Source: [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_analysis/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Row-level statistics](#row-level-statistics), [row-level plot](../data_analysis/broad_data_review/figures/row_level_statistics/row_level_statistics.png))
+- Mostly isolated extremes: `telemetry_04`, `10`, and `11` -> **Test individual-spike and synchronized-event flags instead of automatically removing the rows.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_analysis/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
+- Mostly sustained UAV-specific extremes: `telemetry_01`, `18`, and `26` -> **Test regime flags because these patterns are more consistent with context or calibration differences than isolated sensor spikes.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_analysis/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
+- Mixed extremes: `telemetry_24` -> **Do not clip or remove automatically; test separate low- and high-extreme flags if validation supports them.** (Source: [Tukey's Range Test](#tukeys-range-test), [extreme-reading plot](../data_analysis/broad_data_review/figures/Tukey_extreme_readings_investigation/Tukey_extreme_readings_overview.png))
 - All anomaly boundaries, scalers, and transformations -> **Fit them using only the training portion of each validation fold.** (Source: [Descriptive statistics](#descriptive-statistics); [Tukey's Range Test](#tukeys-range-test))
 
 ### 4. Training and validation construction
 
-- Test histories are shorter than complete training histories, with 47% of test UAVs ending before cycle 145 -> **Train and validate on partial UAV prefixes, emphasizing cutoffs from cycles 38-144 and sampling from the observed test-length distribution.** (Source: [History-length distributions](#history-length-distributions), [history-length plot](../data_review/broad_data_review/figures/history_length_distributions/history_length_distributions.png))
-- History lengths vary from 145-525 cycles in train and 38-475 in test -> **Support variable-length inputs, give each UAV equal total weight, report metrics by cutoff band, and treat very long-cutoff results cautiously.** (Source: [History-length distributions](#history-length-distributions), [history-length plot](../data_review/broad_data_review/figures/history_length_distributions/history_length_distributions.png))
+- Test histories are shorter than complete training histories, with 47% of test UAVs ending before cycle 145 -> **Train and validate on partial UAV prefixes, emphasizing cutoffs from cycles 38-144 and sampling from the observed test-length distribution.** (Source: [History-length distributions](#history-length-distributions), [history-length plot](../data_analysis/broad_data_review/figures/history_length_distributions/history_length_distributions.png))
+- History lengths vary from 145-525 cycles in train and 38-475 in test -> **Support variable-length inputs, give each UAV equal total weight, report metrics by cutoff band, and treat very long-cutoff results cautiously.** (Source: [History-length distributions](#history-length-distributions), [history-length plot](../data_analysis/broad_data_review/figures/history_length_distributions/history_length_distributions.png))
 - UAV grouping -> **Split by `uav_id` before generating prefixes; keep every prefix from one UAV in the same fold.** (Source: [History-length distributions - general validation rules](#history-length-distributions))
 - Recommended starting design -> **Use five fixed UAV folds, a fixed number of cutoffs per training UAV (for example 20), and 20 locked test-like validation scenarios. Treat these numbers as configurable design choices.** (Source: [History-length distributions - general validation rules](#history-length-distributions))
 - Prefix leakage control -> **Build every feature from cycles available at the cutoff only; never use full-history length, final cycle, terminal lifetime, future telemetry, or other post-cutoff information.** (Source: [History-length distributions - general validation rules](#history-length-distributions))
@@ -290,9 +290,47 @@ Flatline analysis measures consecutive exactly equal readings within each UAV. L
 
 ### 5. Caveats and required validation
 
-- Late-cycle fleet trends and widening IQRs may partly reflect survivor or fleet-composition effects -> **Confirm apparent degradation using consistent within-UAV trends rather than fleet aggregates alone.** (Source: [Cycle-wise fleet-level telemetry trend analysis](#cycle-wise-fleet-level-telemetry-trend-analysis), [cycle-wise plot](../data_review/broad_data_review/figures/telemetry_over_cycles/telemetry_overview.png); [Age-band statistics](#age-band-statistics), [age-band plot](../data_review/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
-- Within-UAV variation may be degradation, noise, or operating-state change, while between-UAV variation may be useful context or unwanted identity -> **Use UAV-grouped ablation tests to decide which raw and engineered features generalize.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_review/broad_data_review/figures/within_between_variance/within_between_variance.png))
-- Skewness, extremes, flatlines, and operating regimes do not prove predictive value -> **Keep transformations, flags, and channels only when locked grouped validation improves RUL performance.** (Source: [Row-level statistics](#row-level-statistics), [row-level plot](../data_review/broad_data_review/figures/row_level_statistics/row_level_statistics.png); [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_review/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Flatline duration](#flatline-duration), [flatline plot](../data_review/broad_data_review/figures/flatline_duration/flatline_duration.png))
+- Late-cycle fleet trends and widening IQRs may partly reflect survivor or fleet-composition effects -> **Confirm apparent degradation using consistent within-UAV trends rather than fleet aggregates alone.** (Source: [Cycle-wise fleet-level telemetry trend analysis](#cycle-wise-fleet-level-telemetry-trend-analysis), [cycle-wise plot](../data_analysis/broad_data_review/figures/telemetry_over_cycles/telemetry_overview.png); [Age-band statistics](#age-band-statistics), [age-band plot](../data_analysis/broad_data_review/figures/age_band_statistics/age_band_statistics.png))
+- Within-UAV variation may be degradation, noise, or operating-state change, while between-UAV variation may be useful context or unwanted identity -> **Use UAV-grouped ablation tests to decide which raw and engineered features generalize.** (Source: [Within-UAV versus between-UAV variance](#within-uav-versus-between-uav-variance), [variance plot](../data_analysis/broad_data_review/figures/within_between_variance/within_between_variance.png))
+- Skewness, extremes, flatlines, and operating regimes do not prove predictive value -> **Keep transformations, flags, and channels only when locked grouped validation improves RUL performance.** (Source: [Row-level statistics](#row-level-statistics), [row-level plot](../data_analysis/broad_data_review/figures/row_level_statistics/row_level_statistics.png); [Histograms and box plots](#histograms-and-box-plots), [distribution plot](../data_analysis/broad_data_review/figures/histograms_boxplots/histograms_boxplots.png); [Flatline duration](#flatline-duration), [flatline plot](../data_analysis/broad_data_review/figures/flatline_duration/flatline_duration.png))
 
 
 ## Core Data Analysis
+
+As the previous chapters focused on a broad review of the data indicating the importance of certain channels and the removel of others, as well as showing that some channels include anomalies, we want to now focus actually verify and identify these.
+
+### Temporal and RUL relationships
+
+This analysis compares pooled correlations, age-controlled associations, within-UAV relationships, and the consistency of increasing or decreasing trends across UAVs.
+
+![Temporal and RUL telemetry evidence](../data_analysis/core_data_analysis/figures/temporal_rul/temporal_rul_summary.png)
+
+### Representative UAV trajectories
+
+Short-, median-, and long-history training UAVs are compared with test UAVs observed at similar ages. Values are expressed as robust Z-scores calculated from the training data so channels with different scales can be compared in one figure.
+
+![Representative UAV telemetry trajectories](../data_analysis/core_data_analysis/figures/representative_trajectories/representative_trajectories.png)
+
+### Feature redundancy
+
+Pearson and Spearman correlations are compared at row level and between UAV-level means. This reveals channel groups that may contain overlapping information and whether their relationships are temporal or primarily between UAVs.
+
+![Telemetry correlation and redundancy heatmaps](../data_analysis/core_data_analysis/figures/feature_redundancy/correlation_heatmaps.png)
+
+### Train/test drift
+
+Train and test telemetry distributions are compared across all rows, equally weighted UAV summaries, and test endpoints matched with training UAVs observed at the same flight cycle.
+
+![Train and test telemetry drift](../data_analysis/core_data_analysis/figures/train_test_drift/train_test_drift.png)
+
+### Anomaly diagnostics
+
+The anomaly overview combines robust extreme readings, large cycle-to-cycle jumps, candidate persistent shifts, and the highest-priority UAVs for manual review. These flags indicate observations requiring investigation, not rows that should automatically be removed.
+
+![Telemetry anomaly diagnostics](../data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png)
+
+### Initial channel classification
+
+The combined evidence is summarized as an initial screening classification covering removal, degradation, context, state or regime, anomaly, redundancy, and train/test drift indicators.
+
+![Initial telemetry channel classification](../data_analysis/core_data_analysis/figures/channel_classification/channel_classification.png)

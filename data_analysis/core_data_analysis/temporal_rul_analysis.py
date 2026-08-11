@@ -26,6 +26,7 @@ from core_common import (
     save_figure,
     save_table,
     selected_channels,
+    sort_telemetry_channels,
     style_axis,
 )
 
@@ -209,9 +210,8 @@ def calculate_endpoint_rolling_features(
 
 
 def plot_summary(summary: pd.DataFrame, output_dir, dpi: int) -> object:
-    plotted = summary.sort_values(
-        "median_within_spearman_rul", na_position="first"
-    ).reset_index(drop=True)
+    channel_order = sort_telemetry_channels(summary["channel"].tolist())
+    plotted = summary.set_index("channel").loc[channel_order].reset_index()
     y = np.arange(len(plotted))
     figure, axes = plt.subplots(1, 4, figsize=(19, 10), sharey=True, constrained_layout=True)
 
@@ -259,6 +259,7 @@ def plot_summary(summary: pd.DataFrame, output_dir, dpi: int) -> object:
         axis.axvline(0, color=GRAY, linewidth=0.8)
         style_axis(axis)
     axes[0].set_yticks(y, plotted["channel"])
+    axes[0].invert_yaxis()
     axes[0].set_xlabel("Correlation")
     axes[1].set_xlabel("Partial correlation")
     axes[2].set_xlabel("Correlation")

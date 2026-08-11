@@ -71,16 +71,14 @@ def main() -> None:
 
     if len(nonconstant) > 1:
         linkage = hierarchy.linkage(squareform(distance), method="average")
-        ordered_nonconstant = [nonconstant[index] for index in hierarchy.leaves_list(linkage)]
         cluster_ids = hierarchy.fcluster(
             linkage,
             t=1.0 - args.correlation_threshold,
             criterion="distance",
         )
     else:
-        ordered_nonconstant = nonconstant
         cluster_ids = np.ones(len(nonconstant), dtype=int)
-    order = ordered_nonconstant + constants
+    order = channels
 
     pair_records = []
     for left_index, channel_a in enumerate(nonconstant):
@@ -149,7 +147,7 @@ def main() -> None:
     colorbar.set_label("Correlation")
     figure.suptitle(
         "Telemetry redundancy at row and UAV-summary levels\n"
-        f"Ordering uses absolute Spearman structure; strong-pair threshold = {args.correlation_threshold:.2f}",
+        f"Channels are ordered 01-28; strong-pair threshold = {args.correlation_threshold:.2f}",
         fontsize=14,
     )
 

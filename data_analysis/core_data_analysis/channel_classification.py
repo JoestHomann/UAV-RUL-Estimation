@@ -21,6 +21,7 @@ from core_common import (
     save_figure,
     save_table,
     selected_channels,
+    sort_telemetry_channels,
 )
 
 
@@ -175,10 +176,8 @@ def plot_classification(table: pd.DataFrame, output_dir: Path, dpi: int) -> Path
         "Redundancy",
         "Drift warning",
     ]
-    plotted = table.sort_values(
-        ["removal_candidate", "degradation_candidate", "context_candidate", "channel"],
-        ascending=[False, False, False, True],
-    )
+    channel_order = sort_telemetry_channels(table["channel"].tolist())
+    plotted = table.set_index("channel").loc[channel_order].reset_index()
     matrix = plotted[flag_columns].astype(int).to_numpy()
     figure, axis = plt.subplots(figsize=(11, 10), constrained_layout=True)
     axis.imshow(

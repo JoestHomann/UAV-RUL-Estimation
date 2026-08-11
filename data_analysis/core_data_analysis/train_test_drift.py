@@ -19,6 +19,7 @@ from core_common import (
     save_figure,
     save_table,
     selected_channels,
+    sort_telemetry_channels,
     style_axis,
 )
 
@@ -214,10 +215,8 @@ def plot_drift(
 ) -> object:
     nonconstant = raw.loc[~raw["train_effectively_constant"], "channel"]
     matched = matched.loc[matched["channel"].isin(nonconstant)]
-    plotted = matched.sort_values(
-        "median_absolute_iqr_shift", ascending=True
-    ).reset_index(drop=True)
-    order = plotted["channel"].tolist()
+    order = sort_telemetry_channels(matched["channel"].tolist())
+    plotted = matched.set_index("channel").loc[order].reset_index()
     raw_indexed = raw.set_index("channel").loc[order]
     uav_indexed = uav.set_index("channel").loc[order]
     plotted = plotted.set_index("channel").loc[order]
@@ -245,6 +244,7 @@ def plot_drift(
     for axis in axes:
         style_axis(axis)
     axes[0].set_yticks(y, order)
+    axes[0].invert_yaxis()
     figure.suptitle(
         "Train/test telemetry drift\n"
         "Matched-age results compare each test endpoint with training UAVs observed at the same cycle",
