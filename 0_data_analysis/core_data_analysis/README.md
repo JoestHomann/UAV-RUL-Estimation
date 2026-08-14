@@ -7,11 +7,11 @@ suspicious UAV histories.
 Run the complete suite from the repository root:
 
 ```powershell
-py data_review\core_data_analysis\run_all.py
+py 0_data_analysis\core_data_analysis\run_all.py
 ```
 
 By default, results are written to
-`data_review/core_data_analysis/figures/<analysis-name>/`. Every quantitative
+`0_data_analysis/core_data_analysis/figures/<analysis-name>/`. Every quantitative
 plot has one or more companion CSV files so the conclusions do not depend on
 visual inspection alone.
 

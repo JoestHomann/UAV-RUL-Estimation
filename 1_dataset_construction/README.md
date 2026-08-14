@@ -1,11 +1,11 @@
-# Validation and feature engineering
+# Dataset construction
 
-This module converts the Phase 0 findings into a fixed, leakage-safe model-development contract.
+This workflow converts the Phase 0 findings into fixed, leakage-safe datasets and validation artifacts for model development.
 
 Run the complete workflow from the repository root:
 
 ```powershell
-py model_development\validation_and_feature_engineering\run_all.py
+py 1_dataset_construction\run_all.py
 ```
 
 Each numbered folder contains its own `artifacts/` directory. Generated data is ignored by Git, while the `.gitignore` and step README remain tracked.

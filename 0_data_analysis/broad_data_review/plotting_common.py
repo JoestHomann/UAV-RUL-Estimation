@@ -87,7 +87,7 @@ def make_parser(
         default=FIGURES_ROOT / output_subdirectory,
         help=(
             "Output directory "
-            f"(default: data_review/broad_data_review/figures/{output_subdirectory})."
+            f"(default: 0_data_analysis/broad_data_review/figures/{output_subdirectory})."
         ),
     )
     parser.add_argument(

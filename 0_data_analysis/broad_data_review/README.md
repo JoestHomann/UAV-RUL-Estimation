@@ -21,7 +21,7 @@ resolved from the script location, so the commands work from any directory.
 From the repository root, run a script with:
 
 ```powershell
-py data_review\broad_data_review\plot_descriptive_statistics.py
+py 0_data_analysis\broad_data_review\plot_descriptive_statistics.py
 ```
 
 The common options are `--train-csv`, `--output-dir`, `--channels`, and
@@ -34,7 +34,7 @@ The deeper temporal, redundancy, matched-age drift, and anomaly analyses are
 kept separately in `../core_data_analysis`. Run that suite with:
 
 ```powershell
-py data_review\core_data_analysis\run_all.py
+py 0_data_analysis\core_data_analysis\run_all.py
 ```
 
 See `../core_data_analysis/README.md` for its generated plots and CSV tables.

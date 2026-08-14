@@ -1,4 +1,4 @@
-"""Build and verify all Phase 1 validation and feature artifacts."""
+"""Build and verify all dataset-construction artifacts."""
 
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def main() -> None:
             str(args.train_csv),
         ]
     )
-    print(f"Phase 1 artifacts verified in numbered folders under {SCRIPT_DIR}")
+    print(f"Dataset-construction artifacts verified under {SCRIPT_DIR}")
 
 
 if __name__ == "__main__":

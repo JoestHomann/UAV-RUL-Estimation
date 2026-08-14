@@ -1,4 +1,4 @@
-"""Shared constants and structural checks for Phase 1."""
+"""Shared constants and structural checks for dataset construction."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPOSITORY_ROOT = SCRIPT_DIR.parents[1]
+REPOSITORY_ROOT = SCRIPT_DIR.parent
 DEFAULT_TRAIN_CSV = REPOSITORY_ROOT / "data" / "train.csv"
 DEFAULT_TEST_CSV = REPOSITORY_ROOT / "data" / "test.csv"
 STEP_1_ARTIFACT_DIR = SCRIPT_DIR / "1_structural_data_audit" / "artifacts"
