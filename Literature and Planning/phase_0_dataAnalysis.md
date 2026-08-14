@@ -563,6 +563,8 @@ This is an initial evidence-based classification, not the final feature selectio
 
 ### 1. Channel screening
 
+-> What information do the channels deliver?
+
 - Removal candidates: `telemetry_03`, `08`, `14`, `17`, `20`, and `27`. ([Initial channel classification](#initial-channel-classification), [classification plot](../data_analysis/core_data_analysis/figures/channel_classification/channel_classification.png))
 - Degradation candidates: `telemetry_07`, `13`, `15`, `16`, `19`, `21`, `22`, `23`, `25`, and `28`. ([Initial channel classification](#initial-channel-classification), [classification plot](../data_analysis/core_data_analysis/figures/channel_classification/channel_classification.png))
 - Operating-context candidates: `telemetry_01`, `06`, `18`, and `26`. ([Initial channel classification](#initial-channel-classification), [classification plot](../data_analysis/core_data_analysis/figures/channel_classification/channel_classification.png))
@@ -570,6 +572,8 @@ This is an initial evidence-based classification, not the final feature selectio
 - No clear primary role at the current thresholds: `telemetry_02`, `04`, `05`, `09`, `10`, `11`, `12`, and `24`. ([Initial channel classification](#initial-channel-classification), [classification plot](../data_analysis/core_data_analysis/figures/channel_classification/channel_classification.png))
 
 ### 2. Temporal evidence
+
+-> Further analysis of what information the channels actually deliver.
 
 - Increasing in every UAV: `telemetry_07`, `13`, `19`, `21`, and `22`; `telemetry_15` increases in `76%` of UAVs. ([Temporal and RUL relationships](#temporal-and-rul-relationships), [temporal/RUL plot](../data_analysis/core_data_analysis/figures/temporal_rul/temporal_rul_summary.png))
 - Decreasing in every UAV: `telemetry_16`, `25`, and `28`; `telemetry_23` decreases in `84%` of UAVs. ([Temporal and RUL relationships](#temporal-and-rul-relationships), [temporal/RUL plot](../data_analysis/core_data_analysis/figures/temporal_rul/temporal_rul_summary.png))
@@ -580,11 +584,15 @@ This is an initial evidence-based classification, not the final feature selectio
 
 ### 3. Feature redundancy
 
+-> Potentially remove half of them but check through experiments.
+
 - Redundancy groups: `telemetry_19/21`, `15/23`, `13/16/22/25/28`, and `06/07/11/12/24`. ([Feature redundancy](#feature-redundancy), [correlation heatmaps](../data_analysis/core_data_analysis/figures/feature_redundancy/correlation_heatmaps.png))
 - Strongest UAV-level pair: `telemetry_19/21` (`r ≈ 1.00`); strong row-level correlation also remains (`r ≈ 0.96`). ([Feature redundancy](#feature-redundancy), [correlation heatmaps](../data_analysis/core_data_analysis/figures/feature_redundancy/correlation_heatmaps.png))
 - No correlation above `0.90`: `telemetry_01`, `02`, `04`, `05`, `09`, `10`, `18`, and `26`. ([Feature redundancy](#feature-redundancy), [correlation heatmaps](../data_analysis/core_data_analysis/figures/feature_redundancy/correlation_heatmaps.png))
 
 ### 4. Train/test compatibility
+
+-> Shows how good generalization will work (probably).
 
 - All age-matched median shifts are below `0.27` training IQRs; the largest are `telemetry_28` (`-0.264`), `07` (`+0.250`), and `21` (`+0.233`). ([Train/test drift](#traintest-drift), [drift plot](../data_analysis/core_data_analysis/figures/train_test_drift/train_test_drift.png))
 - Largest same-age outside-range rates: `telemetry_05` (`16%`), `22` (`9%`), and `07/21` (`6%`). ([Train/test drift](#traintest-drift), [drift plot](../data_analysis/core_data_analysis/figures/train_test_drift/train_test_drift.png))
@@ -592,6 +600,8 @@ This is an initial evidence-based classification, not the final feature selectio
 - Longest-age comparisons contain as few as four training UAVs. ([Train/test drift](#traintest-drift), [drift plot](../data_analysis/core_data_analysis/figures/train_test_drift/train_test_drift.png))
 
 ### 5. Anomaly review
+
+-> In this dataset, most “anomalies” appear more likely to be operating regimes, UAV-specific baselines, state transitions, or genuine degradation events than simple corrupt measurements. Therefore, the current evidence does not justify deleting rows or UAVs.
 
 - Highest robust-extreme rates: `telemetry_26` (`8.45%`), `18` (`7.25%`), `01` (`5.28%`), and `24` (`4.63%`). ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
 - Highest large-jump rate: `telemetry_18` (`19.48%` of rows across 84 UAVs). ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
