@@ -111,6 +111,16 @@ Every run writes its fitted model, 400-row prediction table, training and infere
 
 At implementation time Step 5 remains partial at 10 of 40 studies. The Step 6 gate has been verified to reject that state before locked data access, so no project locked predictions have been generated yet.
 
+## Architecture comparison implementation
+
+Step 7 implements the fixed reporting stage in [7_architecture_comparison](../../2_model_architecture_study/7_architecture_comparison/README.md). [comparison_gate.py](../../2_model_architecture_study/7_architecture_comparison/comparison_gate.py) requires the complete Step 6 manifest before either consolidated locked-result table is opened. It verifies run counts, prediction counts, the contract version, the fixed-duration rule, the absence of test-data access and locked-result tuning, and the manual-selection setting. There is no bypass option.
+
+[architecture_comparison.py](../../2_model_architecture_study/7_architecture_comparison/architecture_comparison.py) checks complete family/fold/seed coverage and identical locked endpoints across architectures. It saves R2, RMSE, MAE, and bias overall and by outer fold, scenario, age band, and lifetime quantile. Individual-seed metrics and their mean and population standard deviation are retained. Metric values are averaged across seeds; predictions are not averaged because that would create an undeclared ensemble.
+
+The uncertainty calculation applies the same 1,000 whole-UAV bootstrap resamples to every architecture and seed. It saves architecture intervals and every paired family A minus family B interval. [plot_architecture_comparison.py](../../2_model_architecture_study/7_architecture_comparison/plot_architecture_comparison.py) creates the declared performance, uncertainty, reliability, seed-stability, paired-difference, and efficiency figures in contract order. No score, rank, best-seed rule, winner artifact, or automatic architecture decision is produced.
+
+Step 7 is implemented but intentionally cannot generate real comparison artifacts while Step 5 and consequently Step 6 remain incomplete. Its gate rejects the current state before locked results are loaded.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:

@@ -23,11 +23,17 @@ re-trains completed Step 5 selections and saves held-out predictions, models,
 and efficiency facts. A mandatory completion gate prevents it from loading any
 locked split while Step 5 remains partial.
 
+The [architecture comparison](7_architecture_comparison/README.md) calculates
+the fixed metrics, paired whole-UAV bootstrap intervals, reliability views,
+seed stability, efficiency summaries, and comparison figures. It preserves the
+contract order and never ranks architectures or writes a winner.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell
 py -m pip install -r 2_model_architecture_study\requirements.txt
 ```
 
-Only dependencies needed by implemented steps are listed. Step 4 currently
-uses scikit-learn, XGBoost, PyTorch, and joblib.
+Only dependencies needed by implemented steps are listed. Model adapters use
+scikit-learn, XGBoost, PyTorch, and joblib; Step 7 uses Matplotlib for the fixed
+comparison figures.

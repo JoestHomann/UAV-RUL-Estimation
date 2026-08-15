@@ -21,3 +21,6 @@ xgboost>=3.0,<4
 
 # Implements the MLP, TCN, LSTM, and optional Transformer architectures.
 torch>=2.7,<3
+
+# Creates the fixed Step 7 architecture-comparison figures.
+matplotlib>=3.10,<4
