@@ -13,6 +13,12 @@ Phase 2 answers the following questions:
 
 Phase 2 supports the manual selection of a model architecture and its complete input pipeline. Final training on all 100 training UAVs and prediction of the separate test set belong to Phase 3.
 
+## Phase entry point
+
+The implemented [Phase 2 entry point](../../2_model_architecture_study/run_phase_2.py) delegates Steps 1–7 to their existing scripts using one Python interpreter and one fail-fast process sequence. A normal run builds the contract and adapters, completes within-family tuning, performs locked evaluation only after its gate opens, and then creates the architecture comparison. The "--status" option is read-only, while "--from-step" and "--through-step" select an inclusive step range.
+
+Resume is based on the existing traceable checkpoint manifests. Completed Step 5 family/fold studies and complete Step 6 family/fold evaluations are preserved; no timestamp, hash, automatic architecture rank, or automatic winner is introduced. The explicit "--force" option is required to replace completed expensive work. Individual step scripts remain independently executable for diagnostics, but ordinary Phase 2 operation uses this single entry point.
+
 ## Inputs from Phase 1
 
 The architecture study must reuse the fixed outputs of [Phase 1](phase_1_datasetConstruction.md):
