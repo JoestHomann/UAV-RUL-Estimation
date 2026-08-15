@@ -80,8 +80,9 @@ Step 4 implements the common estimator boundary in [4_model_adapters](../../2_mo
 The implementation separates shared experiment behavior from architecture-specific model code:
 
 - [base.py](../../2_model_architecture_study/4_model_adapters/base.py) defines the common fitting, prediction, nonnegative clipping, training-summary, and trusted-local persistence behavior.
-- [tabular_models.py](../../2_model_architecture_study/4_model_adapters/tabular_models.py) implements the weighted mean and cycle-only baselines, Ridge/Elastic Net, Random Forest, XGBoost, and optional RBF-SVR.
-- [neural_models.py](../../2_model_architecture_study/4_model_adapters/neural_models.py) implements one weighted PyTorch training loop for the MLP, causal TCN, packed unidirectional LSTM, and masked Transformer.
+- [models/baselines](../../2_model_architecture_study/4_model_adapters/models/baselines/) contains separate weighted mean and cycle-only baseline modules.
+- [models/tabular](../../2_model_architecture_study/4_model_adapters/models/tabular/) contains separate Ridge and Elastic Net estimator modules plus the shared regularized-family adapter, and one module each for Random Forest, XGBoost, and optional RBF-SVR.
+- [models/neural](../../2_model_architecture_study/4_model_adapters/models/neural/) contains one module each for MLP, causal TCN, packed unidirectional LSTM, and masked Transformer. The category retains one shared weighted PyTorch training loop and one shared sequence-input adapter so architecture modules do not duplicate training or validation behavior.
 - [model_registry.py](../../2_model_architecture_study/4_model_adapters/model_registry.py) validates resolved hyperparameter names, enforces enabled/disabled contract status, and creates the requested adapter without selecting or ranking architectures.
 - [build_model_registry.py](../../2_model_architecture_study/4_model_adapters/build_model_registry.py) writes "artifacts/model_registry.json" with the contract version, adapter mapping, representation requirements, enabled status, supported configuration fields, and installed library versions. It records no hashes or timestamps.
 

@@ -3,7 +3,7 @@
 The architecture study exchanges representation and estimator modules while
 keeping fitting, prediction, clipping, and persistence calls uniform. This file
 contains that stable boundary and data-independent validation helpers. Concrete
-model logic belongs in the tabular and neural modules.
+model logic belongs in one categorized module per architecture below "models".
 """
 
 from __future__ import annotations

@@ -90,12 +90,42 @@ parallelism belongs to the later runner, avoiding nested parallel execution.
 
 - "base.py" defines the common adapter, training summary, persistence, input
   validation, sample-weight, and metric helpers.
-- "tabular_models.py" contains both baselines and all classical tabular models.
-- "neural_models.py" contains the shared PyTorch loop and the MLP, TCN, LSTM,
-  and Transformer networks.
 - "model_registry.py" maps contract family names to adapter classes and creates
   configured adapters.
 - "build_model_registry.py" writes the traceable registry artifact.
+
+Every architecture has one implementation module below "models":
+
+| Category | Model module | Adapter |
+| --- | --- | --- |
+| Baseline | "models/baselines/mean_baseline.py" | "MeanBaselineAdapter" |
+| Baseline | "models/baselines/cycle_only_baseline.py" | "CycleOnlyBaselineAdapter" |
+| Tabular family | "models/tabular/regularized_linear.py" | "RegularizedLinearAdapter" |
+| Tabular variant | "models/tabular/ridge.py" | Ridge construction |
+| Tabular variant | "models/tabular/elastic_net.py" | Elastic Net construction |
+| Tabular | "models/tabular/random_forest.py" | "RandomForestAdapter" |
+| Tabular | "models/tabular/xgboost.py" | "XGBoostAdapter" |
+| Tabular | "models/tabular/rbf_svr.py" | "RBFSVRAdapter" |
+| Neural | "models/neural/mlp.py" | "MLPAdapter" |
+| Neural | "models/neural/tcn.py" | "TCNAdapter" |
+| Neural | "models/neural/lstm.py" | "LSTMAdapter" |
+| Neural | "models/neural/transformer.py" | "TransformerAdapter" |
+
+The neural modules reuse only two support files:
+
+- "models/neural/neural_base.py" owns the common weighted PyTorch training,
+  early-stopping, deterministic-seeding, and inference loop.
+- "models/neural/sequence_base.py" owns validation and preparation shared by
+  TCN, LSTM, and Transformer sequence inputs.
+
+This structure keeps architecture-specific layers and hyperparameter handling
+inside the model's own file while preventing copied training logic from
+diverging between neural families.
+
+Ridge and Elastic Net remain one comparison family because the experiment
+contract selects between them within the same regularized-linear search. Their
+estimator definitions nevertheless live in separate files; the family adapter
+contains only their shared robust scaling, fitting, prediction, and reporting.
 
 ## Generated artifact
 

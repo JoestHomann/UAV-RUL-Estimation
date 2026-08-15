@@ -13,21 +13,17 @@ from pathlib import Path
 from typing import Any
 
 from base import ModelAdapter, ModelAdapterError
-from neural_models import (
-    LSTMAdapter,
-    MLPAdapter,
-    NeuralTrainingConfig,
-    TCNAdapter,
-    TransformerAdapter,
-)
-from tabular_models import (
-    CycleOnlyBaselineAdapter,
-    MeanBaselineAdapter,
-    RandomForestAdapter,
-    RBFSVRAdapter,
-    RegularizedLinearAdapter,
-    XGBoostAdapter,
-)
+from models.baselines.cycle_only_baseline import CycleOnlyBaselineAdapter
+from models.baselines.mean_baseline import MeanBaselineAdapter
+from models.neural.lstm import LSTMAdapter
+from models.neural.mlp import MLPAdapter
+from models.neural.neural_base import NeuralTrainingConfig
+from models.neural.tcn import TCNAdapter
+from models.neural.transformer import TransformerAdapter
+from models.tabular.random_forest import RandomForestAdapter
+from models.tabular.rbf_svr import RBFSVRAdapter
+from models.tabular.regularized_linear import RegularizedLinearAdapter
+from models.tabular.xgboost import XGBoostAdapter
 
 
 STEP_DIR = Path(__file__).resolve().parent
