@@ -59,6 +59,14 @@ The implementation has three separate responsibilities:
 
 The adapter reads only its Step 2 copies after they have been generated. It preserves source row order and feature-catalog order, performs no scaling or imputation, and never silently falls back to Phase 1 files. Fold-fitted preprocessing therefore remains the responsibility of the later training pipeline.
 
+## Sequence data adapter
+
+Step 3 implements the raw telemetry representation in [3_sequence_data_adapter](../../2_model_architecture_study/3_sequence_data_adapter/README.md). Its builder copies the raw train/test histories, four endpoint tables, and two UAV-fold tables into its local artifact directory. The generated "sequence_dataset_manifest.json" records the ordered channels, lookbacks, mask convention, side features, scaling rule, and source provenance. A copy report confirms existence, size, preserved timestamps, and complete byte equality without storing hashes.
+
+[sequence_data_adapter.py](../../2_model_architecture_study/3_sequence_data_adapter/sequence_data_adapter.py) constructs tensors only when requested. For every endpoint it selects the trailing 50, 100, or 200 cycles ending exactly at the cutoff, left-pads shorter histories with zeros, marks padded positions as True in the Boolean mask, and returns flight cycle and log-transformed flight cycle as separate side features. It preserves endpoint order and never includes post-cutoff telemetry.
+
+The inner-selection and locked-outer methods derive UAV membership from the copied fold assignments. They fit channel medians and IQR-based scales on complete histories from the active training UAVs only, apply the same parameters to both sides of the split, and keep padded values equal to zero. The fitted scaling is independent of lookback, excludes all validation UAVs, and leaves age side features unscaled.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:

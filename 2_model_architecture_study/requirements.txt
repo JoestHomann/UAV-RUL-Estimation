@@ -1,5 +1,17 @@
+# Builds sequence tensors, padding masks, side features, and robust scalers.
+numpy>=1.26,<3
+
 # Reads and structurally verifies the Phase 1 CSV and compressed CSV artifacts.
 pandas>=3.0,<4
 
 # Provides strict, nested validation for the executable experiment contract.
 pydantic>=2.13,<3
+
+# Implements Ridge, Elastic Net, Random Forest, RBF-SVR, and robust scaling.
+scikit-learn>=1.7,<2
+
+# Implements the regularized gradient-boosted-tree architecture.
+xgboost>=3.0,<4
+
+# Implements the MLP, TCN, LSTM, and optional Transformer architectures.
+torch>=2.7,<3

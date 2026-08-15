@@ -6,6 +6,8 @@ The workflow begins in [`1_experiment_contract/`](1_experiment_contract/), which
 
 The next implemented step is the [tabular data adapter](2_tabular_data_adapter/README.md). It creates verified local copies of the Phase 1 tabular inputs and exposes shared feature-loading and UAV-fold selection methods for every tabular architecture.
 
+The [sequence data adapter](3_sequence_data_adapter/README.md) creates causal padded telemetry windows and applies robust channel scaling fitted only on the active training UAVs.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell
