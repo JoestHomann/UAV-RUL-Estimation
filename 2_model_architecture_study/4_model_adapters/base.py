@@ -66,12 +66,17 @@ class ModelAdapter(ABC):
         hyperparameters: dict[str, Any],
         seed: int,
         prediction_minimum: float = 0.0,
+        training_monitor: Any | None = None,
     ) -> None:
         if not np.isfinite(prediction_minimum):
             raise ModelAdapterError("Prediction minimum must be finite")
         self.hyperparameters = dict(hyperparameters)
         self.seed = int(seed)
         self.prediction_minimum = float(prediction_minimum)
+        # Model adapters know only the small neutral monitoring interface. The
+        # TensorBoard writer and all filesystem decisions remain isolated in
+        # the dedicated "tensorboard_monitoring" folder.
+        self._training_monitor = training_monitor
         self.training_summary: TrainingSummary | None = None
         self._is_fitted = False
 
@@ -96,6 +101,47 @@ class ModelAdapter(ABC):
         if not np.isfinite(predictions).all():
             raise ModelAdapterError("Model produced missing or non-finite predictions")
         return np.maximum(predictions, self.prediction_minimum)
+
+    def log_training_step(
+        self,
+        *,
+        step: int,
+        scalars: dict[str, Any],
+        force: bool = False,
+    ) -> bool:
+        """Forward iterative progress without importing TensorBoard here.
+
+        Only neural models and XGBoost call this method because the remaining
+        libraries expose one atomic fitting operation rather than meaningful
+        optimization iterations. Their start, finish, timing, and performance
+        facts are recorded by the shared Step 5 and Step 6 runners.
+        """
+
+        if self._training_monitor is None:
+            raise ModelAdapterError(
+                f"Mandatory training monitor is missing for {self.family!r}"
+            )
+        return bool(
+            self._training_monitor.log_training_step(
+                step=step,
+                scalars=scalars,
+                force=force,
+            )
+        )
+
+    def detach_training_monitor(self) -> None:
+        """Remove the live writer before a fitted adapter is serialized."""
+
+        self._training_monitor = None
+
+    def require_training_monitor(self) -> Any:
+        """Return the mandatory neutral monitor for a framework-specific hook."""
+
+        if self._training_monitor is None:
+            raise ModelAdapterError(
+                f"Mandatory training monitor is missing for {self.family!r}"
+            )
+        return self._training_monitor
 
     def save(self, path: Path) -> Path:
         """Persist a fitted adapter, including preprocessing and model state."""

@@ -21,6 +21,16 @@ Inspect progress without modifying files:
 
     py 2_model_architecture_study\run_phase_2.py --status
 
+TensorBoard monitoring is mandatory for every Phase 2 run. Start the dashboard
+in a second terminal before or after starting the pipeline:
+
+    .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
+
+Open the printed address, normally "http://localhost:6006". Phase 2 always
+writes to the stable "tensorboard_monitoring/logs/" hierarchy; no monitoring
+flag is required. The dashboard process remains separate from training so it
+can be restarted without interrupting a model fit.
+
 Resume from the expensive tuning stage while keeping completed work:
 
     py 2_model_architecture_study\run_phase_2.py --from-step 5
@@ -65,6 +75,11 @@ the fixed metrics, paired whole-UAV bootstrap intervals, reliability views,
 seed stability, efficiency summaries, and comparison figures. It preserves the
 contract order and never ranks architectures or writes a winner.
 
+The [TensorBoard monitoring layer](tensorboard_monitoring/README.md) records
+live optimization curves, candidate summaries, training and inference timing,
+and completion state. Step 6 deliberately withholds locked predictive metrics;
+Step 7 publishes them only after the complete locked-evaluation gate passes.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell
@@ -72,5 +87,5 @@ py -m pip install -r 2_model_architecture_study\requirements.txt
 ```
 
 Only dependencies needed by implemented steps are listed. Model adapters use
-scikit-learn, XGBoost, PyTorch, and joblib; Step 7 uses Matplotlib for the fixed
-comparison figures.
+scikit-learn, XGBoost, PyTorch, and joblib; TensorBoard provides mandatory live
+monitoring; Step 7 uses Matplotlib for the fixed comparison figures.

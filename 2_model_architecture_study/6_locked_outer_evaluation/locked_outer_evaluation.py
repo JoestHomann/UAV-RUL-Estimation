@@ -24,6 +24,7 @@ PHASE_DIR = STEP_DIR.parent
 DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 
 DEPENDENCY_DIRS = [
+    PHASE_DIR,
     PHASE_DIR / "2_tabular_data_adapter",
     PHASE_DIR / "3_sequence_data_adapter",
     PHASE_DIR / "4_model_adapters",
@@ -36,6 +37,11 @@ from base import ModelAdapter, target_values  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from tensorboard_monitoring import (  # noqa: E402
+    TrainingRunContext,
+    create_training_monitor,
+    ensure_tensorboard_available,
+)
 
 from evaluation_gate import (  # noqa: E402
     DEFAULT_SELECTED_CONFIGURATIONS_PATH,
@@ -240,6 +246,7 @@ class LockedOuterEvaluationRunner:
         # This is the critical ordering constraint: the gate reads only Step 1,
         # Step 4, and Step 5 metadata. A failure occurs before data adapters are
         # constructed and therefore before locked tables can be loaded.
+        ensure_tensorboard_available()
         self.plan = build_locked_evaluation_plan(
             specification_path,
             selection_manifest_path,
@@ -348,75 +355,115 @@ class LockedOuterEvaluationRunner:
             split = self._locked_split(selected)
             locked_data_loaded = True
             split_facts = self._validate_locked_split(split, selected.outer_fold)
-            model = self.factory.create(
-                selected.model_family,
-                selected.hyperparameters,
+            architecture = self.contract["architectures"][selected.model_family]
+            context = TrainingRunContext(
+                stage="step_6",
+                model_family=selected.model_family,
+                representation=architecture["representation"],
+                outer_fold=selected.outer_fold,
                 seed=seed,
-                training_iterations=selected.outer_retraining_iterations,
+                configuration_id=selected.configuration_id,
+                feature_set=selected.feature_set,
+                lookback=selected.lookback,
             )
+            model = None
+            with create_training_monitor(context) as monitor:
+                # The locked validation dataset is deliberately omitted here.
+                # Step 6 may display training progress and operating timings,
+                # but no locked predictive metric before Step 7 completes.
+                monitor.start_fit(
+                    hyperparameters=selected.hyperparameters,
+                    training_data=split.training,
+                    validation_data=None,
+                )
+                model = self.factory.create(
+                    selected.model_family,
+                    selected.hyperparameters,
+                    seed=seed,
+                    training_iterations=selected.outer_retraining_iterations,
+                    training_monitor=monitor,
+                )
+                try:
+                    # Passing None is the model-facing leakage boundary. Locked
+                    # labels are used only after training has finished.
+                    training_summary = model.fit(split.training, None)
+                    if training_summary.validation_rows != 0:
+                        raise LockedOuterEvaluationError(
+                            "Model training unexpectedly consumed locked "
+                            "validation rows"
+                        )
+                    if training_summary.best_validation_rmse is not None:
+                        raise LockedOuterEvaluationError(
+                            "Model training unexpectedly calculated locked "
+                            "validation RMSE"
+                        )
+                    if (
+                        selected.outer_retraining_iterations is not None
+                        and training_summary.epochs_or_iterations
+                        != selected.outer_retraining_iterations
+                    ):
+                        raise LockedOuterEvaluationError(
+                            "Completed training duration differs from the "
+                            "Step 5 duration"
+                        )
 
-            # Passing None here is intentional. The model sees only outer-
-            # training rows during fit; locked labels are used after fitting.
-            training_summary = model.fit(split.training, None)
-            if training_summary.validation_rows != 0:
-                raise LockedOuterEvaluationError(
-                    "Model training unexpectedly consumed locked validation rows"
-                )
-            if training_summary.best_validation_rmse is not None:
-                raise LockedOuterEvaluationError(
-                    "Model training unexpectedly calculated locked validation RMSE"
-                )
-            if (
-                selected.outer_retraining_iterations is not None
-                and training_summary.epochs_or_iterations
-                != selected.outer_retraining_iterations
-            ):
-                raise LockedOuterEvaluationError(
-                    "Completed training duration differs from the Step 5 duration"
-                )
+                    prediction_started = perf_counter()
+                    predicted_rul = model.predict(split.validation)
+                    inference_seconds = float(perf_counter() - prediction_started)
+                    predictions = self._prediction_table(
+                        split.validation,
+                        selected,
+                        seed,
+                        predicted_rul,
+                    )
 
-            prediction_started = perf_counter()
-            predicted_rul = model.predict(split.validation)
-            inference_seconds = float(perf_counter() - prediction_started)
-            predictions = self._prediction_table(
-                split.validation,
-                selected,
-                seed,
-                predicted_rul,
-            )
-            serialized_bytes = _atomic_save_model(model, writer.model_path)
-            run_record = {
-                "contract_version": self.contract_version,
-                "model_family": selected.model_family,
-                "configuration_id": selected.configuration_id,
-                "seed": seed,
-                "outer_fold": selected.outer_fold,
-                "feature_set": selected.feature_set,
-                "lookback": selected.lookback,
-                "selected_mean_inner_rmse": selected.mean_inner_rmse,
-                "fixed_retraining_iterations": (
-                    selected.outer_retraining_iterations
-                ),
-                "training_rows": split_facts["training_rows"],
-                "training_uavs": split_facts["training_uavs"],
-                "validation_rows": split_facts["validation_rows"],
-                "validation_uavs": split_facts["validation_uavs"],
-                "locked_scenarios": split_facts["locked_scenarios"],
-                "training_seconds": training_summary.training_seconds,
-                "inference_seconds": inference_seconds,
-                "epochs_or_iterations": (
-                    training_summary.epochs_or_iterations
-                ),
-                "trainable_parameters": training_summary.trainable_parameters,
-                "serialized_model_bytes": serialized_bytes,
-                "prediction_rows": len(predictions),
-                "model_path": writer.model_path.relative_to(
-                    self.output_dir
-                ).as_posix(),
-                "prediction_path": writer.prediction_path.relative_to(
-                    self.output_dir
-                ).as_posix(),
-            }
+                    # SummaryWriter cannot be serialized and is not part of a
+                    # scientific model artifact. Detach it before joblib writes.
+                    model.detach_training_monitor()
+                    serialized_bytes = _atomic_save_model(model, writer.model_path)
+                    run_record = {
+                        "contract_version": self.contract_version,
+                        "model_family": selected.model_family,
+                        "configuration_id": selected.configuration_id,
+                        "seed": seed,
+                        "outer_fold": selected.outer_fold,
+                        "feature_set": selected.feature_set,
+                        "lookback": selected.lookback,
+                        "selected_mean_inner_rmse": selected.mean_inner_rmse,
+                        "fixed_retraining_iterations": (
+                            selected.outer_retraining_iterations
+                        ),
+                        "training_rows": split_facts["training_rows"],
+                        "training_uavs": split_facts["training_uavs"],
+                        "validation_rows": split_facts["validation_rows"],
+                        "validation_uavs": split_facts["validation_uavs"],
+                        "locked_scenarios": split_facts["locked_scenarios"],
+                        "training_seconds": training_summary.training_seconds,
+                        "inference_seconds": inference_seconds,
+                        "epochs_or_iterations": (
+                            training_summary.epochs_or_iterations
+                        ),
+                        "trainable_parameters": (
+                            training_summary.trainable_parameters
+                        ),
+                        "serialized_model_bytes": serialized_bytes,
+                        "prediction_rows": len(predictions),
+                        "model_path": writer.model_path.relative_to(
+                            self.output_dir
+                        ).as_posix(),
+                        "prediction_path": writer.prediction_path.relative_to(
+                            self.output_dir
+                        ).as_posix(),
+                    }
+                    monitor.complete_fit(
+                        training_summary=training_summary.to_dict(),
+                        inference_seconds=inference_seconds,
+                        evaluation_metrics=None,
+                        prediction_rows=len(predictions),
+                    )
+                finally:
+                    if model is not None:
+                        model.detach_training_monitor()
             writer.finish(predictions, run_record)
         except Exception as error:
             writer.fail(

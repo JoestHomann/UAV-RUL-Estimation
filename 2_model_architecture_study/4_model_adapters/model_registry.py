@@ -174,6 +174,7 @@ class ModelAdapterFactory:
         *,
         seed: int,
         training_iterations: int | None = None,
+        training_monitor: Any | None = None,
         allow_disabled: bool = False,
     ) -> ModelAdapter:
         """Construct one model family from a fully resolved candidate."""
@@ -193,6 +194,7 @@ class ModelAdapterFactory:
             "hyperparameters": hyperparameters,
             "seed": seed,
             "prediction_minimum": self.contract["evaluation"]["prediction_minimum"],
+            "training_monitor": training_monitor,
         }
         adapter_class = ADAPTER_CLASSES[family]
         if family == "xgboost":
@@ -257,8 +259,10 @@ def build_registry_payload(
         "libraries": {
             "joblib": version("joblib"),
             "scikit-learn": version("scikit-learn"),
+            "tensorboard": version("tensorboard"),
             "torch": version("torch"),
             "xgboost": version("xgboost"),
         },
+        "training_monitoring": "mandatory TensorBoard event logging",
         "families": families,
     }

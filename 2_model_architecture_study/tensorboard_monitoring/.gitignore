@@ -1,0 +1,3 @@
+# Generated event files are local monitoring data and are never committed.
+logs/*
+!logs/.gitkeep

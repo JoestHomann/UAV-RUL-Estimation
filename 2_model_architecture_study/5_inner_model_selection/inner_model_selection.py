@@ -40,6 +40,7 @@ DEFAULT_SPECIFICATION_PATH = (
 # The numbered step folders are intentionally not Python package names. Add
 # their exact locations once so this runner can reuse their public interfaces.
 DEPENDENCY_DIRS = [
+    PHASE_DIR,
     PHASE_DIR / "2_tabular_data_adapter",
     PHASE_DIR / "3_sequence_data_adapter",
     PHASE_DIR / "4_model_adapters",
@@ -50,7 +51,6 @@ for dependency_dir in DEPENDENCY_DIRS:
 
 from base import (  # noqa: E402
     ModelAdapterError,
-    root_mean_squared_error,
     target_values,
 )
 from model_registry import (  # noqa: E402
@@ -59,6 +59,15 @@ from model_registry import (  # noqa: E402
 )
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from tensorboard_monitoring import (  # noqa: E402
+    TrainingRunContext,
+    calculate_age_band_regression_metrics,
+    calculate_regression_metrics,
+    create_training_monitor,
+    ensure_tensorboard_available,
+    log_step_5_candidate,
+    log_step_5_selection,
+)
 
 from candidate_space import CandidateSpace, ResolvedCandidate  # noqa: E402
 
@@ -462,6 +471,9 @@ class InnerModelSelectionRunner:
     ) -> None:
         self.specification_path = specification_path.resolve()
         self.output_dir = output_dir.resolve()
+        # A direct Step 5 invocation receives the same fail-fast dependency
+        # check as the top-level Phase 2 entry point.
+        ensure_tensorboard_available()
         self.specification = load_experiment_specification(
             self.specification_path
         )
@@ -642,6 +654,11 @@ class InnerModelSelectionRunner:
             raise
 
         selected = writer.finish(study)
+        log_step_5_selection(
+            model_family=family,
+            outer_fold=outer_fold,
+            selected_record=selected,
+        )
         self.consolidate_artifacts()
         return selected
 
@@ -679,30 +696,75 @@ class InnerModelSelectionRunner:
                 outer_fold=outer_fold,
                 inner_fold=inner_fold,
             )
-            model = self.factory.create(
-                family,
-                candidate.hyperparameters,
+            context = TrainingRunContext(
+                stage="step_5",
+                model_family=family,
+                representation=architecture["representation"],
+                outer_fold=outer_fold,
                 seed=self.search_seed,
+                configuration_id=configuration_id,
+                candidate_number=candidate_number,
+                inner_fold=inner_fold,
+                feature_set=candidate.feature_set,
+                lookback=candidate.lookback,
             )
-            summary = model.fit(split.training, split.validation)
-            prediction_started = perf_counter()
-            predictions = model.predict(split.validation)
-            inference_seconds = perf_counter() - prediction_started
-            observed_targets = target_values(split.validation)
-            rmse = root_mean_squared_error(observed_targets, predictions)
-            if not np.isfinite(rmse):
-                raise InnerModelSelectionError(
-                    f"Configuration {configuration_id} produced non-finite RMSE"
+            model = None
+            with create_training_monitor(context) as monitor:
+                monitor.start_fit(
+                    hyperparameters=candidate.hyperparameters,
+                    training_data=split.training,
+                    validation_data=split.validation,
                 )
-            if summary.best_validation_rmse is None or not np.isclose(
-                summary.best_validation_rmse,
-                rmse,
-                rtol=1e-10,
-                atol=1e-10,
-            ):
-                raise InnerModelSelectionError(
-                    "Adapter and Step 5 validation RMSE calculations disagree"
+                model = self.factory.create(
+                    family,
+                    candidate.hyperparameters,
+                    seed=self.search_seed,
+                    training_monitor=monitor,
                 )
+                try:
+                    summary = model.fit(split.training, split.validation)
+                    prediction_started = perf_counter()
+                    predictions = model.predict(split.validation)
+                    inference_seconds = perf_counter() - prediction_started
+                    observed_targets = target_values(split.validation)
+                    development_metrics = calculate_regression_metrics(
+                        observed_targets,
+                        predictions,
+                    )
+                    monitored_metrics = {
+                        **development_metrics,
+                        **calculate_age_band_regression_metrics(
+                            observed_targets,
+                            predictions,
+                            split.validation.metadata["cutoff"],
+                        ),
+                    }
+                    rmse = development_metrics["rmse"]
+                    if not np.isfinite(rmse):
+                        raise InnerModelSelectionError(
+                            f"Configuration {configuration_id} produced "
+                            "non-finite RMSE"
+                        )
+                    if summary.best_validation_rmse is None or not np.isclose(
+                        summary.best_validation_rmse,
+                        rmse,
+                        rtol=1e-10,
+                        atol=1e-10,
+                    ):
+                        raise InnerModelSelectionError(
+                            "Adapter and Step 5 validation RMSE calculations "
+                            "disagree"
+                        )
+                    monitor.complete_fit(
+                        training_summary=summary.to_dict(),
+                        inference_seconds=inference_seconds,
+                        evaluation_metrics=monitored_metrics,
+                        prediction_rows=len(predictions),
+                    )
+                finally:
+                    # Live writers must never become part of a fitted model or
+                    # survive beyond this isolated fold fit.
+                    model.detach_training_monitor()
 
             fold_records.append(
                 {
@@ -777,6 +839,13 @@ class InnerModelSelectionRunner:
             "sampler_parameters_json": _stable_json(trial.params),
             "selected_within_family": False,
         }
+        log_step_5_candidate(
+            model_family=family,
+            outer_fold=outer_fold,
+            candidate_number=candidate_number,
+            candidate_record=candidate_record,
+            hyperparameters=candidate.hyperparameters,
+        )
         return candidate_record, fold_records
 
     @staticmethod

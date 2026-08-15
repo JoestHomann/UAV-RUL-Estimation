@@ -116,7 +116,7 @@ Random Forest, XGBoost, MLP, TCN, LSTM, and an enabled Transformer are marked st
 
 Every run writes its fitted model, 400-row prediction table, training and inference facts, and status checkpoint. The consolidated "locked_predictions.csv.gz", "model_runs.csv", and "locked_evaluation_manifest.json" include only complete runs. Step 6 records all architecture results but calculates no ranking and chooses no winner.
 
-At implementation time Step 5 remains partial at 10 of 40 studies. The Step 6 gate has been verified to reject that state before locked data access, so no project locked predictions have been generated yet.
+The earlier partial Step 5 outputs were removed before mandatory TensorBoard monitoring was added. The new architecture study therefore starts from zero with one monitoring policy applied to every fit. The Step 6 gate continues to reject incomplete Step 5 state before locked data access.
 
 ## Architecture comparison implementation
 
@@ -127,6 +127,22 @@ Step 7 implements the fixed reporting stage in [7_architecture_comparison](../..
 The uncertainty calculation applies the same 1,000 whole-UAV bootstrap resamples to every architecture and seed. It saves architecture intervals and every paired family A minus family B interval. [plot_architecture_comparison.py](../../2_model_architecture_study/7_architecture_comparison/plot_architecture_comparison.py) creates the declared performance, uncertainty, reliability, seed-stability, paired-difference, and efficiency figures in contract order. No score, rank, best-seed rule, winner artifact, or automatic architecture decision is produced.
 
 Step 7 is implemented but intentionally cannot generate real comparison artifacts while Step 5 and consequently Step 6 remain incomplete. Its gate rejects the current state before locked results are loaded.
+
+## Real-time TensorBoard monitoring
+
+[tensorboard_monitoring](../../2_model_architecture_study/tensorboard_monitoring/README.md) is a required sidecar to the numbered Phase 2 steps. The monitoring package owns SummaryWriter creation, safe stable paths, scalar naming, flush behavior, and the separate dashboard launcher. The experiment runners pass only a small run context and scalar dictionaries; the model implementations do not import TensorBoard.
+
+Every fit records its architecture, representation, fold, seed, candidate, feature set or lookback, hyperparameters, row and feature counts, state, training duration, inference duration, completed epochs or iterations, stopping point, and parameter count when available. Step 5 additionally records overall and age-band development RMSE, MAE, R2, and bias for every inner fold and the mean-RMSE tuning curve for every candidate.
+
+The iterative depth follows each model's actual training interface:
+
+- neural architectures report weighted training MSE, validation RMSE, learning rate, epoch duration, best validation RMSE, and early-stopping patience every epoch;
+- XGBoost reports weighted training and validation RMSE plus iteration timing every ten boosting rounds and at the final round;
+- baselines, regularized linear models, Random Forest, and RBF-SVR report fit-level configuration, dimensions, timing, completion, and final permitted metrics because their libraries expose one atomic fitting call.
+
+Weights, gradients, full prediction arrays, feature histograms, and hardware sampling are excluded to keep the log volume and integration surface small. Generated event files are ignored by Git; the Step 5 through Step 7 CSV and JSON artifacts remain the authoritative scientific record.
+
+The locked-evaluation boundary also applies to monitoring. Step 6 exposes training progress and operational timing but does not publish locked RMSE, MAE, R2, bias, predictions, or residuals while runs are in progress. Step 7 publishes the final locked metric, uncertainty, stability, and efficiency views only after all Step 6 runs have completed and the comparison gate has passed. TensorBoard provides no automatic architecture rank or winner.
 
 ## What is compared
 
@@ -456,6 +472,9 @@ flowchart LR
     S6 --> S7["7. Architecture comparison"]
     S7 --> S8["8. Manually selected architecture"]
     S8 --> P3["Phase 3<br/>final training and test prediction"]
+    S5 -.->|live development metrics| TB["TensorBoard monitoring"]
+    S6 -.->|progress and timing only| TB
+    S7 -.->|final locked comparison| TB
 ```
 
 | Step folder | Main artifact | Purpose |
@@ -467,6 +486,7 @@ flowchart LR
 | `5_inner_model_selection/` | `artifacts/selected_configurations.csv` | Inner-fold tuning results and one selected configuration per family and outer fold |
 | `6_locked_outer_evaluation/` | `artifacts/locked_predictions.csv.gz` | Held-out predictions for every family, UAV, scenario, fold, and seed |
 | `7_architecture_comparison/` | `artifacts/architecture_comparison.csv` | Metrics, paired uncertainty, stability, and efficiency comparison |
+| `tensorboard_monitoring/` | `logs/` | Live development curves, locked-run progress, and post-gate final comparison views |
 | `8_selected_architecture/` | `artifacts/selected_architecture.json` | Manually chosen Phase 2 architecture and its final tuned configuration passed to Phase 3 |
 
 ## Phase 2 completion criteria

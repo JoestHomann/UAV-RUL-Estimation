@@ -99,6 +99,12 @@ not reported because Step 6 does not currently measure it reliably.
 No weighted score combines performance and efficiency. The cost plots expose
 the trade-off for manual interpretation.
 
+After every comparison table and figure has been generated successfully, Step
+7 publishes final locked metric means, seed variation, bootstrap intervals, and
+efficiency facts to "tensorboard_monitoring/logs/step_7/final_comparison". The
+architecture order remains the experiment-contract order, and no TensorBoard
+value is converted into a rank or winner.
+
 ## Files
 
 - "comparison_gate.py" validates the complete Step 6 prerequisite without
@@ -134,6 +140,5 @@ After Step 6 is complete, run from the repository root:
 
 ## Current state
 
-Step 6 cannot yet be complete because Step 5 is still partial. The Step 7 gate
-therefore remains closed, and no real locked comparison artifact has been
-generated.
+Step 5 will restart from zero with mandatory monitoring. The Step 7 gate remains
+closed until the fresh Step 5 and Step 6 runs are complete.

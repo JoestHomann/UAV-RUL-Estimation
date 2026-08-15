@@ -6,6 +6,7 @@ from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 import random
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -68,6 +69,7 @@ class NeuralModelAdapter(ModelAdapter):
         training_config: NeuralTrainingConfig,
         prediction_minimum: float = 0.0,
         training_epochs: int | None = None,
+        training_monitor: Any | None = None,
     ) -> None:
         """Store the shared optimizer policy and optional fixed epoch count."""
 
@@ -75,6 +77,7 @@ class NeuralModelAdapter(ModelAdapter):
             hyperparameters=hyperparameters,
             seed=seed,
             prediction_minimum=prediction_minimum,
+            training_monitor=training_monitor,
         )
         if training_epochs is not None and training_epochs <= 0:
             raise ModelAdapterError("Fixed training epochs must be positive")
@@ -174,6 +177,9 @@ class NeuralModelAdapter(ModelAdapter):
         epochs_completed = 0
 
         for epoch in range(1, maximum_epochs + 1):
+            epoch_started_at = perf_counter()
+            epoch_weighted_squared_error = 0.0
+            epoch_weight_total = 0.0
             self.network.train()
             for batch in training_loader:
                 *model_inputs, batch_targets, batch_weights = batch
@@ -184,17 +190,24 @@ class NeuralModelAdapter(ModelAdapter):
                 optimizer.zero_grad(set_to_none=True)
                 predictions = self.network(*model_inputs)
                 squared_errors = torch.square(predictions - batch_targets)
-                loss = torch.sum(batch_weights * squared_errors) / torch.sum(
-                    batch_weights
-                )
+                weighted_squared_error = torch.sum(batch_weights * squared_errors)
+                batch_weight_total = torch.sum(batch_weights)
+                loss = weighted_squared_error / batch_weight_total
                 loss.backward()
                 clip_grad_norm_(
                     self.network.parameters(),
                     self.training_config.gradient_clip_global_norm,
                 )
                 optimizer.step()
+                # Accumulate detached values so TensorBoard receives the exact
+                # sample-weighted epoch MSE without retaining computation graphs.
+                epoch_weighted_squared_error += float(
+                    weighted_squared_error.detach().cpu().item()
+                )
+                epoch_weight_total += float(batch_weight_total.detach().cpu().item())
             epochs_completed = epoch
 
+            validation_rmse: float | None = None
             if use_early_stopping and validation_inputs is not None:
                 validation_rmse = self._validation_rmse(
                     validation_data,
@@ -207,11 +220,34 @@ class NeuralModelAdapter(ModelAdapter):
                     epochs_without_improvement = 0
                 else:
                     epochs_without_improvement += 1
-                    if (
-                        epochs_without_improvement
-                        >= self.training_config.early_stopping_patience
-                    ):
-                        break
+
+            progress_scalars: dict[str, Any] = {
+                "optimization/training_weighted_mse": (
+                    epoch_weighted_squared_error / epoch_weight_total
+                ),
+                "optimization/learning_rate": optimizer.param_groups[0]["lr"],
+                "timing/seconds_per_epoch": perf_counter() - epoch_started_at,
+            }
+            if validation_rmse is not None:
+                progress_scalars.update(
+                    {
+                        "optimization/validation_rmse": validation_rmse,
+                        "optimization/best_validation_rmse": best_rmse,
+                        "early_stopping/patience_used": epochs_without_improvement,
+                        "early_stopping/patience_remaining": (
+                            self.training_config.early_stopping_patience
+                            - epochs_without_improvement
+                        ),
+                    }
+                )
+            self.log_training_step(step=epoch, scalars=progress_scalars)
+
+            if (
+                use_early_stopping
+                and epochs_without_improvement
+                >= self.training_config.early_stopping_patience
+            ):
+                break
 
         if use_early_stopping and best_state is not None:
             self.network.load_state_dict(best_state)

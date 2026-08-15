@@ -33,6 +33,7 @@ class XGBoostAdapter(ModelAdapter):
         prediction_minimum: float = 0.0,
         early_stopping_patience: int | None = None,
         training_iterations: int | None = None,
+        training_monitor: Any | None = None,
     ) -> None:
         """Store inner-stopping or fixed outer-retraining settings."""
 
@@ -40,6 +41,7 @@ class XGBoostAdapter(ModelAdapter):
             hyperparameters=hyperparameters,
             seed=seed,
             prediction_minimum=prediction_minimum,
+            training_monitor=training_monitor,
         )
         self.early_stopping_patience = early_stopping_patience
         self.training_iterations = training_iterations
@@ -58,6 +60,9 @@ class XGBoostAdapter(ModelAdapter):
             validation_data is not None
             and self.training_iterations is None
             and self.early_stopping_patience is not None
+        )
+        progress_callback = self.require_training_monitor().create_xgboost_callback(
+            self.log_training_step
         )
         self.estimator = XGBRegressor(
             objective="reg:squarederror",
@@ -78,24 +83,35 @@ class XGBoostAdapter(ModelAdapter):
             early_stopping_rounds=(
                 int(self.early_stopping_patience) if use_early_stopping else None
             ),
+            callbacks=[progress_callback],
         )
 
         fit_arguments: dict[str, Any] = {
             "sample_weight": weights,
             "verbose": False,
+            # Training data is evaluated only to expose a monitoring curve. It
+            # remains the first set, so the last set is still the validation
+            # fold used by XGBoost's established early-stopping behavior.
+            "eval_set": [(training_values, targets)],
+            "sample_weight_eval_set": [weights],
         }
         if validation_data is not None:
             validation_values, _ = tabular_values(
                 validation_data,
                 self.feature_names,
             )
-            fit_arguments["eval_set"] = [
+            fit_arguments["eval_set"].append(
                 (validation_values, target_values(validation_data))
-            ]
-            fit_arguments["sample_weight_eval_set"] = [
+            )
+            fit_arguments["sample_weight_eval_set"].append(
                 sample_weight_values(validation_data)
-            ]
+            )
         self.estimator.fit(training_values, targets, **fit_arguments)
+        progress_callback.log_final_round(self.estimator.evals_result())
+        # The callback owns a temporary reference to this adapter. Removing it
+        # after training keeps the persisted XGBoost estimator free of live
+        # monitoring objects and unnecessary circular references.
+        self.estimator.set_params(callbacks=None)
         self._is_fitted = True
 
         validation_rmse = None

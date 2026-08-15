@@ -102,6 +102,20 @@ The consolidated Step 5 files are:
 The manifest remains "partial" until all eight enabled families have completed
 all five outer folds. Later steps must require a "complete" manifest.
 
+## TensorBoard monitoring
+
+Every inner-fold fit writes to a stable run below
+"tensorboard_monitoring/logs/step_5". All architectures record configuration,
+dimensions, status, training and inference time, and overall and age-band
+development RMSE, MAE, R2, and bias. Neural models additionally record every
+epoch; XGBoost records every
+tenth boosting round plus its final round. The study-level run records mean
+candidate RMSE, fold variation, timing, and the selected candidate inside that
+family and outer fold.
+
+These are development metrics from the five permitted scenarios. No locked or
+test target is accessed by Step 5 monitoring.
+
 Generated artifacts remain visible locally and are ignored by Git.
 
 ## Running Step 5

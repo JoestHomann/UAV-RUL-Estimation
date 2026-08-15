@@ -145,12 +145,21 @@ The status command is read-only and can be used at any time:
 
 ### Run the complete phase
 
+Start TensorBoard in a second PowerShell terminal:
+
+    .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
+
+Open the printed address, normally "http://localhost:6006". The dashboard can
+be started before or during training and can be restarted independently.
+
 For a new Phase 2 run, execute:
 
     .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py
 
 The entry point uses the same virtual-environment interpreter for every child
-step and stops immediately if a prerequisite or validation gate fails.
+step and stops immediately if a prerequisite, TensorBoard dependency, event
+write, or validation gate fails. TensorBoard logging is always active and does
+not require a command-line option.
 
 ### Resume an interrupted run
 
@@ -186,6 +195,8 @@ Use "--force" only when a complete rerun is genuinely intended.
 - The read-only "--status" command may be used from another terminal.
 - Step 6 remains locked until all Step 5 studies are complete.
 - Step 7 remains locked until all Step 6 runs are complete.
+- Step 6 TensorBoard runs show training progress and timing but no locked
+  predictive metrics; Step 7 publishes the final locked comparison.
 - Locked results are used for comparison, not for another tuning cycle.
 - Step 7 saves all architecture results and plots without selecting a winner.
 

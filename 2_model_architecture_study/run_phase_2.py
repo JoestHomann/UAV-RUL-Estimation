@@ -21,6 +21,12 @@ from typing import Any
 PHASE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PHASE_DIR.parent
 
+from tensorboard_monitoring import (  # noqa: E402
+    DEFAULT_LOG_ROOT,
+    TensorBoardMonitoringError,
+    ensure_tensorboard_available,
+)
+
 SPECIFICATION_PATH = (
     PHASE_DIR
     / "1_experiment_contract"
@@ -439,6 +445,7 @@ def print_status() -> None:
     """Print the seven-step state without importing or running a step module."""
 
     print("Phase 2 pipeline status")
+    print(f"TensorBoard logs: {DEFAULT_LOG_ROOT}")
     print(
         "1. Experiment contract: "
         + ("available" if SPECIFICATION_PATH.is_file() else "not generated")
@@ -486,10 +493,18 @@ def run_pipeline(first_step: int, last_step: int, *, force: bool) -> None:
         raise Phase2PipelineError(
             "--from-step cannot be greater than --through-step"
         )
+    try:
+        tensorboard_version = ensure_tensorboard_available()
+    except TensorBoardMonitoringError as error:
+        raise Phase2PipelineError(str(error)) from error
     requested_steps = range(first_step, last_step + 1)
     print(
         f"Running Phase 2 Steps {first_step}-{last_step} with "
         f"{sys.executable}",
+        flush=True,
+    )
+    print(
+        f"TensorBoard {tensorboard_version} logging to {DEFAULT_LOG_ROOT}",
         flush=True,
     )
     if force:

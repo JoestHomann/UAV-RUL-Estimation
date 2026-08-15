@@ -51,6 +51,14 @@ checks that the completed tree or epoch count equals this fixed value.
 
 No early stopping is performed against locked targets.
 
+## TensorBoard monitoring boundary
+
+Step 6 writes architecture, outer fold, seed, fixed duration, training progress,
+dimensions, timing, and completion state to TensorBoard. It does not publish
+locked RMSE, MAE, R2, bias, predictions, or residuals while evaluation runs are
+in progress. The complete locked comparison appears only after the Step 7 gate
+passes.
+
 ## Retraining seeds
 
 Random Forest, XGBoost, MLP, TCN, LSTM, and any enabled Transformer are marked
@@ -108,5 +116,6 @@ evaluation can start.
 
 ## Current state
 
-Step 5 is currently partial at 10 of 40 studies. Therefore, the Step 6 gate is
-closed and no locked prediction or model artifact has been generated.
+The earlier partial Step 5 training outputs were removed before mandatory
+TensorBoard monitoring was introduced. Step 6 remains closed until the new
+40-study Step 5 run is complete.
