@@ -4,6 +4,8 @@ Phase 2 compares several RUL architectures through the same UAV-grouped validati
 
 The workflow begins in [`1_experiment_contract/`](1_experiment_contract/), which turns the human-readable TOML contract into a validated, deterministic JSON specification.
 
+The next implemented step is the [tabular data adapter](2_tabular_data_adapter/README.md). It creates verified local copies of the Phase 1 tabular inputs and exposes shared feature-loading and UAV-fold selection methods for every tabular architecture.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell

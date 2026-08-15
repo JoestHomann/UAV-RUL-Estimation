@@ -47,6 +47,18 @@ The initial model status is:
 
 Deferred models remain in this document but are deliberately absent from the executable contract. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
 
+## Tabular data adapter
+
+Step 2 implements the shared tabular input boundary in [2_tabular_data_adapter](../../2_model_architecture_study/2_tabular_data_adapter/README.md). It reads the resolved JSON produced by Step 1 and copies the seven Phase 1 feature, catalog, and fold files required by tabular models into its own local artifact directory.
+
+The implementation has three separate responsibilities:
+
+- [build_tabular_data_adapter.py](../../2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py) refreshes the seven copies with preserved modification timestamps, writes the compact dataset manifest, and automatically invokes copy verification.
+- [verify_copied_files.py](../../2_model_architecture_study/2_tabular_data_adapter/verify_copied_files.py) checks source and copy existence, byte size, modification timestamp, and complete byte equality. It writes "copy_verification.json" and does not use hashes or repeat the Phase 1 data audit.
+- [tabular_data_adapter.py](../../2_model_architecture_study/2_tabular_data_adapter/tabular_data_adapter.py) loads only requested feature columns, keeps features separate from metadata, RUL targets, and sample weights, and creates the fixed inner-selection and locked outer-evaluation UAV splits.
+
+The adapter reads only its Step 2 copies after they have been generated. It preserves source row order and feature-catalog order, performs no scaling or imputation, and never silently falls back to Phase 1 files. Fold-fitted preprocessing therefore remains the responsibility of the later training pipeline.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:
