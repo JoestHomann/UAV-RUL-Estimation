@@ -11,7 +11,7 @@ Phase 2 answers the following questions:
 - Which model family generalizes best to unseen UAVs at test-like history cutoffs?
 - Is any gain from a more complex model large and stable enough to justify its additional complexity?
 
-Phase 2 selects the model architecture and its complete input pipeline. Final training on all 100 training UAVs and prediction of the separate test set belong to Phase 3.
+Phase 2 supports the manual selection of a model architecture and its complete input pipeline. Final training on all 100 training UAVs and prediction of the separate test set belong to Phase 3.
 
 ## Inputs from Phase 1
 
@@ -27,6 +27,25 @@ The architecture study must reuse the fixed outputs of [Phase 1](phase_1_dataset
 - The structural, causality, finite-value, and leakage checks.
 
 These datasets, folds, cutoffs, targets, and metrics remain fixed during Phase 2. Changing them after seeing model results would make the architecture comparison less reliable.
+
+## Experiment contract
+
+Step 1 records the executable architecture-study settings before model implementation begins. The tracked [`experiment_contract.toml`](../../2_model_architecture_study/1_experiment_contract/experiment_contract.toml) is the human-readable source of truth. It contains the enabled architecture families, representations, preprocessing modes, tuning ranges, training settings, seeds, metrics, and repository-relative Phase 1 input paths.
+
+The implementation separates building from verification:
+
+- [`verify_experiment_contract.py`](../../2_model_architecture_study/1_experiment_contract/verify_experiment_contract.py) uses a strict Pydantic schema and rejects missing, malformed, or unknown contract fields. It also checks that all required Phase 1 artifacts exist, that the Phase 1 leakage report passed, and that the expected JSON keys, CSV columns, row counts, and feature counts are present. It does not repeat the raw-data audit and never modifies files.
+- [`build_experiment_contract.py`](../../2_model_architecture_study/1_experiment_contract/build_experiment_contract.py) runs the verifier and writes `artifacts/experiment_specification.json` only after all checks pass. Identical TOML and Phase 1 inputs produce identical JSON; timestamps, absolute paths, machine names, hashes, and lock state are not added.
+
+The contract uses a manually maintained positive integer `contract_version`. When an experiment setting changes, this version must be incremented and dependent Phase 2 artifacts must be regenerated. The code does not freeze the contract; avoiding changes after locked results have been inspected remains an explicit experimental rule.
+
+The initial model status is:
+
+- **Required and enabled:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, XGBoost, MLP, TCN, and LSTM.
+- **Conditional and disabled:** small Transformer encoder.
+- **Optional and disabled:** RBF-SVR.
+
+Deferred models remain in this document but are deliberately absent from the executable contract. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
 
 ## What is compared
 
@@ -246,7 +265,7 @@ The feature set or lookback is part of the configuration selected inside the inn
 
 Search spaces must be fixed before locked evaluation. The following initial boundaries keep model capacity appropriate for the small number of independent UAVs:
 
-| Family | Frozen initial search space |
+| Family | Initial search space recorded in the contract |
 | --- | --- |
 | Ridge | `alpha`: log-uniform from `1e-4` to `1e4` |
 | Elastic Net | `alpha`: log-uniform from `1e-5` to `1e2`; `l1_ratio`: `0.05`, `0.2`, `0.5`, `0.8`, or `0.95` |
@@ -259,7 +278,9 @@ Search spaces must be fixed before locked evaluation. The following initial boun
 
 Each family receives at most 25 distinct candidate configurations per outer fold, generated from a fixed search seed. A smaller exact grid is allowed when it exhausts the complete predefined space. Feature-set and lookback choices count as parts of these configurations rather than receiving a separate tuning budget. Manual extra tuning after viewing locked results is prohibited.
 
-Neural models use early stopping on inner-validation performance, gradient clipping, and a fixed maximum epoch budget. The validation data used for early stopping must belong only to the relevant inner fold. The outer-validation UAVs remain unavailable until the selected configuration is retrained on all 80 outer-training UAVs.
+Neural models use weighted mean squared error, AdamW, batch size 64, at most 300 epochs, early-stopping patience of 25 epochs, and global-norm gradient clipping at 1.0. Their learning rate and weight decay share the ranges `1e-4` to `3e-3` and `1e-6` to `1e-2`. XGBoost uses early-stopping patience of 50 rounds. The validation data used for early stopping must belong only to the relevant inner fold.
+
+When a tuned configuration is retrained on all 80 outer-training UAVs, the outer-validation UAVs cannot determine its training duration. The fixed epoch or boosting-round count is therefore the median best iteration observed across the four inner folds.
 
 ## Validation and selection procedure
 
@@ -273,7 +294,7 @@ flowchart TD
 
     OT --> IF["Four inner rounds<br/>60 train and 20 validate"]
     IF --> CS["Compare representations,<br/>hyperparameters, and one configuration per family"]
-    CS --> FC["Freeze the selected configuration<br/>for each family"]
+    CS --> FC["Retain one tuned configuration<br/>for each family"]
     FC --> RT["Refit preprocessing and model<br/>on all 80 outer-training UAVs"]
     RT --> OE["Locked outer evaluation"]
     OV --> OE
@@ -290,16 +311,16 @@ flowchart TD
 5. Evaluate on inner-validation UAVs using the five development scenarios.
 6. Select one configuration for the family using mean inner-validation RMSE.
 7. Retrain that configuration on all 80 outer-training UAVs.
-8. After all choices are frozen, evaluate the 20 outer-validation UAVs
+8. After all choices are finalized in the current contract version, evaluate the 20 outer-validation UAVs
    across the 20 locked scenarios.
 9. Combine held-out predictions from all five outer folds.
 ```
 
-This procedure estimates the generalization of the complete selection process to unseen UAVs. The separate test dataset is never used for fitting, tuning, architecture selection, early stopping, or threshold selection.
+This procedure estimates how each architecture and its within-family tuning procedure generalize to unseen UAVs. It does not automatically select an architecture. The test telemetry values are never used for fitting, tuning, early stopping, or threshold selection; Phase 1 uses only the observed test history lengths to construct test-like cutoff distributions.
 
 ### Primary and secondary criteria
 
-- **Primary selection metric:** mean inner-validation RMSE.
+- **Primary within-architecture tuning metric:** mean inner-validation RMSE.
 - **Secondary metrics:** R2, MAE, and bias.
 - **Reliability views:** results by outer fold, locked scenario, age band, and lifetime quantile.
 - **Uncertainty:** 95% paired UAV-level bootstrap intervals.
@@ -307,9 +328,11 @@ This procedure estimates the generalization of the complete selection process to
 
 Hyperparameter search uses seed `13`. After a configuration is selected, each stochastic model is retrained with seeds `13`, `37`, and `73`. Individual-seed results and their mean and standard deviation are retained. Seed variation is reported; the best seed is never selected.
 
-### Final architecture decision
+### Architecture comparison and manual decision
 
-The selected architecture should:
+The comparison step saves all enabled architecture results and creates plots covering the primary and secondary metrics, uncertainty, outer-fold variation, scenario variation, age-band behaviour, lifetime groups, seed stability, and computational cost. It does not calculate an overall rank or write an automatically selected winner.
+
+The manual architecture decision should favour a model that:
 
 - Clearly outperform the mean and cycle-only baselines.
 - Achieve the best or statistically indistinguishable primary performance on locked outer validation.
@@ -317,11 +340,11 @@ The selected architecture should:
 - Remain stable across UAV folds, locked scenarios, and random seeds.
 - Generalize without using test data or UAV identity leakage.
 
-Model differences are compared on the same `(uav_id, scenario)` predictions. Complete UAV groups, not individual prefix rows, are resampled for paired bootstrap comparisons. If the apparent winner is not clearly better than a simpler model within uncertainty, the simpler model is selected.
+Model differences are compared on the same `(uav_id, scenario)` predictions. Complete UAV groups, not individual prefix rows, are resampled for paired bootstrap comparisons. The plots and tables provide evidence for the decision, but the final trade-off between predictive performance, stability, and complexity is made by the researcher.
 
-Locked results may be opened only after the candidate families, feature/lookback alternatives, search spaces, training budgets, seeds, preprocessing rules, and selection metric have been frozen. The locked results are used for the final comparison, not another tuning cycle.
+Locked results may be opened only after the candidate families, feature/lookback alternatives, search spaces, training budgets, seeds, preprocessing rules, and tuning metric have been finalized in the current contract version. The locked results are used for the architecture comparison, not another tuning cycle.
 
-After the architecture family is selected from the combined locked outer-fold results, one final within-family configuration search is run across the fixed five UAV folds and development scenarios using all 100 training UAVs. It reuses the frozen search space and primary metric and does not reopen the locked scenarios. The resulting single configuration is recorded for Phase 3, where it is fitted on all training UAVs.
+After the researcher selects an architecture from the combined comparison, one final within-family configuration search is run across the fixed five UAV folds and development scenarios using all 100 training UAVs. It reuses the recorded search space and primary metric and does not reopen the locked scenarios. The resulting architecture and configuration are recorded for Phase 3, where the model is fitted on all training UAVs.
 
 ## Models deferred from the initial comparison
 
@@ -348,32 +371,32 @@ flowchart LR
     S4 --> S5["5. Inner model selection"]
     S5 --> S6["6. Locked outer evaluation"]
     S6 --> S7["7. Architecture comparison"]
-    S7 --> S8["8. Selected architecture"]
+    S7 --> S8["8. Manually selected architecture"]
     S8 --> P3["Phase 3<br/>final training and test prediction"]
 ```
 
 | Step folder | Main artifact | Purpose |
 | --- | --- | --- |
-| `1_experiment_contract/` | `artifacts/experiment_specification.json` | Frozen representations, models, search spaces, seeds, metrics, and locked-use rules |
+| `1_experiment_contract/` | `artifacts/experiment_specification.json` | Validated representations, models, search spaces, seeds, metrics, and input expectations |
 | `2_tabular_data_adapter/` | `artifacts/tabular_dataset_manifest.json` | Validated access to Phase 1 engineered feature sets |
 | `3_sequence_data_adapter/` | `artifacts/sequence_dataset_manifest.json` | Causal windows, masks, channel scaling, and lookback alternatives |
 | `4_model_adapters/` | `artifacts/model_registry.json` | Common interface and registered model families |
 | `5_inner_model_selection/` | `artifacts/selected_configurations.csv` | Inner-fold tuning results and one selected configuration per family and outer fold |
-| `6_locked_outer_evaluation/` | `artifacts/locked_predictions.csv.gz` | Frozen held-out predictions for every family, UAV, scenario, fold, and seed |
+| `6_locked_outer_evaluation/` | `artifacts/locked_predictions.csv.gz` | Held-out predictions for every family, UAV, scenario, fold, and seed |
 | `7_architecture_comparison/` | `artifacts/architecture_comparison.csv` | Metrics, paired uncertainty, stability, and efficiency comparison |
-| `8_selected_architecture/` | `artifacts/selected_architecture.json` | Final Phase 2 architecture and hyperparameters passed to Phase 3 |
+| `8_selected_architecture/` | `artifacts/selected_architecture.json` | Manually chosen Phase 2 architecture and its final tuned configuration passed to Phase 3 |
 
 ## Phase 2 completion criteria
 
 Phase 2 is complete when:
 
-- The experiment contract is saved before locked evaluation.
+- The current experiment contract version is saved before locked evaluation.
 - Every required architecture runs through the same fold and scenario protocol.
 - All preprocessing is fitted using training UAVs only.
 - All required prediction tables pass the Phase 1 leakage and schema checks.
 - Inner-selection results and locked outer predictions are preserved separately.
 - Metrics, paired uncertainty, seed stability, age-band behaviour, and computational cost are reported.
-- The selected architecture is documented together with the evidence supporting the decision.
+- The manually selected architecture is documented together with the evidence supporting the decision.
 - No test-set result has influenced model or hyperparameter selection.
 
 ## Initial decision

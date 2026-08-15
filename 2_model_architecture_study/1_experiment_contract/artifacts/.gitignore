@@ -1,0 +1,4 @@
+# The resolved specification is reproducibly generated from the tracked TOML
+# contract and Phase 1 artifacts, so only this placeholder belongs in Git.
+*
+!.gitignore

@@ -1,0 +1,1060 @@
+"""Validate the Phase 2 experiment contract and its Phase 1 inputs.
+
+This module owns all Step 1 verification logic.  It is both a command-line
+check and an importable guard for the builder and later Phase 2 steps.  The
+verifier is intentionally read-only: it reports problems but never changes an
+input or artifact.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+import tomllib
+from typing import Annotated, Any, Literal, TypeAlias
+
+import pandas as pd
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+
+STEP_DIR = Path(__file__).resolve().parent
+PHASE_ROOT = STEP_DIR.parent
+REPOSITORY_ROOT = PHASE_ROOT.parent
+DEFAULT_CONTRACT_PATH = STEP_DIR / "experiment_contract.toml"
+
+# The three directory constants anchor every default path to this source file,
+# not to the caller's current working directory.  The scripts can therefore be
+# run from the repository root, the step folder, or another local directory.
+
+# Phase 1 names every generated model input with this prefix.  Counting these
+# columns separately lets the verifier distinguish metadata such as "uav_id"
+# and "RUL" from features that may later be passed to a model.
+FEATURE_PREFIX = "feature__"
+
+# The named search parameters are part of the executable interface between the
+# contract and the future model adapters.  Keeping this registry here means a
+# misspelled parameter fails now instead of being silently ignored during tuning.
+EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
+    "mean_baseline": set(),
+    "cycle_only_baseline": set(),
+    "regularized_linear": {
+        "variant",
+        "ridge_alpha",
+        "elastic_net_alpha",
+        "elastic_net_l1_ratio",
+    },
+    "random_forest": {
+        "n_estimators",
+        "max_depth",
+        "min_samples_leaf",
+        "max_features",
+    },
+    "xgboost": {
+        "maximum_trees",
+        "learning_rate",
+        "max_depth",
+        "min_child_weight",
+        "subsample",
+        "colsample_bytree",
+        "reg_alpha",
+        "reg_lambda",
+    },
+    "mlp": {"hidden_layers", "dropout", "learning_rate", "weight_decay"},
+    "tcn": {
+        "residual_blocks",
+        "channels",
+        "kernel_size",
+        "dilation_base",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "lstm": {
+        "layers",
+        "hidden_units",
+        "direction",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "transformer": {
+        "encoder_layers",
+        "model_width",
+        "attention_heads",
+        "feed_forward_ratio",
+        "position_encoding",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "rbf_svr": {"c", "gamma", "epsilon"},
+}
+
+EXPECTED_VARIANTS: dict[str, set[str]] = {
+    "mean_baseline": {"mean"},
+    "cycle_only_baseline": {"weighted_linear"},
+    "regularized_linear": {"ridge", "elastic_net"},
+    "random_forest": {"random_forest"},
+    "xgboost": {"xgboost"},
+    "mlp": {"mlp"},
+    "tcn": {"tcn"},
+    "lstm": {"lstm"},
+    "transformer": {"transformer_encoder"},
+    "rbf_svr": {"rbf_svr"},
+}
+
+# Step 1 is a boundary between dataset construction and model experiments.
+# Requiring the complete named set prevents a newly added Phase 1 dependency
+# from being forgotten or a required dependency from disappearing silently.
+EXPECTED_PHASE_1_ARTIFACTS = {
+    "verification_report",
+    "fold_config",
+    "outer_folds",
+    "inner_folds",
+    "scenario_config",
+    "development_scenarios",
+    "locked_scenarios",
+    "training_prefix_config",
+    "training_prefixes",
+    "training_features",
+    "development_features",
+    "locked_features",
+    "test_features",
+    "feature_catalog",
+    "preprocessing_config",
+    "metric_specification",
+}
+
+
+# ---------------------------------------------------------------------------
+# Strict schema for the TOML experiment contract
+# ---------------------------------------------------------------------------
+# These models validate structure and relationships only. They do not train a
+# model, read telemetry, or modify an upstream artifact.
+
+
+class ContractError(ValueError):
+    """Represent one readable contract or upstream-artifact failure.
+
+    A dedicated exception keeps expected validation failures separate from
+    programming errors.  Both command-line scripts catch this exception and
+    show its message without exposing an unnecessary Python traceback.
+    """
+
+
+class StrictModel(BaseModel):
+    """Make every contract section reject unknown fields and loose coercion.
+
+    "extra='forbid'" catches misspelled settings instead of ignoring them.
+    Strict mode prevents surprising conversions, such as interpreting the
+    string value "25" as the integer 25.  All schema classes inherit these
+    rules so validation behaviour is consistent throughout the contract.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+ScalarValue: TypeAlias = str | int | float | bool
+
+
+class FixedParameter(StrictModel):
+    """Describe a hyperparameter that has one non-tunable value.
+
+    Fixed parameters still live in "search" so every model adapter receives
+    one uniform configuration mapping, regardless of whether a value is tuned.
+    """
+
+    kind: Literal["fixed"]
+    value: ScalarValue
+
+
+class CategoricalParameter(StrictModel):
+    """Describe a finite set of scalar values sampled during tuning.
+
+    This covers unordered alternatives such as tree depths or a choice between
+    Ridge and Elastic Net.  The tuning implementation must select only values
+    listed here rather than inventing intermediate values.
+    """
+
+    kind: Literal["categorical"]
+    values: list[ScalarValue]
+
+    @field_validator("values")
+    @classmethod
+    def values_must_be_unique(cls, values: list[ScalarValue]) -> list[ScalarValue]:
+        """Reject empty choices and duplicates before tuning begins."""
+
+        if not values:
+            raise ValueError("must contain at least one value")
+
+        # Include the type in the identity because Python otherwise considers
+        # values such as "True" and "1" equal even though they represent
+        # different configuration choices.
+        identities = [(type(value).__name__, value) for value in values]
+        if len(identities) != len(set(identities)):
+            raise ValueError("must not contain duplicate values")
+        return values
+
+
+class CategoricalIntegerSequencesParameter(StrictModel):
+    """Describe choices whose individual values are integer layer layouts.
+
+    A normal categorical parameter stores scalars.  Neural hidden-layer shapes
+    instead look like "[128, 64]", so they receive an explicit type rather
+    than being accepted through an unstructured "Any" value.
+    """
+
+    kind: Literal["categorical_integer_sequences"]
+    values: list[list[PositiveInt]]
+
+    @field_validator("values")
+    @classmethod
+    def sequences_must_be_unique(
+        cls, values: list[list[PositiveInt]]
+    ) -> list[list[PositiveInt]]:
+        """Require at least one unique, non-empty positive layer layout."""
+
+        if not values:
+            raise ValueError("must contain at least one sequence")
+        identities = [tuple(value) for value in values]
+        if len(identities) != len(set(identities)):
+            raise ValueError("must not contain duplicate sequences")
+        return values
+
+
+class IntegerRangeParameter(StrictModel):
+    """Describe a stepped integer interval for a future tuning sampler.
+
+    The schema records the endpoints and a positive step explicitly, avoiding
+    ambiguous floating-point conversion when a parameter must be integral.
+    """
+
+    kind: Literal["integer_range"]
+    low: int
+    high: int
+    step: PositiveInt = 1
+
+    @model_validator(mode="after")
+    def bounds_are_ordered(self) -> IntegerRangeParameter:
+        """Ensure a future sampler can traverse the interval."""
+
+        if self.low >= self.high:
+            raise ValueError("low must be smaller than high")
+        return self
+
+
+class UniformParameter(StrictModel):
+    """Describe a continuous interval sampled uniformly on a linear scale.
+
+    This is appropriate for bounded fractions such as dropout or subsampling,
+    where equal absolute differences should receive equal sampling density.
+    """
+
+    kind: Literal["uniform"]
+    low: float
+    high: float
+
+    @model_validator(mode="after")
+    def bounds_are_ordered(self) -> UniformParameter:
+        """Reject zero-width or reversed intervals."""
+
+        if self.low >= self.high:
+            raise ValueError("low must be smaller than high")
+        return self
+
+
+class LogUniformParameter(StrictModel):
+    """Describe a positive interval sampled uniformly in logarithmic space.
+
+    Learning rates and regularization strengths often span several orders of
+    magnitude, so equal multiplicative changes receive equal search emphasis.
+    """
+
+    kind: Literal["log_uniform"]
+    low: float
+    high: float
+
+    @model_validator(mode="after")
+    def bounds_are_positive_and_ordered(self) -> LogUniformParameter:
+        """Logarithmic sampling requires positive, increasing bounds."""
+
+        if self.low <= 0:
+            raise ValueError("low must be greater than zero")
+        if self.low >= self.high:
+            raise ValueError("low must be smaller than high")
+        return self
+
+
+SearchParameter = Annotated[
+    FixedParameter
+    | CategoricalParameter
+    | CategoricalIntegerSequencesParameter
+    | IntegerRangeParameter
+    | UniformParameter
+    | LogUniformParameter,
+    Field(discriminator="kind"),
+]
+
+# Pydantic reads "kind" first and then selects exactly one model from the
+# discriminated union above.  Consequently, a "fixed" parameter cannot
+# accidentally receive "low" and "high" fields, and a range cannot omit
+# either boundary.
+
+
+class StudySpecification(StrictModel):
+    """Define experiment membership and the manual comparison policy.
+
+    Literal types make two agreed decisions executable: all architecture
+    results and comparison plots are retained, and no code selects a winner.
+    """
+
+    required_architectures: list[str]
+    conditional_architectures: list[str]
+    optional_architectures: list[str]
+    architecture_selection: Literal["manual"]
+    save_all_architecture_results: Literal[True]
+    create_comparison_plots: Literal[True]
+
+
+class TuningSpecification(StrictModel):
+    """Define settings shared by all within-architecture tuning runs.
+
+    This section separates automated hyperparameter optimization—which remains
+    enabled—from the manual comparison between architecture families.
+    """
+
+    scope: Literal["within_architecture"]
+    primary_metric: Literal["rmse"]
+    direction: Literal["minimize"]
+    candidate_budget_per_architecture: PositiveInt
+    search_seed: int
+    retraining_seeds: list[int]
+    outer_retraining_duration: Literal["median_inner_best_iteration"]
+
+    @field_validator("retraining_seeds")
+    @classmethod
+    def retraining_seeds_must_be_unique(cls, values: list[int]) -> list[int]:
+        """Ensure repeated stochastic fits represent distinct runs."""
+
+        if not values:
+            raise ValueError("must contain at least one seed")
+        if len(values) != len(set(values)):
+            raise ValueError("must not contain duplicate seeds")
+        return values
+
+
+class EvaluationSpecification(StrictModel):
+    """Define common metrics, reporting groups, and uncertainty settings.
+
+    Centralizing these values prevents individual architecture adapters from
+    reporting a more favorable metric or using a different weighting policy.
+    """
+
+    metrics: list[Literal["r2", "rmse", "mae", "bias"]]
+    reported_groups: list[
+        Literal[
+            "overall",
+            "scenario",
+            "outer_fold",
+            "age_band",
+            "lifetime_quantile",
+        ]
+    ]
+    prediction_minimum: float
+    equal_total_weight_per_uav: Literal[True]
+    bootstrap_unit: Literal["uav_id"]
+    bootstrap_repetitions: PositiveInt
+    bootstrap_seed: int
+
+
+class RepresentationSpecification(StrictModel):
+    """Describe the tabular and raw-sequence inputs available to adapters.
+
+    Tabular models consume Phase 1 engineered feature rows.  Sequence models
+    consume ordered telemetry windows plus age side features.  Both interfaces
+    are declared here so adapters can be exchanged without changing folds,
+    targets, or the evaluation protocol.
+    """
+
+    tabular_feature_sets: list[
+        Literal["age_only", "last_values", "screened", "all_nonconstant"]
+    ]
+    sequence_channel_count: PositiveInt
+    sequence_channels: list[str]
+    sequence_lookbacks: list[PositiveInt]
+    sequence_padding: Literal["left"]
+    sequence_padding_mask: Literal[True]
+    sequence_side_features: list[
+        Literal["flight_cycle", "log1p_flight_cycle"]
+    ]
+
+    @model_validator(mode="after")
+    def sequence_channels_are_explicit_and_unique(
+        self,
+    ) -> RepresentationSpecification:
+        """Keep the declared sequence count synchronized with channel names."""
+
+        if len(self.sequence_channels) != self.sequence_channel_count:
+            raise ValueError(
+                "sequence_channel_count must equal the number of sequence_channels"
+            )
+        if len(self.sequence_channels) != len(set(self.sequence_channels)):
+            raise ValueError("sequence_channels must not contain duplicates")
+        return self
+
+
+class PreprocessingSpecification(StrictModel):
+    """Assign fold-fitted preprocessing modes to architecture groups.
+
+    The literal fit scope makes the leakage boundary part of the validated
+    contract: transformations may learn statistics from training UAVs only.
+    """
+
+    scaled_tabular_architectures: list[str]
+    unscaled_tree_architectures: list[str]
+    tabular_scaling: Literal["median_iqr"]
+    sequence_scaling: Literal["training_fold_channel_median_iqr"]
+    fit_scope: Literal["training_uavs_only"]
+
+
+class NeuralTrainingSpecification(StrictModel):
+    """Hold optimization choices shared by every neural architecture.
+
+    Shared defaults keep architecture comparisons interpretable while each
+    neural family tunes its own capacity, dropout, and learning rate.
+    """
+
+    loss: Literal["weighted_mse"]
+    optimizer: Literal["adamw"]
+    batch_size: PositiveInt
+    maximum_epochs: PositiveInt
+    early_stopping_patience: PositiveInt
+    gradient_clip_global_norm: float = Field(gt=0)
+
+
+class ArchitectureSpecification(StrictModel):
+    """Describe one executable architecture and its tuning alternatives.
+
+    "feature_sets" and "lookbacks" are mutually exclusive because tabular
+    and sequence adapters expose different input structures.  The optional
+    early-stopping field is currently used by XGBoost; neural early stopping is
+    shared through "NeuralTrainingSpecification".
+    """
+
+    status: Literal["required", "conditional", "optional"]
+    enabled: bool
+    representation: Literal["none", "tabular", "sequence"]
+    feature_sets: list[str] = Field(default_factory=list)
+    lookbacks: list[PositiveInt] = Field(default_factory=list)
+    variants: list[str]
+    early_stopping_patience: PositiveInt | None = None
+    search: dict[str, SearchParameter] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def representation_fields_are_consistent(self) -> ArchitectureSpecification:
+        """Reject input settings that do not match the representation type."""
+
+        if not self.variants:
+            raise ValueError("variants must not be empty")
+        if len(self.variants) != len(set(self.variants)):
+            raise ValueError("variants must not contain duplicates")
+
+        if self.representation == "none" and (self.feature_sets or self.lookbacks):
+            raise ValueError("a representation-free model cannot define inputs")
+        if self.representation == "tabular":
+            if not self.feature_sets or self.lookbacks:
+                raise ValueError("tabular models need feature_sets and no lookbacks")
+        if self.representation == "sequence":
+            if not self.lookbacks or self.feature_sets:
+                raise ValueError("sequence models need lookbacks and no feature_sets")
+        return self
+
+
+class ArtifactSpecification(StrictModel):
+    """Describe the lightweight structural checks for one Phase 1 artifact.
+
+    CSV files are checked through dimensions and required columns.  JSON files
+    are checked through required dotted keys and selected exact scalar values.
+    The contract intentionally stores no file hashes.
+    """
+
+    path: str
+    format: Literal["csv", "json"]
+    rows: int | None = Field(default=None, ge=0)
+    total_columns: int | None = Field(default=None, ge=0)
+    feature_columns: int | None = Field(default=None, ge=0)
+    required_columns: list[str] = Field(default_factory=list)
+    required_json_keys: list[str] = Field(default_factory=list)
+    required_json_values: dict[str, ScalarValue] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def fields_match_file_format(self) -> ArtifactSpecification:
+        """Prevent CSV-only and JSON-only expectations from being mixed."""
+
+        csv_only_values = (self.rows, self.total_columns, self.feature_columns)
+        if self.format == "csv":
+            if self.rows is None or self.total_columns is None:
+                raise ValueError("CSV artifacts require rows and total_columns")
+            if not self.required_columns:
+                raise ValueError("CSV artifacts require required_columns")
+            if self.required_json_keys or self.required_json_values:
+                raise ValueError("CSV artifacts cannot define JSON requirements")
+        elif any(value is not None for value in csv_only_values):
+            raise ValueError("JSON artifacts cannot define CSV dimensions")
+        elif self.required_columns:
+            raise ValueError("JSON artifacts cannot define required_columns")
+        return self
+
+
+class PhaseOneSpecification(StrictModel):
+    """Collect the Phase 1 interface consumed by the architecture study.
+
+    Expected global counts and per-file specifications make upstream changes
+    visible before they can alter an experiment unnoticed.
+    """
+
+    expected_training_uavs: PositiveInt
+    expected_outer_folds: PositiveInt
+    expected_inner_folds_per_outer_fold: PositiveInt
+    expected_development_scenarios: PositiveInt
+    expected_locked_scenarios: PositiveInt
+    expected_prefixes_per_training_uav: PositiveInt
+    expected_generated_features: PositiveInt
+    expected_feature_sets: dict[str, PositiveInt]
+    artifacts: dict[str, ArtifactSpecification]
+
+
+class ExperimentContract(StrictModel):
+    """Represent the complete, typed interface for Phase 2 experiments.
+
+    A successfully created instance guarantees both local field validity and
+    semantic agreement among architecture, representation, and Phase 1 sections.
+    It does not yet guarantee that the declared files exist; that read-only check
+    is performed by "verify_phase_1_inputs" below.
+    """
+
+    contract_version: PositiveInt
+    phase: Literal["model_architecture_study"]
+    study: StudySpecification
+    tuning: TuningSpecification
+    evaluation: EvaluationSpecification
+    representations: RepresentationSpecification
+    preprocessing: PreprocessingSpecification
+    neural_training: NeuralTrainingSpecification
+    architectures: dict[str, ArchitectureSpecification]
+    phase_1: PhaseOneSpecification
+
+    @model_validator(mode="after")
+    def sections_are_consistent(self) -> ExperimentContract:
+        """Validate relationships that span otherwise independent sections.
+
+        Pydantic validates each field locally.  This method handles semantic
+        relationships, for example that an architecture appears in exactly one
+        status list and that every named search parameter is recognized by its
+        future adapter.
+        """
+
+        required = set(self.study.required_architectures)
+        conditional = set(self.study.conditional_architectures)
+        optional = set(self.study.optional_architectures)
+        listed = required | conditional | optional
+
+        if len(listed) != sum(map(len, (required, conditional, optional))):
+            raise ValueError("architecture status lists must not overlap")
+        if listed != set(self.architectures):
+            raise ValueError(
+                "study architecture lists must exactly match the architecture tables"
+            )
+
+        # Derive the expected per-model status from the three top-level lists.
+        # This prevents a table from claiming "optional" while also appearing
+        # in the required execution set.
+        expected_status = {
+            **{name: "required" for name in required},
+            **{name: "conditional" for name in conditional},
+            **{name: "optional" for name in optional},
+        }
+        for name, architecture in self.architectures.items():
+            if architecture.status != expected_status[name]:
+                raise ValueError(f"architectures.{name}.status is inconsistent")
+            if architecture.status == "required" and not architecture.enabled:
+                raise ValueError(f"required architecture {name!r} must be enabled")
+
+            # Search dictionaries need a separate name check because their keys
+            # are dynamic mappings rather than normal Pydantic model fields.
+            expected_parameters = EXPECTED_SEARCH_PARAMETERS.get(name)
+            if expected_parameters is None:
+                raise ValueError(f"unsupported architecture {name!r}")
+            if set(architecture.search) != expected_parameters:
+                raise ValueError(
+                    f"architectures.{name}.search must contain exactly "
+                    f"{sorted(expected_parameters)}"
+                )
+            if set(architecture.variants) != EXPECTED_VARIANTS[name]:
+                raise ValueError(
+                    f"architectures.{name}.variants must contain exactly "
+                    f"{sorted(EXPECTED_VARIANTS[name])}"
+                )
+
+            unknown_features = set(architecture.feature_sets) - set(
+                self.representations.tabular_feature_sets
+            )
+            if unknown_features:
+                raise ValueError(
+                    f"architectures.{name} uses unknown feature sets "
+                    f"{sorted(unknown_features)}"
+                )
+            unknown_lookbacks = set(architecture.lookbacks) - set(
+                self.representations.sequence_lookbacks
+            )
+            if unknown_lookbacks:
+                raise ValueError(
+                    f"architectures.{name} uses unknown lookbacks "
+                    f"{sorted(unknown_lookbacks)}"
+                )
+
+        if set(self.phase_1.artifacts) != EXPECTED_PHASE_1_ARTIFACTS:
+            raise ValueError(
+                "phase_1.artifacts must contain exactly "
+                f"{sorted(EXPECTED_PHASE_1_ARTIFACTS)}"
+            )
+        if (
+            self.phase_1.expected_feature_sets.get("all_nonconstant")
+            != self.phase_1.expected_generated_features
+        ):
+            raise ValueError(
+                "all_nonconstant must contain every expected generated feature"
+            )
+        return self
+
+
+class ArtifactCheck(StrictModel):
+    """Summarize the structure actually observed for one input file.
+
+    These observations enter the generated JSON artifact.  They provide a
+    compact audit trail without copying full datasets or storing file hashes.
+    """
+
+    path: str
+    format: Literal["csv", "json"]
+    rows: int | None = None
+    columns: int | None = None
+    feature_columns: int | None = None
+
+
+class VerificationSummary(StrictModel):
+    """Provide deterministic verification metadata for the JSON artifact.
+
+    The status can only be "passed" because failures raise "ContractError"
+    and prevent artifact generation entirely.
+    """
+
+    status: Literal["passed"]
+    checked_artifacts: int
+    phase_1_assertions: int
+    artifacts: dict[str, ArtifactCheck]
+
+
+# ---------------------------------------------------------------------------
+# Contract loading and portable path handling
+# ---------------------------------------------------------------------------
+
+
+def _format_pydantic_error(error: ValidationError) -> str:
+    """Convert Pydantic errors into messages that point into the TOML file.
+
+    Pydantic exposes errors as structured dictionaries.  That structure is
+    useful to code, but a reader editing TOML needs a location such as
+    "architectures.lstm.lookbacks". Joining each location component with a
+    dot produces that familiar notation while preserving Pydantic's exact
+    explanation of the invalid value.
+    """
+
+    messages: list[str] = []
+    for detail in error.errors(include_url=False):
+        # "loc" can contain both field names and list indices.  Converting
+        # every component to text handles both without special cases.
+        location = ".".join(str(part) for part in detail["loc"])
+        messages.append(f"{location}: {detail['msg']}")
+    return "\n".join(messages)
+
+
+def load_contract(path: Path = DEFAULT_CONTRACT_PATH) -> ExperimentContract:
+    """Read the human-authored TOML contract and validate it completely.
+
+    Parsing and schema validation are deliberately separate operations.  A
+    TOML syntax error means the file itself cannot be read, whereas a Pydantic
+    error means the TOML is syntactically valid but violates an experiment
+    rule.  Both cases are converted to "ContractError" so callers get a
+    consistent, readable failure interface.
+    """
+
+    try:
+        # "tomllib" expects a binary stream and performs no type coercion of
+        # our own.  The resulting Python mapping is validated in the next step.
+        with path.open("rb") as stream:
+            payload = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ContractError(f"Cannot read contract {path}: {error}") from error
+
+    try:
+        # This invokes field validation and the cross-section model validator.
+        # No downstream file is inspected until this in-memory contract passes.
+        return ExperimentContract.model_validate(payload)
+    except ValidationError as error:
+        raise ContractError(
+            "Experiment contract schema validation failed:\n"
+            f"{_format_pydantic_error(error)}"
+        ) from error
+
+
+def repository_relative_path(path: Path) -> str:
+    """Represent a path portably and reject files outside this repository.
+
+    Generated metadata must not contain developer-specific absolute paths such
+    as "C:\\Users\\...". The resolved containment check also prevents a path
+    containing ".." from merely looking repository-relative while actually
+    referring to an external file.
+    """
+
+    try:
+        # POSIX separators make the generated JSON stable across operating
+        # systems even though the current development machine uses Windows.
+        return path.resolve().relative_to(REPOSITORY_ROOT.resolve()).as_posix()
+    except ValueError as error:
+        raise ContractError(f"Path is outside the repository: {path}") from error
+
+
+def _resolve_input_path(relative_path: str) -> Path:
+    """Resolve one declared Phase 1 input safely from the repository root.
+
+    The contract stores repository-relative paths for portability.  This
+    helper centralizes path handling and refuses both absolute paths and
+    relative paths that escape through parent-directory components.
+    """
+
+    supplied = Path(relative_path)
+    if supplied.is_absolute():
+        raise ContractError(f"Artifact path must be relative: {relative_path}")
+
+    # Resolve first so that embedded ".." components and symbolic links are
+    # accounted for before the containment check is applied.
+    resolved = (REPOSITORY_ROOT / supplied).resolve()
+    try:
+        resolved.relative_to(REPOSITORY_ROOT.resolve())
+    except ValueError as error:
+        raise ContractError(
+            f"Artifact path escapes the repository: {relative_path}"
+        ) from error
+    return resolved
+
+
+def _nested_json_value(payload: dict[str, Any], dotted_path: str) -> Any:
+    """Read a nested JSON value named with contract-friendly dotted notation.
+
+    For example, "uncertainty.unit" means
+    "payload['uncertainty']['unit']". The contract can therefore describe
+    nested requirements without reproducing an entire upstream JSON document.
+    A missing object or key raises "KeyError" with the original full path so
+    the caller can report exactly which requirement failed.
+    """
+
+    current: Any = payload
+    for part in dotted_path.split("."):
+        # Each intermediate value must be a JSON object.  Lists are not
+        # traversed because the current contract only needs named object keys.
+        if not isinstance(current, dict) or part not in current:
+            raise KeyError(dotted_path)
+        current = current[part]
+    return current
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 artifact verification
+# ---------------------------------------------------------------------------
+
+
+def _verify_json_artifact(
+    name: str,
+    path: Path,
+    specification: ArtifactSpecification,
+) -> tuple[ArtifactCheck, dict[str, Any]]:
+    """Validate the small, stable interface of one Phase 1 JSON artifact.
+
+    The verifier intentionally does not compare the complete document.  It
+    checks the keys that Phase 2 consumes and exact values that define critical
+    interfaces, such as the number of folds.  This keeps Phase 2 sensitive to
+    meaningful upstream changes without coupling it to unrelated metadata.
+
+    The parsed payload is returned as well as the summary because selected JSON
+    files participate in later cross-artifact consistency checks.
+    """
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError(
+            f"{name}: cannot read valid JSON from {path}: {error}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise ContractError(f"{name}: top-level JSON value must be an object")
+
+    # Accumulate every local problem before failing.  A user can then correct
+    # all missing or changed values in one edit-and-verify cycle.
+    problems: list[str] = []
+
+    # Presence checks establish the required interface even when the concrete
+    # value is allowed to vary or is checked against another file later.
+    for key in specification.required_json_keys:
+        try:
+            _nested_json_value(payload, key)
+        except KeyError:
+            problems.append(f"missing required JSON key {key!r}")
+    # Exact-value checks protect settings that must agree with this experiment,
+    # for example five outer folds or leakage verification status "passed".
+    for key, expected in specification.required_json_values.items():
+        try:
+            observed = _nested_json_value(payload, key)
+        except KeyError:
+            problems.append(f"missing required JSON value {key!r}")
+            continue
+        if observed != expected:
+            problems.append(f"{key!r} is {observed!r}, expected {expected!r}")
+    if problems:
+        raise ContractError(f"{name}: " + "; ".join(problems))
+
+    # Only lightweight, deterministic observations enter the generated
+    # specification; the complete upstream payload remains an input artifact.
+    return (
+        ArtifactCheck(
+            path=repository_relative_path(path),
+            format="json",
+        ),
+        payload,
+    )
+
+
+def _verify_csv_artifact(
+    name: str,
+    path: Path,
+    specification: ArtifactSpecification,
+) -> ArtifactCheck:
+    """Validate the structural interface of one Phase 1 tabular artifact.
+
+    The checks answer four questions needed before an architecture can consume
+    the file: can pandas read it, does it contain the expected observations,
+    are required metadata columns present, and does it expose the expected
+    number of engineered features?  Values are not re-audited here because
+    their semantic and leakage checks belong to Phase 1.
+    """
+
+    try:
+        table = pd.read_csv(path)
+    except (OSError, ValueError, pd.errors.ParserError) as error:
+        raise ContractError(f"{name}: cannot read CSV {path}: {error}") from error
+
+    # As with JSON validation, collect all local discrepancies so one run gives
+    # a useful diagnostic instead of stopping at the first missing column.
+    problems: list[str] = []
+    missing = [
+        column
+        for column in specification.required_columns
+        if column not in table.columns
+    ]
+    if missing:
+        problems.append(f"missing columns {missing}")
+    if len(table) != specification.rows:
+        problems.append(f"has {len(table)} rows, expected {specification.rows}")
+    if len(table.columns) != specification.total_columns:
+        problems.append(
+            f"has {len(table.columns)} columns, expected {specification.total_columns}"
+        )
+
+    # Phase 1 uses a naming convention for model features.  Counting by prefix
+    # avoids hard-coding 606 names here and excludes identifiers/targets.
+    feature_columns = sum(column.startswith(FEATURE_PREFIX) for column in table.columns)
+    if (
+        specification.feature_columns is not None
+        and feature_columns != specification.feature_columns
+    ):
+        problems.append(
+            f"has {feature_columns} feature columns, "
+            f"expected {specification.feature_columns}"
+        )
+    if problems:
+        raise ContractError(f"{name}: " + "; ".join(problems))
+
+    return ArtifactCheck(
+        path=repository_relative_path(path),
+        format="csv",
+        rows=int(len(table)),
+        columns=int(len(table.columns)),
+        feature_columns=int(feature_columns),
+    )
+
+
+def _verify_cross_artifact_consistency(
+    contract: ExperimentContract,
+    json_payloads: dict[str, dict[str, Any]],
+) -> int:
+    """Verify agreements that cannot be established one file at a time.
+
+    Individual artifact checks prove that files have the required structures.
+    This function proves that selected contents agree with each other and with
+    the Phase 2 contract.  Without these comparisons, two individually valid
+    files could still describe different feature sets, metrics, or validation
+    protocols.
+
+    Returns:
+        The number of passed Phase 1 assertions, recorded in the generated
+        verification summary for a concise audit trail.
+    """
+
+    report = json_payloads["verification_report"]
+    assertions = report.get("assertions")
+    if not isinstance(assertions, dict) or not assertions:
+        raise ContractError(
+            "verification_report: assertions must be a non-empty object"
+        )
+    # "is not True" deliberately rejects false, null, zero, and strings such
+    # as "passed". Every assertion must be the JSON boolean true.
+    failed_assertions = sorted(
+        name for name, passed in assertions.items() if passed is not True
+    )
+    if failed_assertions:
+        raise ContractError(
+            "verification_report: failed Phase 1 assertions "
+            f"{failed_assertions}"
+        )
+
+    # The same feature-set sizes appear in the Phase 1 verification report and
+    # preprocessing configuration.  Requiring three-way agreement prevents a
+    # stale feature catalog from silently entering the architecture study.
+    expected_sets = dict(contract.phase_1.expected_feature_sets)
+    if report.get("feature_sets") != expected_sets:
+        raise ContractError(
+            "verification_report: feature-set counts do not match the contract"
+        )
+
+    preprocessing = json_payloads["preprocessing_config"]
+    if preprocessing.get("feature_counts") != expected_sets:
+        raise ContractError(
+            "preprocessing_config: feature-set counts do not match the contract"
+        )
+
+    # Phase 2 must report exactly the metrics and groups defined by Phase 1.
+    # Sets are suitable for metric names; report-group order is retained because
+    # it also defines a stable output and plotting order.
+    metrics = json_payloads["metric_specification"]
+    if set(metrics.get("metrics", {})) != set(contract.evaluation.metrics):
+        raise ContractError(
+            "metric_specification: metric names do not match the contract"
+        )
+    if metrics.get("reported_groups") != contract.evaluation.reported_groups:
+        raise ContractError(
+            "metric_specification: reported groups do not match the contract"
+        )
+    return len(assertions)
+
+
+# ---------------------------------------------------------------------------
+# Public verification API and command-line entry point
+# ---------------------------------------------------------------------------
+
+
+def verify_phase_1_inputs(contract: ExperimentContract) -> VerificationSummary:
+    """Run format-specific and cross-file checks for every declared input.
+
+    This is the public verification entry point used by both the standalone
+    verifier and the builder.  It performs no writes.  Returning a typed summary
+    makes the observed input structure available to the deterministic JSON
+    specification that later pipeline steps will consume.
+    """
+
+    artifact_checks: dict[str, ArtifactCheck] = {}
+    json_payloads: dict[str, dict[str, Any]] = {}
+
+    # Each artifact is resolved and checked according to its declared format.
+    # JSON payloads are retained temporarily because a few contain values that
+    # must be compared after every individual file has passed.
+    for name, specification in contract.phase_1.artifacts.items():
+        path = _resolve_input_path(specification.path)
+        if not path.is_file():
+            raise ContractError(f"{name}: required artifact does not exist: {path}")
+
+        if specification.format == "json":
+            check, payload = _verify_json_artifact(name, path, specification)
+            artifact_checks[name] = check
+            json_payloads[name] = payload
+        else:
+            artifact_checks[name] = _verify_csv_artifact(name, path, specification)
+
+    # Cross-file checks happen last so they can assume all required JSON files
+    # exist, parse successfully, and contain their minimum required interface.
+    assertion_count = _verify_cross_artifact_consistency(contract, json_payloads)
+    return VerificationSummary(
+        status="passed",
+        checked_artifacts=len(artifact_checks),
+        phase_1_assertions=assertion_count,
+        artifacts=artifact_checks,
+    )
+
+
+def load_and_verify_contract(
+    path: Path = DEFAULT_CONTRACT_PATH,
+) -> tuple[ExperimentContract, VerificationSummary]:
+    """Provide one mandatory gate for every consumer of the contract.
+
+    Keeping schema and input verification behind this single function prevents
+    the builder—and later model-running code—from accidentally validating only
+    half of the experiment interface.
+    """
+
+    contract = load_contract(path)
+    summary = verify_phase_1_inputs(contract)
+    return contract, summary
+
+
+def main() -> None:
+    """Run the read-only contract check from the command line."""
+
+    # The CLI accepts file locations only.  Scientific settings intentionally
+    # cannot be overridden with flags because that would create experiments not
+    # represented by the versioned TOML source of truth.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--contract",
+        type=Path,
+        default=DEFAULT_CONTRACT_PATH,
+        help="TOML contract location; experiment values cannot be overridden.",
+    )
+    args = parser.parse_args()
+
+    try:
+        contract, summary = load_and_verify_contract(args.contract)
+        source = repository_relative_path(args.contract)
+    except ContractError as error:
+        print(f"Experiment contract verification failed:\n{error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
+    # Keep success output concise but include the quantities a human should
+    # check before moving on to model execution.
+    print("Experiment contract verification passed")
+    print(f"Contract: {source}")
+    print(f"Contract version: {contract.contract_version}")
+    print(f"Phase 1 artifacts checked: {summary.checked_artifacts}")
+    print(f"Passed Phase 1 assertions: {summary.phase_1_assertions}")
+
+
+if __name__ == "__main__":
+    main()

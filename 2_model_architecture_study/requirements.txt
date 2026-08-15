@@ -1,0 +1,5 @@
+# Reads and structurally verifies the Phase 1 CSV and compressed CSV artifacts.
+pandas>=3.0,<4
+
+# Provides strict, nested validation for the executable experiment contract.
+pydantic>=2.13,<3
