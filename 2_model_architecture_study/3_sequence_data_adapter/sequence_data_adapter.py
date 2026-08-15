@@ -552,6 +552,40 @@ class SequenceDataAdapter:
 
         return self._build_dataset("test_endpoints", lookback)
 
+    def outer_fold_labels(self) -> tuple[int, ...]:
+        """Return the actual outer-fold labels stored in the copied table."""
+
+        try:
+            folds = pd.read_csv(
+                self._copied_path("outer_folds"),
+                usecols=["outer_fold"],
+            )
+        except (OSError, ValueError, pd.errors.ParserError) as error:
+            raise SequenceAdapterError(f"Cannot read outer folds: {error}") from error
+        return tuple(
+            sorted(int(value) for value in folds["outer_fold"].unique())
+        )
+
+    def inner_fold_labels(self, outer_fold: int) -> tuple[int, ...]:
+        """Return actual inner-fold labels for one outer-training partition."""
+
+        try:
+            folds = pd.read_csv(
+                self._copied_path("inner_folds"),
+                usecols=["outer_fold", "inner_fold"],
+            )
+        except (OSError, ValueError, pd.errors.ParserError) as error:
+            raise SequenceAdapterError(f"Cannot read inner folds: {error}") from error
+        folds = folds.loc[folds["outer_fold"].astype(int) == outer_fold]
+        if folds.empty:
+            available = self.outer_fold_labels()
+            raise SequenceAdapterError(
+                f"Unknown outer fold {outer_fold}. Available: {list(available)}"
+            )
+        return tuple(
+            sorted(int(value) for value in folds["inner_fold"].unique())
+        )
+
     def _fold_uav_ids(
         self,
         *,

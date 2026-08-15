@@ -76,6 +76,8 @@ Run from the repository root:
 - "load_development(lookback)"
 - "load_locked(lookback)"
 - "load_test(lookback)"
+- "outer_fold_labels()"
+- "inner_fold_labels(outer_fold)"
 - "fit_channel_scaler(training_uav_ids)"
 - "get_inner_selection_split(outer_fold, inner_fold, lookback)"
 - "get_locked_outer_evaluation_split(outer_fold, lookback)"

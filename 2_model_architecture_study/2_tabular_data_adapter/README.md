@@ -62,6 +62,8 @@ time, and complete byte content.
 - "load_development(feature_set)"
 - "load_locked(feature_set)"
 - "load_test(feature_set)"
+- "outer_fold_labels()"
+- "inner_fold_labels(outer_fold)"
 - "get_inner_selection_split(outer_fold, inner_fold, feature_set)"
 - "get_locked_outer_evaluation_split(outer_fold, feature_set)"
 

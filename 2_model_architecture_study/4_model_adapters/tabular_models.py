@@ -158,6 +158,12 @@ class RegularizedLinearAdapter(ModelAdapter):
         if variant == "ridge":
             self.estimator = Ridge(
                 alpha=float(self.hyperparameters["ridge_alpha"]),
+                # The engineered feature matrix contains strongly redundant
+                # columns. LSQR avoids solving an ill-conditioned normal
+                # equation directly when the sampled penalty is very small.
+                solver="lsqr",
+                tol=1e-6,
+                max_iter=20_000,
             )
         elif variant == "elastic_net":
             self.estimator = ElasticNet(

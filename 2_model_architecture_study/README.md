@@ -13,6 +13,11 @@ classical tabular estimators, and neural sequence estimators behind one common
 fit, prediction, and persistence interface. Their generated registry records
 which contract families are implemented and enabled.
 
+The [inner model-selection runner](5_inner_model_selection/README.md) performs
+automatic tuning separately inside each enabled family and outer fold. It uses
+only inner UAV folds and development scenarios, writes per-study checkpoints,
+and never ranks architectures.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell

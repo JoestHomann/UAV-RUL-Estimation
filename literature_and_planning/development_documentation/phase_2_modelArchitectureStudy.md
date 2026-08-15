@@ -83,6 +83,20 @@ Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net
 
 XGBoost and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. The later runner must derive that fixed duration from the median inner-fold best duration, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
 
+## Inner model selection
+
+Step 5 implements automatic selection within each enabled architecture family in [5_inner_model_selection](../../2_model_architecture_study/5_inner_model_selection/README.md). One independent Optuna study covers one model family and one outer fold. Mean and cycle-only baselines receive one fixed candidate; every tunable family receives up to 25 distinct candidates from the Step 1 contract.
+
+[candidate_space.py](../../2_model_architecture_study/5_inner_model_selection/candidate_space.py) resolves the feature set or sequence lookback together with the model hyperparameters. It maps the fixed, categorical, uniform, log-uniform, and hidden-layer alternatives to an Optuna TPE study using search seed 13. The combined Ridge/Elastic Net family uses a conditional space so inactive variant parameters do not consume tuning trials.
+
+[inner_model_selection.py](../../2_model_architecture_study/5_inner_model_selection/inner_model_selection.py) evaluates every candidate across the four actual inner-fold labels from the copied fold tables. Each split is checked for disjoint UAV groups, training weights, RUL targets, and exactly five development scenarios. Fold-specific preprocessing and model fitting are repeated independently. The objective is the mean of the four inner-validation RMSE values.
+
+Each family/fold study writes candidate, fold-level, selected-configuration, and status checkpoints below "artifacts/studies/". The consolidated "candidate_results.csv", "inner_fold_results.csv", and "selected_configurations.csv" expose all completed work. "selection_manifest.json" remains "partial" until all 40 enabled family/fold studies are complete and explicitly records that neither locked nor test data was loaded.
+
+For XGBoost and neural candidates, Step 5 records the best duration in every inner fold. The median is rounded to the nearest integer with half values rounded upward and stored as "outer_retraining_iterations". Step 6 must retrain with this fixed duration instead of using locked targets for early stopping.
+
+The inexpensive mean and cycle-only studies have been generated for all five outer folds, producing 10 completed studies, 10 candidate rows, and 40 inner-fold rows. The manifest correctly remains partial until the six tunable families finish their 25-candidate searches. This partial execution demonstrates the artifact flow but is not the completed architecture study.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:

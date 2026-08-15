@@ -13,6 +13,9 @@ scikit-learn>=1.7,<2
 # Persists complete fitted adapters with their preprocessing and model state.
 joblib>=1.5,<2
 
+# Runs deterministic automatic tuning within each architecture family.
+optuna>=4.8,<5
+
 # Implements the regularized gradient-boosted-tree architecture.
 xgboost>=3.0,<4
 
