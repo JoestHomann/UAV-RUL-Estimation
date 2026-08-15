@@ -333,6 +333,8 @@ class TransformerRegressor(nn.Module):
 class NeuralModelAdapter(ModelAdapter):
     """Share deterministic weighted training across all PyTorch networks."""
 
+    stochastic = True
+
     def __init__(
         self,
         *,

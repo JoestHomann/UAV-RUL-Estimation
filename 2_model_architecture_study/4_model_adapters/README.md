@@ -52,6 +52,10 @@ factory creates an adapter, so those values do not have to be passed again to
 time, completed epochs or iterations, the selected stopping point when
 available, validation RMSE, and the trainable parameter count when meaningful.
 
+Every adapter also declares whether its family is stochastic. Random Forest,
+XGBoost, and the neural adapters use the three retraining seeds from the
+contract; deterministic baselines and linear or kernel models need one run.
+
 ## Preprocessing ownership
 
 Preprocessing stays with the model artifact that depends on it:

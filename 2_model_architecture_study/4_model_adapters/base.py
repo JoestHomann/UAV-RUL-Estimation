@@ -58,6 +58,7 @@ class ModelAdapter(ABC):
 
     family: str
     representation: Representation
+    stochastic = False
 
     def __init__(
         self,

@@ -247,6 +247,7 @@ def build_registry_payload(
             "variants": architecture["variants"],
             "resolved_hyperparameters": sorted(EXPECTED_HYPERPARAMETERS[family]),
             "supports_sample_weights": True,
+            "stochastic": adapter_class.stochastic,
             "prediction_minimum": contract["evaluation"]["prediction_minimum"],
             "persistence": "trusted local joblib artifact",
         }

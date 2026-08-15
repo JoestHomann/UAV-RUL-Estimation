@@ -213,6 +213,7 @@ class RandomForestAdapter(ModelAdapter):
 
     family = "random_forest"
     representation = "tabular"
+    stochastic = True
 
     def fit(self, training_data: Any, validation_data: Any | None) -> TrainingSummary:
         started_at = self.start_timer()
@@ -267,6 +268,7 @@ class XGBoostAdapter(ModelAdapter):
 
     family = "xgboost"
     representation = "tabular"
+    stochastic = True
 
     def __init__(
         self,

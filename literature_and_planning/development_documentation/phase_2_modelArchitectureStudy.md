@@ -97,6 +97,20 @@ For XGBoost and neural candidates, Step 5 records the best duration in every inn
 
 The inexpensive mean and cycle-only studies have been generated for all five outer folds, producing 10 completed studies, 10 candidate rows, and 40 inner-fold rows. The manifest correctly remains partial until the six tunable families finish their 25-candidate searches. This partial execution demonstrates the artifact flow but is not the completed architecture study.
 
+## Locked outer evaluation
+
+Step 6 implements held-out evaluation in [6_locked_outer_evaluation](../../2_model_architecture_study/6_locked_outer_evaluation/README.md). [evaluation_gate.py](../../2_model_architecture_study/6_locked_outer_evaluation/evaluation_gate.py) runs before either data adapter is constructed. It requires a complete Step 5 manifest, all 40 family/fold selections, a matching contract version, valid configuration fields, and confirmation that Step 5 used neither locked nor test data. There is no bypass option.
+
+[locked_outer_evaluation.py](../../2_model_architecture_study/6_locked_outer_evaluation/locked_outer_evaluation.py) retrains each selected configuration on the 80 outer-training UAVs and then predicts the 20 held-out UAVs across 20 locked scenarios. It verifies 1,600 training prefixes, 400 validation endpoints, disjoint UAV groups, correct fold membership, unique scenario/UAV keys, and total training weight 1 per UAV.
+
+Locked validation data is never passed to the model's fitting method. XGBoost and neural adapters receive the fixed "outer_retraining_iterations" selected from the median inner-fold stopping duration. Predictions are generated only after fitting finishes, so locked targets cannot influence preprocessing, parameters, early stopping, or training duration.
+
+Random Forest, XGBoost, MLP, TCN, LSTM, and an enabled Transformer are marked stochastic and run with seeds 13, 37, and 73. Deterministic families run once with seed 13. The current eight-family contract therefore requires 90 family/fold/seed runs and produces 36,000 prediction rows.
+
+Every run writes its fitted model, 400-row prediction table, training and inference facts, and status checkpoint. The consolidated "locked_predictions.csv.gz", "model_runs.csv", and "locked_evaluation_manifest.json" include only complete runs. Step 6 records all architecture results but calculates no ranking and chooses no winner.
+
+At implementation time Step 5 remains partial at 10 of 40 studies. The Step 6 gate has been verified to reject that state before locked data access, so no project locked predictions have been generated yet.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:

@@ -18,6 +18,11 @@ automatic tuning separately inside each enabled family and outer fold. It uses
 only inner UAV folds and development scenarios, writes per-study checkpoints,
 and never ranks architectures.
 
+The [locked outer-evaluation runner](6_locked_outer_evaluation/README.md)
+re-trains completed Step 5 selections and saves held-out predictions, models,
+and efficiency facts. A mandatory completion gate prevents it from loading any
+locked split while Step 5 remains partial.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell
