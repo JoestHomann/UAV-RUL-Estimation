@@ -67,6 +67,22 @@ Step 3 implements the raw telemetry representation in [3_sequence_data_adapter](
 
 The inner-selection and locked-outer methods derive UAV membership from the copied fold assignments. They fit channel medians and IQR-based scales on complete histories from the active training UAVs only, apply the same parameters to both sides of the split, and keep padded values equal to zero. The fitted scaling is independent of lookback, excludes all validation UAVs, and leaves age side features unscaled.
 
+## Model adapters
+
+Step 4 implements the common estimator boundary in [4_model_adapters](../../2_model_architecture_study/4_model_adapters/README.md). The model registry connects every family in the experiment contract to one concrete adapter class. The eight required families are enabled; the conditional Transformer and optional RBF-SVR are implemented but remain disabled by the contract.
+
+The implementation separates shared experiment behavior from architecture-specific model code:
+
+- [base.py](../../2_model_architecture_study/4_model_adapters/base.py) defines the common fitting, prediction, nonnegative clipping, training-summary, and trusted-local persistence behavior.
+- [tabular_models.py](../../2_model_architecture_study/4_model_adapters/tabular_models.py) implements the weighted mean and cycle-only baselines, Ridge/Elastic Net, Random Forest, XGBoost, and optional RBF-SVR.
+- [neural_models.py](../../2_model_architecture_study/4_model_adapters/neural_models.py) implements one weighted PyTorch training loop for the MLP, causal TCN, packed unidirectional LSTM, and masked Transformer.
+- [model_registry.py](../../2_model_architecture_study/4_model_adapters/model_registry.py) validates resolved hyperparameter names, enforces enabled/disabled contract status, and creates the requested adapter without selecting or ranking architectures.
+- [build_model_registry.py](../../2_model_architecture_study/4_model_adapters/build_model_registry.py) writes "artifacts/model_registry.json" with the contract version, adapter mapping, representation requirements, enabled status, supported configuration fields, and installed library versions. It records no hashes or timestamps.
+
+Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling using only the supplied training rows; Random Forest and XGBoost use unscaled tabular features. Sequence models consume Step 3's fold-scaled telemetry and fit a separate robust scaler for the two age side features from their supplied training rows. Every family uses the sample weights already carried by its Step 2 or Step 3 dataset.
+
+XGBoost and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. The later runner must derive that fixed duration from the median inner-fold best duration, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
+
 ## What is compared
 
 In this study, an **architecture** means the complete path from an available UAV history to one RUL prediction:
@@ -106,10 +122,12 @@ hyperparameters: {}
 seed: 13
 ```
 
-Every model adapter must expose the same logical interface:
+Every model adapter exposes the same logical interface. The dataset contains
+its target and sample weights, while the adapter configuration contains its
+seed:
 
 ```python
-fit(training_data, validation_data, sample_weights, seed)
+fit(training_data, validation_data)
 predict(data)
 save(path)
 load(path)

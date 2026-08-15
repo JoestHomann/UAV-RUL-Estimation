@@ -10,6 +10,9 @@ pydantic>=2.13,<3
 # Implements Ridge, Elastic Net, Random Forest, RBF-SVR, and robust scaling.
 scikit-learn>=1.7,<2
 
+# Persists complete fitted adapters with their preprocessing and model state.
+joblib>=1.5,<2
+
 # Implements the regularized gradient-boosted-tree architecture.
 xgboost>=3.0,<4
 

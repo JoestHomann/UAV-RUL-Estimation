@@ -8,10 +8,16 @@ The next implemented step is the [tabular data adapter](2_tabular_data_adapter/R
 
 The [sequence data adapter](3_sequence_data_adapter/README.md) creates causal padded telemetry windows and applies robust channel scaling fitted only on the active training UAVs.
 
+The [model adapters](4_model_adapters/README.md) implement the baselines,
+classical tabular estimators, and neural sequence estimators behind one common
+fit, prediction, and persistence interface. Their generated registry records
+which contract families are implemented and enabled.
+
 Install the Phase 2 dependencies from the repository root:
 
 ```powershell
 py -m pip install -r 2_model_architecture_study\requirements.txt
 ```
 
-Only the dependencies needed by implemented steps are listed. Model libraries will be added when the corresponding adapters are implemented.
+Only dependencies needed by implemented steps are listed. Step 4 currently
+uses scikit-learn, XGBoost, PyTorch, and joblib.
