@@ -133,9 +133,9 @@ More details, including every generated artifact, are available in the
 ## Phase 2: Model architecture study
 
 Phase 2 uses one entry point for its seven steps. It builds and verifies the
-experiment contract, prepares the tabular and sequence adapters, registers the
-models, performs within-family tuning, evaluates locked outer folds, and
-creates the final architecture-comparison tables and figures.
+architecture study settings, prepares the tabular and sequence adapters,
+registers the models, performs within-family tuning, evaluates locked outer
+folds, and creates the final architecture-comparison tables and figures.
 
 ### Check current progress
 

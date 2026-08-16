@@ -14,12 +14,12 @@ does not compare it with the selected Random Forest, MLP, TCN, or LSTM.
 
 One independent study is identified by:
 
-    model family + outer fold + contract version
+    model family + outer fold + settings version
 
 For that study, the runner:
 
 1. keeps the current outer-validation UAVs outside model selection;
-2. generates distinct candidates from the recorded contract search space;
+2. generates distinct candidates from the recorded settings search space;
 3. treats the tabular feature set or sequence lookback as part of a candidate;
 4. evaluates every candidate on all four inner UAV folds;
 5. refits preprocessing and the model separately in every inner fold;
@@ -28,7 +28,7 @@ For that study, the runner:
 8. selects the lowest mean RMSE inside that family and outer fold.
 
 Mean and cycle-only baselines have no tunable choices and therefore receive one
-candidate. Other enabled families receive the contract budget of 25 distinct
+candidate. Other enabled families receive the settings budget of 20 distinct
 candidates.
 
 ## Automatic tuning
@@ -134,4 +134,4 @@ same family/fold study replaces that study's generated checkpoints. Other
 completed studies are preserved and reconsolidated.
 
 The candidate budget cannot be changed from the command line. This prevents a
-quick diagnostic run from being confused with the contract-defined study.
+quick diagnostic run from being confused with the settings-defined study.

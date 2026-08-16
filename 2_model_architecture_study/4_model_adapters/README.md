@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This step implements every architecture declared in the experiment contract
-behind one shared interface. The later tuning and evaluation runner can
+This step implements every architecture declared in the architecture study
+settings behind one shared interface. The later tuning and evaluation runner can
 therefore exchange model families without containing separate fitting and
 prediction logic for each library.
 
@@ -24,11 +24,11 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "MLPAdapter" applies training-fold robust scaling before a PyTorch MLP.
 - "TCNAdapter" applies causal dilated convolutions to Step 3 sequence windows.
 - "LSTMAdapter" uses packed valid sequence lengths in one temporal direction.
-- "TransformerAdapter" implements the contract's disabled conditional masked
+- "TransformerAdapter" implements the settings' disabled conditional masked
   Transformer so it can be enabled without changing the adapter layer.
 - "RBFSVRAdapter" implements the disabled optional robust-scaled RBF-SVR.
 
-The eight required families are enabled by the current contract. Transformer
+The eight required families are enabled by the current settings. Transformer
 and RBF-SVR are implemented but remain disabled and cannot be constructed by
 the factory unless the caller explicitly allows disabled families.
 
@@ -38,7 +38,7 @@ Every adapter exposes the following operations:
 
 - "fit(training_data, validation_data)" fits preprocessing and the model;
 - "predict(data)" returns one finite RUL value per row and clips values at the
-  contract's lower prediction boundary;
+  settings' lower prediction boundary;
 - "save(path)" stores the fitted preprocessing, estimator, configuration, and
   training summary together;
 - "load(path)" restores a trusted local model artifact.
@@ -61,7 +61,7 @@ configuration, and permitted final metrics.
 
 Every adapter also declares whether its family is stochastic. Random Forest,
 XGBoost, and the neural adapters use the three retraining seeds from the
-contract; deterministic baselines and linear or kernel models need one run.
+settings; deterministic baselines and linear or kernel models need one run.
 
 ## Preprocessing ownership
 
@@ -81,7 +81,7 @@ predictions use exactly the transformation learned during training.
 
 All families use the supplied Phase 1 sample weights. Neural adapters share
 weighted mean squared error, AdamW, deterministic seeds, gradient clipping,
-batch size, maximum epoch count, and early-stopping patience from the contract.
+batch size, maximum epoch count, and early-stopping patience from the settings.
 They run on CPU with one data-loading worker for a simple repeatable baseline.
 
 XGBoost and neural models support two distinct training modes:
@@ -97,7 +97,7 @@ parallelism belongs to the later runner, avoiding nested parallel execution.
 
 - "base.py" defines the common adapter, training summary, persistence, input
   validation, sample-weight, and metric helpers.
-- "model_registry.py" maps contract family names to adapter classes and creates
+- "model_registry.py" maps settings family names to adapter classes and creates
   configured adapters.
 - "build_model_registry.py" writes the traceable registry artifact.
 
@@ -129,9 +129,9 @@ This structure keeps architecture-specific layers and hyperparameter handling
 inside the model's own file while preventing copied training logic from
 diverging between neural families.
 
-Ridge and Elastic Net remain one comparison family because the experiment
-contract selects between them within the same regularized-linear search. Their
-estimator definitions nevertheless live in separate files; the family adapter
+Ridge and Elastic Net remain one comparison family because the architecture
+study settings select between them within the same regularized-linear search.
+Their estimator definitions nevertheless live in separate files; the family adapter
 contains only their shared robust scaling, fitting, prediction, and reporting.
 
 ## Generated artifact
@@ -142,7 +142,7 @@ Run from the repository root:
 
 The command creates "artifacts/model_registry.json". It records all ten model
 families, their enabled status, representation, adapter class, permitted
-configuration fields, common behavior, contract version, and installed model
+configuration fields, common behavior, settings version, and installed model
 library versions. It contains no timestamp or hash and makes no performance or
 winner claim.
 
@@ -150,7 +150,7 @@ Generated artifacts remain visible locally and are ignored by Git.
 
 ## Boundary for Step 5
 
-Step 5 will sample resolved candidates from the contract, request the correct
+Step 5 will sample resolved candidates from the settings, request the correct
 Step 2 or Step 3 split, construct the matching adapter through
 "ModelAdapterFactory", and collect its predictions and training summary. The
 model adapters deliberately contain no candidate-ranking or cross-architecture

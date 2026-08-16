@@ -3,7 +3,7 @@
 The stage consumes only the consolidated outputs accepted by the Step 7 gate.
 It reports predictive metrics, reliability groups, paired whole-UAV bootstrap
 uncertainty, random-seed variation, and computational cost. Architecture names
-always remain in contract order; performance is never converted into a rank or
+always remain in settings order; performance is never converted into a rank or
 an automatically selected winner.
 """
 
@@ -25,7 +25,7 @@ AGE_BANDS = ("1-50", "51-100", "101-200", ">200")
 GROUP_TYPES = ("overall", "outer_fold", "scenario", "age_band", "lifetime_quantile")
 
 PREDICTION_COLUMNS = {
-    "contract_version",
+    "settings_version",
     "model_family",
     "configuration_id",
     "seed",
@@ -44,7 +44,7 @@ PREDICTION_COLUMNS = {
 }
 
 RUN_COLUMNS = {
-    "contract_version",
+    "settings_version",
     "model_family",
     "configuration_id",
     "seed",
@@ -81,7 +81,7 @@ class ComparisonTables:
 
 
 def _regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    """Calculate the four metrics fixed by the experiment contract."""
+    """Calculate the four metrics fixed by the architecture study settings."""
 
     observed = np.asarray(y_true, dtype=np.float64)
     predicted = np.asarray(y_pred, dtype=np.float64)
@@ -175,8 +175,8 @@ class ArchitectureComparisonAnalyzer:
         plan: ArchitectureComparisonPlan,
     ) -> None:
         self.plan = plan
-        self.contract = plan.contract
-        self.contract_version = int(self.contract["contract_version"])
+        self.settings = plan.settings
+        self.settings_version = int(self.settings["settings_version"])
         self.predictions = predictions.copy()
         self.model_runs = model_runs.copy()
         self._validate_inputs()
@@ -240,7 +240,7 @@ class ArchitectureComparisonAnalyzer:
             )
 
         numeric_prediction_columns = [
-            "contract_version",
+            "settings_version",
             "seed",
             "outer_fold",
             "scenario",
@@ -261,7 +261,7 @@ class ArchitectureComparisonAnalyzer:
         self.predictions[numeric_prediction_columns] = numeric_predictions
 
         numeric_run_columns = [
-            "contract_version",
+            "settings_version",
             "seed",
             "outer_fold",
             "training_rows",
@@ -284,17 +284,17 @@ class ArchitectureComparisonAnalyzer:
             )
         self.model_runs[numeric_run_columns] = numeric_runs
 
-        if set(self.predictions["contract_version"].astype(int)) != {
-            self.contract_version
+        if set(self.predictions["settings_version"].astype(int)) != {
+            self.settings_version
         }:
             raise ArchitectureComparisonError(
-                "Locked predictions do not use the active contract version"
+                "Locked predictions do not use the active settings version"
             )
-        if set(self.model_runs["contract_version"].astype(int)) != {
-            self.contract_version
+        if set(self.model_runs["settings_version"].astype(int)) != {
+            self.settings_version
         }:
             raise ArchitectureComparisonError(
-                "Model runs do not use the active contract version"
+                "Model runs do not use the active settings version"
             )
         if set(self.predictions["model_family"].astype(str)) != set(
             self.plan.enabled_families
@@ -309,7 +309,7 @@ class ArchitectureComparisonAnalyzer:
                 "Model runs do not contain exactly the enabled families"
             )
         if (self.predictions["y_pred"] < float(
-            self.contract["evaluation"]["prediction_minimum"]
+            self.settings["evaluation"]["prediction_minimum"]
         )).any():
             raise ArchitectureComparisonError(
                 "Locked predictions violate the configured nonnegative boundary"
@@ -335,14 +335,14 @@ class ArchitectureComparisonAnalyzer:
                 "Model runs contain duplicate family/seed/fold rows"
             )
 
-        expected_training_uavs = int(self.contract["phase_1"]["expected_training_uavs"])
+        expected_training_uavs = int(self.settings["phase_1"]["expected_training_uavs"])
         fold_count = len(self.plan.outer_fold_labels)
         expected_validation_uavs = expected_training_uavs // fold_count
         expected_outer_training_uavs = expected_training_uavs - expected_validation_uavs
-        expected_scenarios = int(self.contract["phase_1"]["expected_locked_scenarios"])
+        expected_scenarios = int(self.settings["phase_1"]["expected_locked_scenarios"])
         expected_training_rows = (
             expected_outer_training_uavs
-            * int(self.contract["phase_1"]["expected_prefixes_per_training_uav"])
+            * int(self.settings["phase_1"]["expected_prefixes_per_training_uav"])
         )
         expected_rows_per_run = expected_validation_uavs * expected_scenarios
 
@@ -501,7 +501,7 @@ class ArchitectureComparisonAnalyzer:
                     & (self.predictions["seed"].astype(int) == seed)
                 ]
                 record: dict[str, Any] = {
-                    "contract_version": self.contract_version,
+                    "settings_version": self.settings_version,
                     "model_family": family,
                     "seed": seed,
                     "rows": len(group),
@@ -541,7 +541,7 @@ class ArchitectureComparisonAnalyzer:
                                 range(
                                     1,
                                     int(
-                                        self.contract["phase_1"][
+                                        self.settings["phase_1"][
                                             "expected_locked_scenarios"
                                         ]
                                     )
@@ -564,7 +564,7 @@ class ArchitectureComparisonAnalyzer:
                         ]
                     for position, (value, group) in enumerate(groups):
                         record: dict[str, Any] = {
-                            "contract_version": self.contract_version,
+                            "settings_version": self.settings_version,
                             "model_family": family,
                             "seed": seed,
                             "group_type": group_type,
@@ -587,7 +587,7 @@ class ArchitectureComparisonAnalyzer:
         for keys, group in grouped.groupby(key_columns, sort=False, observed=True):
             family, group_type, group_value, group_position = keys
             record: dict[str, Any] = {
-                "contract_version": self.contract_version,
+                "settings_version": self.settings_version,
                 "model_family": family,
                 "group_type": group_type,
                 "group_value": group_value,
@@ -641,8 +641,8 @@ class ArchitectureComparisonAnalyzer:
     def _bootstrap_metrics(self) -> pd.DataFrame:
         """Apply one paired whole-UAV resample to every family and every seed."""
 
-        repetitions = int(self.contract["evaluation"]["bootstrap_repetitions"])
-        seed = int(self.contract["evaluation"]["bootstrap_seed"])
+        repetitions = int(self.settings["evaluation"]["bootstrap_repetitions"])
+        seed = int(self.settings["evaluation"]["bootstrap_seed"])
         reference, predictions, row_uav_indices = self._aligned_prediction_arrays()
         y_true = reference["y_true"].to_numpy(dtype=np.float64)
         uav_count = reference["uav_id"].nunique()
@@ -662,7 +662,7 @@ class ArchitectureComparisonAnalyzer:
                     for values in predictions[family]
                 ]
                 record: dict[str, Any] = {
-                    "contract_version": self.contract_version,
+                    "settings_version": self.settings_version,
                     "bootstrap_repetition": repetition,
                     "model_family": family,
                     "sampled_uav_draws": uav_count,
@@ -690,7 +690,7 @@ class ArchitectureComparisonAnalyzer:
             family_seeds = seed_metrics.loc[seed_metrics["model_family"] == family]
             family_bootstrap = bootstrap.loc[bootstrap["model_family"] == family]
             record: dict[str, Any] = {
-                "contract_version": self.contract_version,
+                "settings_version": self.settings_version,
                 "model_family": family,
                 "seed_count": family_seeds["seed"].nunique(),
                 "evaluation_rows_per_seed": int(family_seeds["rows"].iloc[0]),
@@ -746,7 +746,7 @@ class ArchitectureComparisonAnalyzer:
                     }[metric]
                     records.append(
                         {
-                            "contract_version": self.contract_version,
+                            "settings_version": self.settings_version,
                             "family_a": family_a,
                             "family_b": family_b,
                             "metric": metric,
@@ -779,7 +779,7 @@ class ArchitectureComparisonAnalyzer:
             total_predictions = float(runs["prediction_rows"].sum())
             records.append(
                 {
-                    "contract_version": self.contract_version,
+                    "settings_version": self.settings_version,
                     "model_family": family,
                     "run_count": len(runs),
                     "training_seconds_mean_per_run": mean_or_nan(runs["training_seconds"]),
@@ -849,17 +849,17 @@ def save_comparison(
     figure_paths = create_comparison_figures(tables, plan, output_dir / "figures")
     manifest = {
         "comparison_version": 1,
-        "contract_version": int(plan.contract["contract_version"]),
+        "settings_version": int(plan.settings["settings_version"]),
         "status": "complete",
         "step_6_prerequisite": "complete",
         "enabled_families": list(plan.enabled_families),
         "metrics": list(METRICS),
         "reported_groups": list(GROUP_TYPES),
-        "bootstrap_unit": plan.contract["evaluation"]["bootstrap_unit"],
+        "bootstrap_unit": plan.settings["evaluation"]["bootstrap_unit"],
         "bootstrap_repetitions": int(
-            plan.contract["evaluation"]["bootstrap_repetitions"]
+            plan.settings["evaluation"]["bootstrap_repetitions"]
         ),
-        "bootstrap_seed": int(plan.contract["evaluation"]["bootstrap_seed"]),
+        "bootstrap_seed": int(plan.settings["evaluation"]["bootstrap_seed"]),
         "seed_aggregation": "mean of individual-seed metric values",
         "predictions_ensembled_across_seeds": False,
         "paired_comparison_keys": ["uav_id", "scenario"],

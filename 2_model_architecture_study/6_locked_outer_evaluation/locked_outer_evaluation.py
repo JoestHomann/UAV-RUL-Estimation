@@ -56,7 +56,7 @@ from evaluation_gate import (  # noqa: E402
 RUNNER_VERSION = 1
 
 PREDICTION_COLUMNS = [
-    "contract_version",
+    "settings_version",
     "model_family",
     "configuration_id",
     "seed",
@@ -75,7 +75,7 @@ PREDICTION_COLUMNS = [
 ]
 
 RUN_COLUMNS = [
-    "contract_version",
+    "settings_version",
     "model_family",
     "configuration_id",
     "seed",
@@ -218,7 +218,7 @@ class LockedRunArtifactWriter:
 
         payload: dict[str, Any] = {
             "runner_version": RUNNER_VERSION,
-            "contract_version": self.selected.contract_version,
+            "settings_version": self.selected.settings_version,
             "model_family": self.selected.model_family,
             "configuration_id": self.selected.configuration_id,
             "outer_fold": self.selected.outer_fold,
@@ -254,16 +254,16 @@ class LockedOuterEvaluationRunner:
         )
         self.output_dir = output_dir.resolve()
         self.factory = ModelAdapterFactory(specification_path)
-        self.contract = self.plan.contract
-        self.contract_version = int(self.contract["contract_version"])
+        self.settings = self.plan.settings
+        self.settings_version = int(self.settings["settings_version"])
         self.locked_scenarios = int(
-            self.contract["phase_1"]["expected_locked_scenarios"]
+            self.settings["phase_1"]["expected_locked_scenarios"]
         )
         self.training_uavs = int(
-            self.contract["phase_1"]["expected_training_uavs"]
+            self.settings["phase_1"]["expected_training_uavs"]
         )
         self.prefixes_per_uav = int(
-            self.contract["phase_1"]["expected_prefixes_per_training_uav"]
+            self.settings["phase_1"]["expected_prefixes_per_training_uav"]
         )
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
@@ -365,7 +365,7 @@ class LockedOuterEvaluationRunner:
             split = self._locked_split(selected)
             locked_data_loaded = True
             split_facts = self._validate_locked_split(split, selected.outer_fold)
-            architecture = self.contract["architectures"][selected.model_family]
+            architecture = self.settings["architectures"][selected.model_family]
             context = TrainingRunContext(
                 stage="step_6",
                 model_family=selected.model_family,
@@ -432,7 +432,7 @@ class LockedOuterEvaluationRunner:
                     model.detach_training_monitor()
                     serialized_bytes = _atomic_save_model(model, writer.model_path)
                     run_record = {
-                        "contract_version": self.contract_version,
+                        "settings_version": self.settings_version,
                         "model_family": selected.model_family,
                         "configuration_id": selected.configuration_id,
                         "seed": seed,
@@ -489,7 +489,7 @@ class LockedOuterEvaluationRunner:
     def _locked_split(self, selected: SelectedConfiguration) -> Any:
         """Load the one locked split matching the selected representation."""
 
-        architecture = self.contract["architectures"][selected.model_family]
+        architecture = self.settings["architectures"][selected.model_family]
         representation = architecture["representation"]
         if representation in {"none", "tabular"}:
             feature_set = selected.feature_set or "age_only"
@@ -588,7 +588,7 @@ class LockedOuterEvaluationRunner:
         }
         if observed != expected:
             raise LockedOuterEvaluationError(
-                f"Locked split dimensions differ from the contract: {observed}"
+                f"Locked split dimensions differ from the settings: {observed}"
             )
 
         metadata_outer_folds = set(
@@ -648,7 +648,7 @@ class LockedOuterEvaluationRunner:
         table.insert(0, "seed", seed)
         table.insert(0, "configuration_id", selected.configuration_id)
         table.insert(0, "model_family", selected.model_family)
-        table.insert(0, "contract_version", self.contract_version)
+        table.insert(0, "settings_version", self.settings_version)
         table["feature_set"] = selected.feature_set
         table["lookback"] = selected.lookback
         table["y_true"] = observed_rul
@@ -697,7 +697,7 @@ class LockedOuterEvaluationRunner:
                 status is not None
                 and status.get("state") == "complete"
                 and status.get("runner_version") == RUNNER_VERSION
-                and status.get("contract_version") == self.contract_version
+                and status.get("settings_version") == self.settings_version
                 and status.get("configuration_id") == configuration_id
                 and status.get("seed") == seed
             )
@@ -770,7 +770,7 @@ class LockedOuterEvaluationRunner:
         )
         manifest = {
             "runner_version": RUNNER_VERSION,
-            "contract_version": self.contract_version,
+            "settings_version": self.settings_version,
             "status": (
                 "complete"
                 if len(completed_runs) == len(expected_keys)

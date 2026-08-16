@@ -32,7 +32,7 @@ from tensorboard_monitoring import (  # noqa: E402
 
 SPECIFICATION_PATH = (
     PHASE_DIR
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -96,8 +96,10 @@ class StepDefinition:
 STEPS = {
     1: StepDefinition(
         1,
-        "Experiment contract",
-        PHASE_DIR / "1_experiment_contract" / "build_experiment_contract.py",
+        "Architecture study settings",
+        PHASE_DIR
+        / "1_architecture_study_settings"
+        / "build_architecture_study_settings.py",
     ),
     2: StepDefinition(
         2,
@@ -158,25 +160,25 @@ def _read_optional_json(path: Path, description: str) -> dict[str, Any] | None:
     return _read_json(path, description)
 
 
-def _load_contract() -> dict[str, Any]:
-    """Return the resolved contract produced by Step 1."""
+def _load_settings() -> dict[str, Any]:
+    """Return the resolved settings produced by Step 1."""
 
     specification = _read_json(
         SPECIFICATION_PATH,
         "Step 1 experiment specification",
     )
-    contract = specification.get("contract")
-    if not isinstance(contract, dict):
+    settings = specification.get("settings")
+    if not isinstance(settings, dict):
         raise Phase2PipelineError(
-            "Step 1 experiment specification has no contract object"
+            "Step 1 experiment specification has no settings object"
         )
-    return contract
+    return settings
 
 
-def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
+def _enabled_families(settings: dict[str, Any]) -> tuple[str, ...]:
     """Preserve the family order declared before performance was observed."""
 
-    study = contract["study"]
+    study = settings["study"]
     declared_order = (
         study["required_architectures"]
         + study["conditional_architectures"]
@@ -185,7 +187,7 @@ def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
     return tuple(
         family
         for family in declared_order
-        if contract["architectures"][family]["enabled"]
+        if settings["architectures"][family]["enabled"]
     )
 
 
@@ -332,26 +334,26 @@ def _run_pairs_in_parallel(
         raise first_error
 
 
-def _contract_version_matches(
+def _settings_version_matches(
     artifact: dict[str, Any] | None,
-    contract_version: int,
+    settings_version: int,
 ) -> bool:
-    """Treat artifacts from another contract version as incomplete work."""
+    """Treat artifacts from another settings version as incomplete work."""
 
     return (
         artifact is not None
-        and artifact.get("contract_version") == contract_version
+        and artifact.get("settings_version") == settings_version
     )
 
 
 def _run_step_5(*, force: bool, max_workers: int) -> None:
     """Run only missing family/fold tuning studies unless forced to rerun all."""
 
-    contract = _load_contract()
-    contract_version = int(contract["contract_version"])
-    families = _enabled_families(contract)
+    settings = _load_settings()
+    settings_version = int(settings["settings_version"])
+    families = _enabled_families(settings)
     outer_folds = tuple(
-        range(int(contract["phase_1"]["expected_outer_folds"]))
+        range(int(settings["phase_1"]["expected_outer_folds"]))
     )
     expected_studies = {
         f"{family}__outer_{outer_fold:02d}"
@@ -363,7 +365,7 @@ def _run_step_5(*, force: bool, max_workers: int) -> None:
         "Step 5 selection manifest",
     )
     completed_studies: set[str] = set()
-    if not force and _contract_version_matches(manifest, contract_version):
+    if not force and _settings_version_matches(manifest, settings_version):
         completed_value = manifest.get("completed_studies", [])
         if not isinstance(completed_value, list):
             raise Phase2PipelineError(
@@ -412,29 +414,29 @@ def _run_step_5(*, force: bool, max_workers: int) -> None:
 
 
 def _step_6_expected_runs(
-    contract: dict[str, Any],
+    settings: dict[str, Any],
 ) -> tuple[dict[tuple[str, int], set[str]], int]:
-    """Derive complete family/fold run sets from the contract and registry."""
+    """Derive complete family/fold run sets from the settings and registry."""
 
     registry = _read_json(MODEL_REGISTRY_PATH, "Step 4 model registry")
-    contract_version = int(contract["contract_version"])
-    if registry.get("contract_version") != contract_version:
+    settings_version = int(settings["settings_version"])
+    if registry.get("settings_version") != settings_version:
         raise Phase2PipelineError(
-            "Step 4 model registry uses a different contract version"
+            "Step 4 model registry uses a different settings version"
         )
     registry_families = registry.get("families")
     if not isinstance(registry_families, dict):
         raise Phase2PipelineError("Step 4 model registry has no families object")
 
-    families = _enabled_families(contract)
+    families = _enabled_families(settings)
     outer_folds = tuple(
-        range(int(contract["phase_1"]["expected_outer_folds"]))
+        range(int(settings["phase_1"]["expected_outer_folds"]))
     )
     retraining_seeds = tuple(
-        int(seed) for seed in contract["tuning"]["retraining_seeds"]
+        int(seed) for seed in settings["tuning"]["retraining_seeds"]
     )
     if not retraining_seeds:
-        raise Phase2PipelineError("The contract does not define retraining seeds")
+        raise Phase2PipelineError("The settings do not define retraining seeds")
 
     expected_by_family_fold: dict[tuple[str, int], set[str]] = {}
     for family in families:
@@ -460,15 +462,15 @@ def _step_6_expected_runs(
 def _run_step_6(*, force: bool, max_workers: int) -> None:
     """Run missing complete family/fold evaluations and preserve finished ones."""
 
-    contract = _load_contract()
-    contract_version = int(contract["contract_version"])
-    expected_by_pair, expected_run_count = _step_6_expected_runs(contract)
+    settings = _load_settings()
+    settings_version = int(settings["settings_version"])
+    expected_by_pair, expected_run_count = _step_6_expected_runs(settings)
     manifest = _read_optional_json(
         STEP_6_MANIFEST_PATH,
         "Step 6 locked-evaluation manifest",
     )
     completed_runs: set[str] = set()
-    if not force and _contract_version_matches(manifest, contract_version):
+    if not force and _settings_version_matches(manifest, settings_version):
         completed_value = manifest.get("completed_runs", [])
         if not isinstance(completed_value, list):
             raise Phase2PipelineError(
@@ -571,7 +573,7 @@ def print_status() -> None:
     print("Phase 2 pipeline status")
     print(f"TensorBoard logs: {DEFAULT_LOG_ROOT}")
     print(
-        "1. Experiment contract: "
+        "1. Architecture study settings: "
         + ("available" if SPECIFICATION_PATH.is_file() else "not generated")
     )
     print(

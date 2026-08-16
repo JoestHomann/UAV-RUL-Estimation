@@ -17,7 +17,7 @@ change a feature set or lookback, rank architectures, or choose a winner.
 - Step 5 "selection_manifest.json" to have status "complete";
 - all 40 enabled family/outer-fold studies to be complete;
 - exactly one selected configuration for each enabled family and outer fold;
-- matching Step 1 and Step 5 contract versions;
+- matching Step 1 and Step 5 settings versions;
 - valid feature sets, lookbacks, hyperparameters, and retraining durations;
 - Step 5 to report no locked-data or test-data access;
 - architecture selection to remain manual.

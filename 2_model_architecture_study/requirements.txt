@@ -4,7 +4,7 @@ numpy>=1.26,<3
 # Reads and structurally verifies the Phase 1 CSV and compressed CSV artifacts.
 pandas>=3.0,<4
 
-# Provides strict, nested validation for the executable experiment contract.
+# Provides strict, nested validation for the architecture study settings.
 pydantic>=2.13,<3
 
 # Implements Ridge, Elastic Net, Random Forest, RBF-SVR, and robust scaling.

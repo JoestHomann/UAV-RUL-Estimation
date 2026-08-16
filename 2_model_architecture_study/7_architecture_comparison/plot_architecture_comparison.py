@@ -47,7 +47,7 @@ def _display_name(family: str) -> str:
 
 
 def _family_colors(families: tuple[str, ...]) -> dict[str, tuple[float, ...]]:
-    """Assign stable, visibly distinct colors in contract order."""
+    """Assign stable, visibly distinct colors in settings order."""
 
     palette = plt.get_cmap("tab10")
     return {family: palette(index % 10) for index, family in enumerate(families)}

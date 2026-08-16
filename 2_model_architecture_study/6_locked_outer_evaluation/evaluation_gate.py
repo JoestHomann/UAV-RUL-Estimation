@@ -1,7 +1,7 @@
 """Verify that inner selection is complete before locked data can be loaded.
 
 This module intentionally imports no Step 2 or Step 3 data adapter. Its only
-job is to validate the experiment contract, the complete Step 5 manifest, and
+job is to validate the architecture study settings, the complete Step 5 manifest, and
 the selected configurations. The evaluation runner constructs a data adapter
 only after this gate returns a valid plan.
 """
@@ -24,7 +24,7 @@ PHASE_DIR = STEP_DIR.parent
 MODEL_ADAPTER_DIR = PHASE_DIR / "4_model_adapters"
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -62,7 +62,7 @@ class LockedEvaluationGateError(ValueError):
 class SelectedConfiguration:
     """Hold one validated Step 5 selection for one family and outer fold."""
 
-    contract_version: int
+    settings_version: int
     model_family: str
     outer_fold: int
     configuration_id: str
@@ -77,7 +77,7 @@ class SelectedConfiguration:
 class LockedEvaluationPlan:
     """Store all choices that must be fixed before locked data is opened."""
 
-    contract: dict[str, Any]
+    settings: dict[str, Any]
     enabled_families: tuple[str, ...]
     outer_fold_labels: tuple[int, ...]
     retraining_seeds: tuple[int, ...]
@@ -121,10 +121,10 @@ def _read_json(path: Path, description: str) -> dict[str, Any]:
     return value
 
 
-def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
-    """Preserve the architecture order explicitly recorded in the contract."""
+def _enabled_families(settings: dict[str, Any]) -> tuple[str, ...]:
+    """Preserve the architecture order explicitly recorded in the settings."""
 
-    study = contract["study"]
+    study = settings["study"]
     order = (
         study["required_architectures"]
         + study["conditional_architectures"]
@@ -133,7 +133,7 @@ def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
     return tuple(
         family
         for family in order
-        if contract["architectures"][family]["enabled"]
+        if settings["architectures"][family]["enabled"]
     )
 
 
@@ -161,7 +161,7 @@ def _optional_positive_integer(value: Any) -> int | None:
 def _parse_selected_row(
     row: pd.Series,
     *,
-    contract: dict[str, Any],
+    settings: dict[str, Any],
 ) -> SelectedConfiguration:
     """Parse and cross-check one selected-configuration CSV row."""
 
@@ -186,7 +186,7 @@ def _parse_selected_row(
     feature_set = configuration.get("feature_set")
     lookback_value = configuration.get("lookback")
     lookback = int(lookback_value) if lookback_value is not None else None
-    architecture = contract["architectures"][family]
+    architecture = settings["architectures"][family]
     if feature_set is not None and feature_set not in architecture["feature_sets"]:
         raise LockedEvaluationGateError(
             f"Selected feature set {feature_set!r} is invalid for {family!r}"
@@ -245,7 +245,7 @@ def _parse_selected_row(
             f"Configuration ID {configuration_id!r} has an unexpected format"
         )
     return SelectedConfiguration(
-        contract_version=int(row["contract_version"]),
+        settings_version=int(row["settings_version"]),
         model_family=family,
         outer_fold=outer_fold,
         configuration_id=configuration_id,
@@ -266,7 +266,7 @@ def _validate_hyperparameter_values(
 
     if set(hyperparameters) != set(search):
         raise LockedEvaluationGateError(
-            f"Selected hyperparameter names differ from the contract for {family!r}"
+            f"Selected hyperparameter names differ from the settings for {family!r}"
         )
     for name, definition in search.items():
         value = hyperparameters[name]
@@ -296,7 +296,7 @@ def _validate_hyperparameter_values(
             )
         if not valid:
             raise LockedEvaluationGateError(
-                f"Selected value {value!r} for {family}.{name} is outside the contract"
+                f"Selected value {value!r} for {family}.{name} is outside the settings"
             )
 
 
@@ -343,7 +343,7 @@ def _selected_flag(value: Any) -> bool:
 
 def _verify_step5_result_tables(
     *,
-    contract: dict[str, Any],
+    settings: dict[str, Any],
     manifest: dict[str, Any],
     manifest_path: Path,
     selected_path: Path,
@@ -431,10 +431,10 @@ def _verify_step5_result_tables(
         )
 
     inner_fold_count = int(
-        contract["phase_1"]["expected_inner_folds_per_outer_fold"]
+        settings["phase_1"]["expected_inner_folds_per_outer_fold"]
     )
     maximum_budget = int(
-        contract["tuning"]["candidate_budget_per_architecture"]
+        settings["tuning"]["candidate_budget_per_architecture"]
     )
     if set(folds["configuration_id"]) != set(candidates["configuration_id"]):
         raise LockedEvaluationGateError(
@@ -452,7 +452,7 @@ def _verify_step5_result_tables(
             (candidates["model_family"] == family)
             & (candidates["outer_fold"].astype(int) == outer_fold)
         ].copy()
-        architecture = contract["architectures"][family]
+        architecture = settings["architectures"][family]
         alternatives = max(
             len(architecture["feature_sets"]),
             len(architecture["lookbacks"]),
@@ -538,8 +538,8 @@ def build_locked_evaluation_plan(
     """Open the locked-evaluation gate only for a complete matching Step 5."""
 
     specification = load_experiment_specification(specification_path)
-    contract = specification["contract"]
-    contract_version = int(contract["contract_version"])
+    settings = specification["settings"]
+    settings_version = int(settings["settings_version"])
     manifest = _read_json(selection_manifest_path, "Step 5 selection manifest")
 
     completed = int(manifest.get("completed_study_count", -1))
@@ -549,9 +549,9 @@ def build_locked_evaluation_plan(
             "Step 5 is incomplete, so locked validation data must remain closed: "
             f"completed {completed}/{expected} family/fold studies"
         )
-    if manifest.get("contract_version") != contract_version:
+    if manifest.get("settings_version") != settings_version:
         raise LockedEvaluationGateError(
-            "Step 5 and the current experiment contract versions differ"
+            "Step 5 and the current architecture study settings versions differ"
         )
     if manifest.get("automatic_architecture_selection") is not False:
         raise LockedEvaluationGateError(
@@ -566,20 +566,20 @@ def build_locked_evaluation_plan(
             "Step 5 reports test-data access and cannot authorize evaluation"
         )
 
-    enabled_families = _enabled_families(contract)
+    enabled_families = _enabled_families(settings)
     if tuple(manifest.get("enabled_families", ())) != enabled_families:
         raise LockedEvaluationGateError(
-            "Step 5 enabled families differ from the current contract"
+            "Step 5 enabled families differ from the current settings"
         )
     outer_fold_labels = tuple(
         int(value) for value in manifest.get("outer_fold_labels", ())
     )
     expected_outer_folds = int(
-        contract["phase_1"]["expected_outer_folds"]
+        settings["phase_1"]["expected_outer_folds"]
     )
     if len(outer_fold_labels) != expected_outer_folds:
         raise LockedEvaluationGateError(
-            "Step 5 outer-fold label count differs from the current contract"
+            "Step 5 outer-fold label count differs from the current settings"
         )
     expected_keys = {
         (family, outer_fold)
@@ -592,7 +592,7 @@ def build_locked_evaluation_plan(
         )
 
     required_columns = {
-        "contract_version",
+        "settings_version",
         "model_family",
         "outer_fold",
         "configuration_id",
@@ -627,18 +627,18 @@ def build_locked_evaluation_plan(
 
     configurations: dict[tuple[str, int], SelectedConfiguration] = {}
     factory = ModelAdapterFactory(specification_path)
-    validation_seed = int(contract["tuning"]["retraining_seeds"][0])
+    validation_seed = int(settings["tuning"]["retraining_seeds"][0])
     for _, row in selected_table.iterrows():
         family = str(row["model_family"])
         if family not in enabled_families:
             raise LockedEvaluationGateError(
                 f"Selected table contains disabled or unknown family {family!r}"
             )
-        selected = _parse_selected_row(row, contract=contract)
-        if selected.contract_version != contract_version:
+        selected = _parse_selected_row(row, settings=settings)
+        if selected.settings_version != settings_version:
             raise LockedEvaluationGateError(
                 f"Selected configuration {selected.configuration_id!r} has "
-                "the wrong contract version"
+                "the wrong settings version"
             )
         if row["selection_metric"] != "mean_inner_rmse":
             raise LockedEvaluationGateError("Unexpected Step 5 selection metric")
@@ -661,7 +661,7 @@ def build_locked_evaluation_plan(
         )
 
     _verify_step5_result_tables(
-        contract=contract,
+        settings=settings,
         manifest=manifest,
         manifest_path=selection_manifest_path,
         selected_path=selected_configurations_path,
@@ -670,12 +670,12 @@ def build_locked_evaluation_plan(
     )
 
     retraining_seeds = tuple(
-        int(seed) for seed in contract["tuning"]["retraining_seeds"]
+        int(seed) for seed in settings["tuning"]["retraining_seeds"]
     )
     if not retraining_seeds or len(retraining_seeds) != len(set(retraining_seeds)):
         raise LockedEvaluationGateError("Retraining seeds must be non-empty and unique")
     return LockedEvaluationPlan(
-        contract=contract,
+        settings=settings,
         enabled_families=enabled_families,
         outer_fold_labels=outer_fold_labels,
         retraining_seeds=retraining_seeds,

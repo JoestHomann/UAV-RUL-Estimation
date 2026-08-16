@@ -40,7 +40,7 @@ complete Step 6 family/fold evaluations. If a Step 6 family/fold was interrupted
 between stochastic seeds, that family/fold is rerun as one complete unit.
 
 Use "--through-step" to stop after a chosen step. For example, this prepares
-the contract, both data adapters, and model registry without starting training:
+the settings, both data adapters, and model registry without starting training:
 
     py 2_model_architecture_study\run_phase_2.py --through-step 4
 
@@ -104,7 +104,7 @@ as part of this change; before relying on a long GPU run, first do a small
 "--family mlp --outer-fold 0" (or "tcn"/"lstm") dry run and confirm it
 completes without that error.
 
-The workflow begins in [`1_experiment_contract/`](1_experiment_contract/), which turns the human-readable TOML contract into a validated, deterministic JSON specification.
+The workflow begins in [`1_architecture_study_settings/`](1_architecture_study_settings/), which turns the human-readable TOML settings into a validated, deterministic JSON specification.
 
 The next implemented step is the [tabular data adapter](2_tabular_data_adapter/README.md). It creates verified local copies of the Phase 1 tabular inputs and exposes shared feature-loading and UAV-fold selection methods for every tabular architecture.
 
@@ -113,7 +113,7 @@ The [sequence data adapter](3_sequence_data_adapter/README.md) creates causal pa
 The [model adapters](4_model_adapters/README.md) implement the baselines,
 classical tabular estimators, and neural sequence estimators behind one common
 fit, prediction, and persistence interface. Their generated registry records
-which contract families are implemented and enabled.
+which settings families are implemented and enabled.
 
 The [inner model-selection runner](5_inner_model_selection/README.md) performs
 automatic tuning separately inside each enabled family and outer fold. It uses
@@ -128,7 +128,7 @@ locked split while Step 5 remains partial.
 The [architecture comparison](7_architecture_comparison/README.md) calculates
 the fixed metrics, paired whole-UAV bootstrap intervals, reliability views,
 seed stability, efficiency summaries, and comparison figures. It preserves the
-contract order and never ranks architectures or writes a winner.
+settings order and never ranks architectures or writes a winner.
 
 The [TensorBoard monitoring layer](tensorboard_monitoring/README.md) records
 live optimization curves, candidate summaries, training and inference timing,

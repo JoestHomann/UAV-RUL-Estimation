@@ -32,7 +32,7 @@ PHASE_DIR = STEP_DIR.parent
 DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -76,7 +76,7 @@ RUNNER_VERSION = 1
 EARLY_STOPPED_FAMILIES = {"xgboost", "mlp", "tcn", "lstm", "transformer"}
 
 CANDIDATE_COLUMNS = [
-    "contract_version",
+    "settings_version",
     "model_family",
     "outer_fold",
     "candidate_number",
@@ -99,7 +99,7 @@ CANDIDATE_COLUMNS = [
 ]
 
 FOLD_COLUMNS = [
-    "contract_version",
+    "settings_version",
     "model_family",
     "outer_fold",
     "candidate_number",
@@ -123,7 +123,7 @@ FOLD_COLUMNS = [
 ]
 
 SELECTED_COLUMNS = [
-    "contract_version",
+    "settings_version",
     "model_family",
     "outer_fold",
     "configuration_id",
@@ -142,7 +142,7 @@ SELECTED_COLUMNS = [
 
 
 class InnerModelSelectionError(ValueError):
-    """Represent a contract, split, fitting, or artifact consistency failure."""
+    """Represent a settings, split, fitting, or artifact consistency failure."""
 
 
 def _stable_json(value: Any) -> str:
@@ -318,7 +318,7 @@ class InnerSplitRepository:
         observed_scenarios = int(validation.metadata["scenario"].nunique())
         if observed_scenarios != self.expected_development_scenarios:
             raise InnerModelSelectionError(
-                "Inner validation scenario count does not match the contract: "
+                "Inner validation scenario count does not match the settings: "
                 f"expected {self.expected_development_scenarios}, "
                 f"observed {observed_scenarios}"
             )
@@ -331,14 +331,14 @@ class StudyArtifactWriter:
         self,
         output_dir: Path,
         *,
-        contract_version: int,
+        settings_version: int,
         family: str,
         outer_fold: int,
         candidate_budget: int,
     ) -> None:
         self.output_dir = output_dir
         self.study_dir = output_dir / "studies"
-        self.contract_version = contract_version
+        self.settings_version = settings_version
         self.family = family
         self.outer_fold = outer_fold
         self.candidate_budget = candidate_budget
@@ -426,7 +426,7 @@ class StudyArtifactWriter:
 
         payload: dict[str, Any] = {
             "runner_version": RUNNER_VERSION,
-            "contract_version": self.contract_version,
+            "settings_version": self.settings_version,
             "model_family": self.family,
             "outer_fold": self.outer_fold,
             "state": state,
@@ -477,37 +477,37 @@ class InnerModelSelectionRunner:
         self.specification = load_experiment_specification(
             self.specification_path
         )
-        self.contract = self.specification["contract"]
-        self.architectures = self.contract["architectures"]
+        self.settings = self.specification["settings"]
+        self.architectures = self.settings["architectures"]
         self.candidate_space = CandidateSpace(self.architectures)
         self.factory = ModelAdapterFactory(self.specification_path)
-        self.contract_version = int(self.contract["contract_version"])
-        self.search_seed = int(self.contract["tuning"]["search_seed"])
+        self.settings_version = int(self.settings["settings_version"])
+        self.search_seed = int(self.settings["tuning"]["search_seed"])
         self.maximum_candidate_budget = int(
-            self.contract["tuning"]["candidate_budget_per_architecture"]
+            self.settings["tuning"]["candidate_budget_per_architecture"]
         )
         self.outer_fold_count = int(
-            self.contract["phase_1"]["expected_outer_folds"]
+            self.settings["phase_1"]["expected_outer_folds"]
         )
         self.inner_fold_count = int(
-            self.contract["phase_1"]["expected_inner_folds_per_outer_fold"]
+            self.settings["phase_1"]["expected_inner_folds_per_outer_fold"]
         )
         self.development_scenarios = int(
-            self.contract["phase_1"]["expected_development_scenarios"]
+            self.settings["phase_1"]["expected_development_scenarios"]
         )
         self.outer_fold_labels = list(TabularDataAdapter().outer_fold_labels())
         if len(self.outer_fold_labels) != self.outer_fold_count:
             raise InnerModelSelectionError(
-                "Observed outer-fold label count does not match the contract: "
+                "Observed outer-fold label count does not match the settings: "
                 f"expected {self.outer_fold_count}, "
                 f"observed {len(self.outer_fold_labels)}"
             )
 
     @property
     def enabled_families(self) -> list[str]:
-        """Return enabled families in the study order recorded by the contract."""
+        """Return enabled families in the study order recorded by the settings."""
 
-        study = self.contract["study"]
+        study = self.settings["study"]
         configured_order = (
             study["required_architectures"]
             + study["conditional_architectures"]
@@ -538,7 +538,7 @@ class InnerModelSelectionRunner:
                 raise InnerModelSelectionError(f"Unknown model family {family!r}")
             if not self.architectures[family]["enabled"]:
                 raise InnerModelSelectionError(
-                    f"Model family {family!r} is disabled in the contract"
+                    f"Model family {family!r} is disabled in the settings"
                 )
 
         selected_folds = (
@@ -587,7 +587,7 @@ class InnerModelSelectionRunner:
         )
         writer = StudyArtifactWriter(
             self.output_dir,
-            contract_version=self.contract_version,
+            settings_version=self.settings_version,
             family=family,
             outer_fold=outer_fold,
             candidate_budget=candidate_budget,
@@ -598,7 +598,7 @@ class InnerModelSelectionRunner:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         sampler = optuna.samplers.TPESampler(seed=self.search_seed)
         study = optuna.create_study(
-            study_name=f"{writer.prefix}__contract_{self.contract_version}",
+            study_name=f"{writer.prefix}__settings_{self.settings_version}",
             direction="minimize",
             sampler=sampler,
             pruner=optuna.pruners.NopPruner(),
@@ -696,7 +696,7 @@ class InnerModelSelectionRunner:
         )
         if len(inner_fold_labels) != self.inner_fold_count:
             raise InnerModelSelectionError(
-                "Observed inner-fold label count does not match the contract: "
+                "Observed inner-fold label count does not match the settings: "
                 f"expected {self.inner_fold_count}, observed {len(inner_fold_labels)}"
             )
         for inner_fold in inner_fold_labels:
@@ -779,7 +779,7 @@ class InnerModelSelectionRunner:
 
             fold_records.append(
                 {
-                    "contract_version": self.contract_version,
+                    "settings_version": self.settings_version,
                     "model_family": family,
                     "outer_fold": outer_fold,
                     "candidate_number": candidate_number,
@@ -826,7 +826,7 @@ class InnerModelSelectionRunner:
             dtype=np.float64,
         )
         candidate_record = {
-            "contract_version": self.contract_version,
+            "settings_version": self.settings_version,
             "model_family": family,
             "outer_fold": outer_fold,
             "candidate_number": candidate_number,
@@ -905,7 +905,7 @@ class InnerModelSelectionRunner:
                     status is not None
                     and status.get("state") == "complete"
                     and status.get("runner_version") == RUNNER_VERSION
-                    and status.get("contract_version") == self.contract_version
+                    and status.get("settings_version") == self.settings_version
                     and status.get("candidate_budget") == budget
                 )
                 if not valid:
@@ -973,7 +973,7 @@ class InnerModelSelectionRunner:
         expected_studies = len(self.enabled_families) * len(self.outer_fold_labels)
         manifest = {
             "runner_version": RUNNER_VERSION,
-            "contract_version": self.contract_version,
+            "settings_version": self.settings_version,
             "status": (
                 "complete"
                 if len(complete_studies) == expected_studies

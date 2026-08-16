@@ -1,6 +1,6 @@
 """Register every architecture and construct adapters from resolved settings.
 
-The registry connects contract family names to concrete Python classes. It does
+The registry connects settings family names to concrete Python classes. It does
 not sample hyperparameters, run validation, compare architectures, or select a
 winner. Later steps provide one resolved candidate configuration at a time.
 """
@@ -29,7 +29,7 @@ from models.tabular.xgboost import XGBoostAdapter
 STEP_DIR = Path(__file__).resolve().parent
 DEFAULT_SPECIFICATION_PATH = (
     STEP_DIR.parent
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -111,7 +111,7 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
 def load_experiment_specification(
     path: Path = DEFAULT_SPECIFICATION_PATH,
 ) -> dict[str, Any]:
-    """Read Step 1's resolved contract for registry and factory settings."""
+    """Read Step 1's resolved settings for registry and factory settings."""
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -121,17 +121,17 @@ def load_experiment_specification(
             f"builder first. Details: {error}"
         ) from error
     try:
-        contract = payload["contract"]
-        architectures = contract["architectures"]
-        contract["neural_training"]
-        contract["evaluation"]
+        settings = payload["settings"]
+        architectures = settings["architectures"]
+        settings["neural_training"]
+        settings["evaluation"]
     except (KeyError, TypeError) as error:
         raise ModelAdapterError(
             f"Experiment specification is missing required field {error}"
         ) from error
     if set(architectures) != set(ADAPTER_CLASSES):
         raise ModelAdapterError(
-            "Contract architecture names do not match implemented adapter names"
+            "Settings architecture names do not match implemented adapter names"
         )
     return payload
 
@@ -140,7 +140,7 @@ class ModelAdapterFactory:
     """Create one configured adapter without embedding model-specific branches.
 
     The factory reads shared neural settings, prediction clipping, and XGBoost
-    stopping patience from the resolved contract. The caller supplies the
+    stopping patience from the resolved settings. The caller supplies the
     candidate's resolved hyperparameters and seed.
     """
 
@@ -150,7 +150,7 @@ class ModelAdapterFactory:
     ) -> None:
         self.specification_path = specification_path.resolve()
         self.specification = load_experiment_specification(specification_path)
-        self.contract = self.specification["contract"]
+        self.settings = self.specification["settings"]
 
     def _validate_hyperparameters(
         self,
@@ -183,17 +183,18 @@ class ModelAdapterFactory:
             raise ModelAdapterError(f"Unknown model family {family!r}")
         if training_iterations is not None and training_iterations <= 0:
             raise ModelAdapterError("Fixed training iterations must be positive")
-        architecture = self.contract["architectures"][family]
+        architecture = self.settings["architectures"][family]
         if not architecture["enabled"] and not allow_disabled:
             raise ModelAdapterError(
-                f"Model family {family!r} is disabled in the experiment contract"
+                f"Model family {family!r} is disabled in the "
+                "architecture study settings"
             )
         self._validate_hyperparameters(family, hyperparameters)
 
         common_arguments: dict[str, Any] = {
             "hyperparameters": hyperparameters,
             "seed": seed,
-            "prediction_minimum": self.contract["evaluation"]["prediction_minimum"],
+            "prediction_minimum": self.settings["evaluation"]["prediction_minimum"],
             "training_monitor": training_monitor,
         }
         adapter_class = ADAPTER_CLASSES[family]
@@ -204,7 +205,7 @@ class ModelAdapterFactory:
                 training_iterations=training_iterations,
             )
         if family in {"mlp", "tcn", "lstm", "transformer"}:
-            shared = self.contract["neural_training"]
+            shared = self.settings["neural_training"]
             training_config = NeuralTrainingConfig(
                 batch_size=shared["batch_size"],
                 maximum_epochs=shared["maximum_epochs"],
@@ -226,12 +227,12 @@ class ModelAdapterFactory:
 def build_registry_payload(
     specification_path: Path = DEFAULT_SPECIFICATION_PATH,
 ) -> dict[str, Any]:
-    """Describe installed adapters and their contract roles for later steps."""
+    """Describe installed adapters and their settings roles for later steps."""
 
     specification = load_experiment_specification(specification_path)
-    contract = specification["contract"]
+    settings = specification["settings"]
     families: dict[str, dict[str, Any]] = {}
-    for family, architecture in contract["architectures"].items():
+    for family, architecture in settings["architectures"].items():
         adapter_class = ADAPTER_CLASSES[family]
         families[family] = {
             "adapter_class": adapter_class.__name__,
@@ -246,13 +247,13 @@ def build_registry_payload(
             "resolved_hyperparameters": sorted(EXPECTED_HYPERPARAMETERS[family]),
             "supports_sample_weights": True,
             "stochastic": adapter_class.stochastic,
-            "prediction_minimum": contract["evaluation"]["prediction_minimum"],
+            "prediction_minimum": settings["evaluation"]["prediction_minimum"],
             "persistence": "trusted local joblib artifact",
         }
 
     return {
         "registry_version": 1,
-        "contract_version": contract["contract_version"],
+        "settings_version": settings["settings_version"],
         "architecture_selection": "manual",
         "automatic_architecture_ranking": False,
         "common_methods": ["fit", "predict", "save", "load"],

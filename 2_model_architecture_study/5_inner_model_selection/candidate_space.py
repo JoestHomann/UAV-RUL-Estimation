@@ -1,8 +1,8 @@
-"""Resolve contract search definitions into model-ready Optuna candidates.
+"""Resolve settings search definitions into model-ready Optuna candidates.
 
 This module owns only candidate construction. It does not load data, fit a
 model, calculate a score, or choose a candidate. Keeping these responsibilities
-separate makes it possible to inspect how every contract field becomes an
+separate makes it possible to inspect how every settings field becomes an
 actual adapter configuration.
 """
 
@@ -16,7 +16,7 @@ from optuna.trial import Trial
 
 
 class CandidateSpaceError(ValueError):
-    """Represent an unsupported or inconsistent contract search definition."""
+    """Represent an unsupported or inconsistent settings search definition."""
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class ResolvedCandidate:
 
 
 class CandidateSpace:
-    """Translate one architecture's contract entry into Optuna suggestions."""
+    """Translate one architecture's settings entry into Optuna suggestions."""
 
     SUPPORTED_KINDS = {
         "fixed",
@@ -61,7 +61,7 @@ class CandidateSpace:
         self.architectures = architectures
 
     def candidate_budget(self, family: str, maximum_budget: int) -> int:
-        """Return one trial for a fixed baseline and the contract cap otherwise."""
+        """Return one trial for a fixed baseline and the settings cap otherwise."""
 
         architecture = self._architecture(family)
         alternatives = max(
@@ -139,7 +139,7 @@ class CandidateSpace:
         """Sample only parameters active for the chosen linear variant.
 
         The Step 4 factory expects all four declared keys. Inactive values are
-        therefore filled with deterministic contract defaults, while Optuna
+        therefore filled with deterministic settings defaults, while Optuna
         spends its candidate budget only on parameters that affect the model.
         """
 
@@ -170,7 +170,7 @@ class CandidateSpace:
         name: str,
         definition: dict[str, Any],
     ) -> Any:
-        """Map one validated contract distribution to the current Optuna API."""
+        """Map one validated settings distribution to the current Optuna API."""
 
         kind = definition.get("kind")
         if kind not in self.SUPPORTED_KINDS:

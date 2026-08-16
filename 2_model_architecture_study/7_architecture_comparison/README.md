@@ -20,8 +20,8 @@ requires:
 - Step 6 status "complete";
 - all expected family, outer-fold, and seed runs to be complete;
 - the exact expected number of locked predictions;
-- matching Step 1 and Step 6 contract versions;
-- all enabled families in their predeclared contract order;
+- matching Step 1 and Step 6 settings versions;
+- all enabled families in their predeclared settings order;
 - fixed Step 5 retraining durations for applicable models;
 - no use of locked results for tuning;
 - no automatic architecture selection;
@@ -49,7 +49,7 @@ rather than mismatched validation samples.
 
 ## Metrics and seed handling
 
-The four contract metrics are R2, RMSE, MAE, and signed bias. Metrics are saved
+The four settings metrics are R2, RMSE, MAE, and signed bias. Metrics are saved
 separately for every retained seed. The architecture-level value is the mean of
 the individual-seed metric values, and the population standard deviation shows
 seed sensitivity.
@@ -75,7 +75,7 @@ strong overall result cannot hide a severe subgroup failure.
 ## Paired UAV bootstrap
 
 The uncertainty procedure uses 1,000 repetitions and seed 20260814 from the
-experiment contract. Each repetition samples the 100 complete UAV groups with
+architecture study settings. Each repetition samples the 100 complete UAV groups with
 replacement. All 20 scenario rows belonging to a sampled UAV receive the same
 resampling multiplicity.
 
@@ -102,7 +102,7 @@ the trade-off for manual interpretation.
 After every comparison table and figure has been generated successfully, Step
 7 publishes final locked metric means, seed variation, bootstrap intervals, and
 efficiency facts to "tensorboard_monitoring/logs/step_7/final_comparison". The
-architecture order remains the experiment-contract order, and no TensorBoard
+architecture order remains the settings order, and no TensorBoard
 value is converted into a rank or winner.
 
 ## Files

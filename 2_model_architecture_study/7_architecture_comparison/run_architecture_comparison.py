@@ -59,7 +59,7 @@ def main() -> None:
 
     try:
         ensure_tensorboard_available()
-        # This call examines only the contract and Step 6 manifest. The two
+        # This call examines only the settings and Step 6 manifest. The two
         # locked result tables are not opened until the completion gate passes.
         plan = build_architecture_comparison_plan(
             specification_path=args.specification,

@@ -2,7 +2,7 @@
 
 The gate reads metadata before any locked prediction table is opened. It makes
 the comparison stage fail closed when Step 6 is missing, partial, inconsistent
-with the experiment contract, or reports prohibited test-data access.
+with the architecture study settings, or reports prohibited test-data access.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -50,7 +50,7 @@ class ArchitectureComparisonGateError(ValueError):
 class ArchitectureComparisonPlan:
     """Store validated inputs and fixed reporting choices for Step 7."""
 
-    contract: dict[str, Any]
+    settings: dict[str, Any]
     enabled_families: tuple[str, ...]
     outer_fold_labels: tuple[int, ...]
     retraining_seeds: tuple[int, ...]
@@ -77,10 +77,10 @@ def _read_json(path: Path, description: str) -> dict[str, Any]:
     return value
 
 
-def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
+def _enabled_families(settings: dict[str, Any]) -> tuple[str, ...]:
     """Return enabled families in the predeclared, non-performance order."""
 
-    study = contract["study"]
+    study = settings["study"]
     declared_order = (
         study["required_architectures"]
         + study["conditional_architectures"]
@@ -89,7 +89,7 @@ def _enabled_families(contract: dict[str, Any]) -> tuple[str, ...]:
     return tuple(
         family
         for family in declared_order
-        if contract["architectures"][family]["enabled"]
+        if settings["architectures"][family]["enabled"]
     )
 
 
@@ -134,24 +134,24 @@ def build_architecture_comparison_plan(
         specification_path,
         "Step 1 experiment specification",
     )
-    contract = specification.get("contract")
-    if not isinstance(contract, dict):
+    settings = specification.get("settings")
+    if not isinstance(settings, dict):
         raise ArchitectureComparisonGateError(
-            "Step 1 experiment specification has no contract object"
+            "Step 1 experiment specification has no settings object"
         )
 
-    study = contract["study"]
+    study = settings["study"]
     if study.get("architecture_selection") != "manual":
         raise ArchitectureComparisonGateError(
-            "The experiment contract must keep architecture selection manual"
+            "The architecture study settings must keep architecture selection manual"
         )
     if study.get("save_all_architecture_results") is not True:
         raise ArchitectureComparisonGateError(
-            "The experiment contract must retain every architecture result"
+            "The architecture study settings must retain every architecture result"
         )
     if study.get("create_comparison_plots") is not True:
         raise ArchitectureComparisonGateError(
-            "The experiment contract must enable comparison plots"
+            "The architecture study settings must enable comparison plots"
         )
 
     # The manifest is the only Step 6 file read before the completion decision.
@@ -169,10 +169,10 @@ def build_architecture_comparison_plan(
             f"completed {completed}/{expected} family/fold/seed runs"
         )
 
-    contract_version = int(contract["contract_version"])
-    if manifest.get("contract_version") != contract_version:
+    settings_version = int(settings["settings_version"])
+    if manifest.get("settings_version") != settings_version:
         raise ArchitectureComparisonGateError(
-            "Step 1 and Step 6 use different contract versions"
+            "Step 1 and Step 6 use different settings versions"
         )
     required_manifest_values = {
         "step_5_prerequisite": "complete",
@@ -188,13 +188,13 @@ def build_architecture_comparison_plan(
                 f"Step 6 manifest requires {key}={expected_value!r}"
             )
 
-    families = _enabled_families(contract)
-    fold_count = int(contract["phase_1"]["expected_outer_folds"])
+    families = _enabled_families(settings)
+    fold_count = int(settings["phase_1"]["expected_outer_folds"])
     outer_folds = tuple(range(fold_count))
-    retraining_seeds = tuple(int(seed) for seed in contract["tuning"]["retraining_seeds"])
+    retraining_seeds = tuple(int(seed) for seed in settings["tuning"]["retraining_seeds"])
     if not retraining_seeds:
         raise ArchitectureComparisonGateError(
-            "The experiment contract does not define retraining seeds"
+            "The architecture study settings do not define retraining seeds"
         )
     seeds_by_family = {
         family: (
@@ -208,8 +208,8 @@ def build_architecture_comparison_plan(
         len(seeds_by_family[family]) * len(outer_folds)
         for family in families
     )
-    validation_uavs = int(contract["phase_1"]["expected_training_uavs"]) // fold_count
-    locked_scenarios = int(contract["phase_1"]["expected_locked_scenarios"])
+    validation_uavs = int(settings["phase_1"]["expected_training_uavs"]) // fold_count
+    locked_scenarios = int(settings["phase_1"]["expected_locked_scenarios"])
     rows_per_run = validation_uavs * locked_scenarios
     expected_prediction_rows = expected_runs * rows_per_run
 
@@ -250,7 +250,7 @@ def build_architecture_comparison_plan(
         "model_runs",
     )
     return ArchitectureComparisonPlan(
-        contract=contract,
+        settings=settings,
         enabled_families=families,
         outer_fold_labels=outer_folds,
         retraining_seeds=retraining_seeds,
