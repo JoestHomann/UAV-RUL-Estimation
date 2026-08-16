@@ -83,7 +83,15 @@ class NeuralModelAdapter(ModelAdapter):
             raise ModelAdapterError("Fixed training epochs must be positive")
         self.training_config = training_config
         self.training_epochs = training_epochs
-        self.device = torch.device("cpu")
+        # Every tensor and module in this class already flows through
+        # self.device (see _prepare_inputs callers, _network_predictions,
+        # and the training loop below), so auto-detecting CUDA here is
+        # enough to move the whole training loop onto a GPU when one is
+        # available; no other method needs to change. CUBLAS_WORKSPACE_CONFIG
+        # must already be set (by the entry-point script, before torch's
+        # CUDA context is created) for torch.use_deterministic_algorithms(True)
+        # to work correctly on CUDA; see _set_reproducible_seed.
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     @abstractmethod
     def _prepare_inputs(self, data: Any, *, fit: bool) -> NeuralInputs:

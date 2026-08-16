@@ -10,12 +10,15 @@ subprocess handling.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
-from typing import Any
+import threading
+from typing import Any, Callable
 
 
 PHASE_DIR = Path(__file__).resolve().parent
@@ -70,6 +73,15 @@ STEP_7_MANIFEST_PATH = (
 
 class Phase2PipelineError(ValueError):
     """Explain a failed prerequisite, subprocess, or generated artifact."""
+
+
+class _StudySkipped(Exception):
+    """Signal that a queued family/outer-fold study was skipped after a
+    sibling study already failed, rather than that this study itself failed.
+    """
+
+    def __init__(self, family: str, outer_fold: int) -> None:
+        super().__init__(f"Skipped {family} outer fold {outer_fold}")
 
 
 @dataclass(frozen=True)
@@ -183,7 +195,43 @@ def _command_text(command: list[str]) -> str:
     return subprocess.list2cmdline(command)
 
 
-def _run_script(step: StepDefinition, extra_arguments: list[str] | None = None) -> None:
+def _default_max_workers() -> int:
+    """Use every available core unless the user asks for something else."""
+
+    return max(1, os.cpu_count() or 1)
+
+
+def _single_process_environment() -> dict[str, str]:
+    """Cap BLAS/OpenMP thread pools so concurrent studies cannot oversubscribe.
+
+    Each Step 5/6 subprocess already trains with ``n_jobs=1`` (XGBoost,
+    Random Forest) or a single-threaded PyTorch device. Those settings only
+    control the library's own worker count, not the lower-level thread pools
+    NumPy/PyTorch create by default (often "one thread per core"). Running
+    several such processes at once without this cap would let every process
+    try to use every core, which oversubscribes the machine instead of
+    speeding it up. Setting these variables before the child interpreter
+    starts is the reliable way to bound them, since some libraries read them
+    only at import time.
+    """
+
+    environment = dict(os.environ)
+    for variable in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        environment[variable] = "1"
+    return environment
+
+
+def _run_script(
+    step: StepDefinition,
+    extra_arguments: list[str] | None = None,
+    *,
+    env: dict[str, str] | None = None,
+) -> None:
     """Run one existing step with this process's exact Python interpreter."""
 
     arguments = extra_arguments or []
@@ -197,11 +245,91 @@ def _run_script(step: StepDefinition, extra_arguments: list[str] | None = None) 
         command,
         cwd=REPOSITORY_ROOT,
         check=False,
+        env=env,
     )
     if completed.returncode != 0:
         raise Phase2PipelineError(
             f"Step {step.number} failed with exit code {completed.returncode}"
         )
+
+
+def _run_pairs_in_parallel(
+    *,
+    step: StepDefinition,
+    pairs: list[tuple[str, int]],
+    max_workers: int,
+    describe: Callable[[tuple[str, int]], str],
+) -> None:
+    """Run one independent family/outer-fold study per pair, fanned out.
+
+    Each pair becomes its own subprocess invoked with a single ``--family``
+    and a single ``--outer-fold``, matching the granularity that Step 5's and
+    Step 6's checkpointing, TensorBoard writers, and manifest consolidation
+    already treat as one independent unit of work (see the runtime-reduction
+    note in ``literature_and_planning/phase_2_runtime_reduction.md``). A
+    thread pool is used rather than a process pool because each unit of work
+    is itself an OS subprocess: the pool threads spend almost all their time
+    blocked in ``subprocess.run``, which releases the GIL, so this adds
+    concurrency without needing multiprocessing.
+
+    Fail-fast behavior: once any study fails, no *new* studies are started,
+    but studies already running are allowed to finish (rather than being
+    killed mid-write) before the first recorded error is raised. This keeps
+    on-disk checkpoints consistent, since every checkpoint write in Step 5
+    and Step 6 is a full, atomic file replace. A shared stop signal is
+    checked immediately before each subprocess actually launches, not just
+    relied on through future cancellation: a worker thread can otherwise
+    pull the next pair off the pool's internal queue before a cancellation
+    request reaches it, which would let one extra study start after a
+    failure has already been recorded.
+    """
+
+    worker_count = max(1, min(max_workers, len(pairs)))
+    print(
+        f"Dispatching {len(pairs)} independent studies across up to "
+        f"{worker_count} concurrent worker process(es)",
+        flush=True,
+    )
+    environment = _single_process_environment()
+    stop_after_failure = threading.Event()
+
+    def _run_one(family: str, outer_fold: int) -> None:
+        if stop_after_failure.is_set():
+            raise _StudySkipped(family, outer_fold)
+        _run_script(
+            step,
+            ["--family", family, "--outer-fold", str(outer_fold)],
+            env=environment,
+        )
+
+    first_error: Phase2PipelineError | None = None
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(_run_one, family, outer_fold): (family, outer_fold)
+            for family, outer_fold in pairs
+        }
+        for future in as_completed(futures):
+            pair = futures[future]
+            try:
+                future.result()
+            except (CancelledError, _StudySkipped):
+                # Expected once a failure stops new studies from starting;
+                # the original failure is what gets raised below.
+                continue
+            except Phase2PipelineError as error:
+                if first_error is None:
+                    first_error = error
+                    stop_after_failure.set()
+                    print(
+                        f"Study {describe(pair)} failed; letting already-running "
+                        "studies finish before stopping",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    for pending_future in futures:
+                        pending_future.cancel()
+    if first_error is not None:
+        raise first_error
 
 
 def _contract_version_matches(
@@ -216,7 +344,7 @@ def _contract_version_matches(
     )
 
 
-def _run_step_5(*, force: bool) -> None:
+def _run_step_5(*, force: bool, max_workers: int) -> None:
     """Run only missing family/fold tuning studies unless forced to rerun all."""
 
     contract = _load_contract()
@@ -252,20 +380,21 @@ def _run_step_5(*, force: bool) -> None:
             flush=True,
         )
 
-    for family in families:
-        missing_folds = [
-            fold
-            for fold in outer_folds
-            if force
-            or f"{family}__outer_{fold:02d}" not in completed_studies
-        ]
-        if not missing_folds:
-            print(f"Step 5: {family} is already complete; skipping", flush=True)
-            continue
-        arguments = ["--family", family]
-        for outer_fold in missing_folds:
-            arguments.extend(["--outer-fold", str(outer_fold)])
-        _run_script(STEPS[5], arguments)
+    pending_pairs = [
+        (family, outer_fold)
+        for family in families
+        for outer_fold in outer_folds
+        if force or f"{family}__outer_{outer_fold:02d}" not in completed_studies
+    ]
+    if not pending_pairs:
+        print("Step 5: every family/fold study is already complete; skipping", flush=True)
+    else:
+        _run_pairs_in_parallel(
+            step=STEPS[5],
+            pairs=pending_pairs,
+            max_workers=max_workers,
+            describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
+        )
 
     final_manifest = _read_json(
         STEP_5_MANIFEST_PATH,
@@ -328,7 +457,7 @@ def _step_6_expected_runs(
     return expected_by_family_fold, expected_run_count
 
 
-def _run_step_6(*, force: bool) -> None:
+def _run_step_6(*, force: bool, max_workers: int) -> None:
     """Run missing complete family/fold evaluations and preserve finished ones."""
 
     contract = _load_contract()
@@ -356,25 +485,20 @@ def _run_step_6(*, force: bool) -> None:
             flush=True,
         )
 
-    families = _enabled_families(contract)
-    for family in families:
-        family_pairs = [
-            (pair, required_runs)
-            for pair, required_runs in expected_by_pair.items()
-            if pair[0] == family
-        ]
-        missing_folds = [
-            outer_fold
-            for (_, outer_fold), required_runs in family_pairs
-            if force or not required_runs.issubset(completed_runs)
-        ]
-        if not missing_folds:
-            print(f"Step 6: {family} is already complete; skipping", flush=True)
-            continue
-        arguments = ["--family", family]
-        for outer_fold in missing_folds:
-            arguments.extend(["--outer-fold", str(outer_fold)])
-        _run_script(STEPS[6], arguments)
+    pending_pairs = [
+        pair
+        for pair, required_runs in expected_by_pair.items()
+        if force or not required_runs.issubset(completed_runs)
+    ]
+    if not pending_pairs:
+        print("Step 6: every family/fold evaluation is already complete; skipping", flush=True)
+    else:
+        _run_pairs_in_parallel(
+            step=STEPS[6],
+            pairs=pending_pairs,
+            max_workers=max_workers,
+            describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
+        )
 
     final_manifest = _read_json(
         STEP_6_MANIFEST_PATH,
@@ -486,7 +610,13 @@ def print_status() -> None:
     )
 
 
-def run_pipeline(first_step: int, last_step: int, *, force: bool) -> None:
+def run_pipeline(
+    first_step: int,
+    last_step: int,
+    *,
+    force: bool,
+    max_workers: int,
+) -> None:
     """Execute a validated inclusive step range in dependency order."""
 
     if first_step > last_step:
@@ -512,14 +642,21 @@ def run_pipeline(first_step: int, last_step: int, *, force: bool) -> None:
             "Force mode is enabled for the expensive Step 5 and Step 6 work",
             flush=True,
         )
+    if 5 in requested_steps or 6 in requested_steps:
+        print(
+            f"Step 5/6 studies run up to {max_workers} at a time "
+            "(--max-workers); output from concurrent studies interleaves in "
+            "this console, but each study's own checkpoint files stay separate",
+            flush=True,
+        )
 
     for step_number in requested_steps:
         if step_number <= 4:
             _run_script(STEPS[step_number])
         elif step_number == 5:
-            _run_step_5(force=force)
+            _run_step_5(force=force, max_workers=max_workers)
         elif step_number == 6:
-            _run_step_6(force=force)
+            _run_step_6(force=force, max_workers=max_workers)
         else:
             _run_step_7()
 
@@ -559,13 +696,31 @@ def main() -> None:
             "Without this option, expensive completed work is preserved."
         ),
     )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=_default_max_workers(),
+        help=(
+            "Maximum number of independent Step 5/6 family/outer-fold "
+            "studies to run at the same time, each as its own subprocess. "
+            "Defaults to the number of available CPU cores. Use 1 to run "
+            "sequentially, matching the previous behavior."
+        ),
+    )
     args = parser.parse_args()
+    if args.max_workers < 1:
+        parser.error("--max-workers must be at least 1")
 
     try:
         if args.status:
             print_status()
             return
-        run_pipeline(args.from_step, args.through_step, force=args.force)
+        run_pipeline(
+            args.from_step,
+            args.through_step,
+            force=args.force,
+            max_workers=args.max_workers,
+        )
     except KeyboardInterrupt:
         print(
             "\nPhase 2 interrupted; completed step artifacts remain available for resume",

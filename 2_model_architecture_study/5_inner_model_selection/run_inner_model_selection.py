@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import os
+
+# CUDA's deterministic cuBLAS kernels only exist when this variable is set
+# before PyTorch creates a CUDA context. It must therefore be set before
+# `import torch`, not inside the adapter that later calls
+# torch.use_deterministic_algorithms(True) -- by then a context may already
+# exist, and the setting would silently have no effect. setdefault leaves
+# an operator-supplied value untouched. This has no effect at all on
+# CPU-only machines.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 from pathlib import Path
 import sys
+
+import torch
 
 
 STEP_DIR = Path(__file__).resolve().parent
@@ -27,6 +40,15 @@ from inner_model_selection import (  # noqa: E402
 
 def main() -> None:
     """Parse optional study filters and run the requested Step 5 work."""
+
+    # This process may run alongside sibling Step 5 processes dispatched by
+    # run_phase_2.py's parallel study fan-out. Without an explicit cap,
+    # PyTorch defaults to one intra-op thread per core, so several such
+    # processes running at once would oversubscribe the machine instead of
+    # speeding it up. This mirrors the codebase's existing n_jobs=1 choice
+    # for XGBoost and Random Forest, applied unconditionally so behavior does
+    # not change based on how many studies happen to run at the same time.
+    torch.set_num_threads(1)
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -71,6 +93,11 @@ def main() -> None:
             args.families,
             args.outer_folds,
         )
+        neural_device = "cuda" if torch.cuda.is_available() else "cpu"
+        device_detail = (
+            f" ({torch.cuda.get_device_name(0)})" if neural_device == "cuda" else ""
+        )
+        print(f"Neural training device: {neural_device}{device_detail}")
         print("Starting leakage-safe inner model selection")
         print(f"Families: {', '.join(families)}")
         print(f"Outer folds: {outer_folds}")
