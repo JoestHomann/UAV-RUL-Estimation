@@ -140,20 +140,6 @@ def build_architecture_comparison_plan(
             "Step 1 experiment specification has no settings object"
         )
 
-    study = settings["study"]
-    if study.get("architecture_selection") != "manual":
-        raise ArchitectureComparisonGateError(
-            "The architecture study settings must keep architecture selection manual"
-        )
-    if study.get("save_all_architecture_results") is not True:
-        raise ArchitectureComparisonGateError(
-            "The architecture study settings must retain every architecture result"
-        )
-    if study.get("create_comparison_plots") is not True:
-        raise ArchitectureComparisonGateError(
-            "The architecture study settings must enable comparison plots"
-        )
-
     # The manifest is the only Step 6 file read before the completion decision.
     # A missing or partial manifest therefore prevents locked predictions from
     # entering memory, even if a stale prediction CSV happens to exist locally.

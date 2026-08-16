@@ -312,18 +312,11 @@ SearchParameter = Annotated[
 
 
 class StudySpecification(StrictModel):
-    """Define experiment membership and the manual comparison policy.
-
-    Literal types make two agreed decisions executable: all architecture
-    results and comparison plots are retained, and no code selects a winner.
-    """
+    """Define which architectures the study runs, and in what priority."""
 
     architectures_to_run: list[str]
     conditional_architectures: list[str]
     optional_architectures: list[str]
-    architecture_selection: Literal["manual"]
-    save_all_architecture_results: Literal[True]
-    create_comparison_plots: Literal[True]
 
 
 class TuningSpecification(StrictModel):

@@ -36,16 +36,11 @@ architectures_to_run = [
 conditional_architectures = ["transformer"]
 optional_architectures = ["rbf_svr"]
 
-# The pipeline saves every architecture's predictions, metrics, and
-# comparison plots.  It never declares a winner; the final selection is made
-# by the user after inspecting the complete evidence.
-# Options: "manual" (the only supported selection policy).
-architecture_selection = "manual"
-# Options: true (the only supported value; every result is always saved).
-save_all_architecture_results = true
-# Options: true (the only supported value; comparison plots are always
-# created).
-create_comparison_plots = true
+# The pipeline always saves every architecture's predictions, metrics, and
+# comparison plots, and never declares a winner: the final selection is made
+# by the user after inspecting the complete evidence. These are fixed
+# pipeline behaviors, not configurable settings, so there is nothing to set
+# here for them.
 
 [tuning]
 # Hyperparameters are optimized independently inside each architecture
