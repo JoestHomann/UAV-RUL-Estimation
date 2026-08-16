@@ -318,7 +318,7 @@ class StudySpecification(StrictModel):
     results and comparison plots are retained, and no code selects a winner.
     """
 
-    required_architectures: list[str]
+    architectures_to_run: list[str]
     conditional_architectures: list[str]
     optional_architectures: list[str]
     architecture_selection: Literal["manual"]
@@ -451,7 +451,7 @@ class ArchitectureSpecification(StrictModel):
     shared through "NeuralTrainingSpecification".
     """
 
-    status: Literal["required", "conditional", "optional"]
+    status: Literal["included", "conditional", "optional"]
     enabled: bool
     representation: Literal["none", "tabular", "sequence"]
     feature_sets: list[str] = Field(default_factory=list)
@@ -564,12 +564,12 @@ class ArchitectureStudySettings(StrictModel):
         future adapter.
         """
 
-        required = set(self.study.required_architectures)
+        to_run = set(self.study.architectures_to_run)
         conditional = set(self.study.conditional_architectures)
         optional = set(self.study.optional_architectures)
-        listed = required | conditional | optional
+        listed = to_run | conditional | optional
 
-        if len(listed) != sum(map(len, (required, conditional, optional))):
+        if len(listed) != sum(map(len, (to_run, conditional, optional))):
             raise ValueError("architecture status lists must not overlap")
         if listed != set(self.architectures):
             raise ValueError(
@@ -578,17 +578,15 @@ class ArchitectureStudySettings(StrictModel):
 
         # Derive the expected per-model status from the three top-level lists.
         # This prevents a table from claiming "optional" while also appearing
-        # in the required execution set.
+        # in the list of architectures the study runs.
         expected_status = {
-            **{name: "required" for name in required},
+            **{name: "included" for name in to_run},
             **{name: "conditional" for name in conditional},
             **{name: "optional" for name in optional},
         }
         for name, architecture in self.architectures.items():
             if architecture.status != expected_status[name]:
                 raise ValueError(f"architectures.{name}.status is inconsistent")
-            if architecture.status == "required" and not architecture.enabled:
-                raise ValueError(f"required architecture {name!r} must be enabled")
 
             # Search dictionaries need a separate name check because their keys
             # are dynamic mappings rather than normal Pydantic model fields.

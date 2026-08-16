@@ -509,7 +509,7 @@ class InnerModelSelectionRunner:
 
         study = self.settings["study"]
         configured_order = (
-            study["required_architectures"]
+            study["architectures_to_run"]
             + study["conditional_architectures"]
             + study["optional_architectures"]
         )

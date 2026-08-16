@@ -180,7 +180,7 @@ def _enabled_families(settings: dict[str, Any]) -> tuple[str, ...]:
 
     study = settings["study"]
     declared_order = (
-        study["required_architectures"]
+        study["architectures_to_run"]
         + study["conditional_architectures"]
         + study["optional_architectures"]
     )

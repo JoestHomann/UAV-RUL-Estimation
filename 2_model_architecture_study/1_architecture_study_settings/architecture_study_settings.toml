@@ -14,14 +14,16 @@ settings_version = 2
 phase = "model_architecture_study"
 
 [study]
-# Required architectures form the comparison that must always be executed.
+# The architectures that run in the comparison. Nothing here forces any of
+# them to stay enabled -- disabling one below simply drops it from the run,
+# the same way a conditional or optional architecture is skipped.
 # Conditional and optional architectures stay explicit in this settings file
 # but are skipped while "enabled = false" in their individual tables below.
 # Options: any architecture name that also has an [architectures.*] table
 # below (currently mean_baseline, cycle_only_baseline, regularized_linear,
 # random_forest, xgboost, mlp, tcn, lstm, transformer, rbf_svr). Every such
 # name must appear in exactly one of the three lists below.
-required_architectures = [
+architectures_to_run = [
     "mean_baseline",
     "cycle_only_baseline",
     "regularized_linear",
@@ -220,15 +222,15 @@ early_stopping_patience = 15
 # clipping.
 gradient_clip_global_norm = 1.0
 
-# Required baselines ---------------------------------------------------------
+# Baselines ------------------------------------------------------------------
 # Baselines verify that complex models improve on simple references.  The
 # mean baseline needs no model input; the cycle-only baseline receives only
 # age.
 
 [architectures.mean_baseline]
-# Options: "required", "conditional", "optional"; must match which of the
+# Options: "included", "conditional", "optional"; must match which of the
 # three [study] lists above this architecture's name appears in.
-status = "required"
+status = "included"
 # Options: true, false.
 enabled = true
 # Options: "none", "tabular", "sequence". Determines which of "feature_sets"
@@ -239,19 +241,19 @@ representation = "none"
 variants = ["mean"]
 
 [architectures.cycle_only_baseline]
-status = "required"
+status = "included"
 enabled = true
 representation = "tabular"
 feature_sets = ["age_only"]
 # Options: exactly {"weighted_linear"} for this architecture.
 variants = ["weighted_linear"]
 
-# Required tabular architectures --------------------------------------------
+# Tabular architectures ------------------------------------------------------
 # All tabular families consume the same Phase 1 prefix-feature rows.  Their
 # "feature_sets" lists define which predeclared feature subsets are compared.
 
 [architectures.regularized_linear]
-status = "required"
+status = "included"
 enabled = true
 representation = "tabular"
 feature_sets = ["age_only", "last_values", "screened", "all_nonconstant"]
@@ -284,7 +286,7 @@ kind = "categorical"
 values = [0.05, 0.2, 0.5, 0.8, 0.95]
 
 [architectures.random_forest]
-status = "required"
+status = "included"
 enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
@@ -310,7 +312,7 @@ kind = "categorical"
 values = [0.33, 0.67, 1.0]
 
 [architectures.xgboost]
-status = "required"
+status = "included"
 enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
@@ -363,13 +365,13 @@ kind = "log_uniform"
 low = 1e-3
 high = 100.0
 
-# Required neural architectures ---------------------------------------------
+# Neural architectures -------------------------------------------------------
 # The MLP uses engineered tabular rows.  TCN and LSTM use padded ordered
 # telemetry windows, allowing the study to compare feature-based and
 # end-to-end sequence representations under the same folds and metrics.
 
 [architectures.mlp]
-status = "required"
+status = "included"
 enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
@@ -398,7 +400,7 @@ low = 1e-6
 high = 1e-2
 
 [architectures.tcn]
-status = "required"
+status = "included"
 enabled = true
 representation = "sequence"
 # Any subset of the top-level [representations].sequence_lookbacks list.
@@ -440,7 +442,7 @@ low = 1e-6
 high = 1e-2
 
 [architectures.lstm]
-status = "required"
+status = "included"
 enabled = true
 representation = "sequence"
 lookbacks = [50, 100]
@@ -479,10 +481,10 @@ high = 1e-2
 # Disabled extensions --------------------------------------------------------
 # Disabled architectures remain fully specified so enabling one is a
 # deliberate one-line status change and uses a documented search space.
-# They are not run in the required comparison while "enabled = false".
+# They are not run in the comparison while "enabled = false".
 
 [architectures.transformer]
-# Options: "required", "conditional", "optional"; must match which [study]
+# Options: "included", "conditional", "optional"; must match which [study]
 # list this architecture's name appears in ("transformer" is in
 # conditional_architectures above).
 status = "conditional"
@@ -528,7 +530,7 @@ low = 1e-6
 high = 1e-2
 
 [architectures.rbf_svr]
-# Options: "required", "conditional", "optional"; "rbf_svr" is in
+# Options: "included", "conditional", "optional"; "rbf_svr" is in
 # optional_architectures above.
 status = "optional"
 enabled = false
