@@ -27,7 +27,7 @@ from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
     calculate_age_band_regression_metrics,
     calculate_regression_metrics,
-    create_training_monitor,
+    create_study_monitor,
     ensure_tensorboard_available,
     publish_step_7_comparison,
 )
@@ -80,23 +80,34 @@ def _model_dataset(rows: int, *, seed: int) -> TabularDataset:
     )
 
 
+def _require_no_per_fit_subdirectories(study_directory: Path) -> None:
+    """Confirm a study reused one shared directory instead of one per fit.
+
+    Before every fit shared one writer, each candidate and inner fold created
+    its own generated subdirectory below the study. Any such subdirectory
+    appearing now would mean the consolidation regressed back to per-fit
+    directories.
+    """
+
+    parent = study_directory.parent
+    unexpected = sorted(
+        entry.name
+        for entry in parent.iterdir()
+        if entry.is_dir() and entry.name not in {"fit_progress", "study_progress"}
+    )
+    if unexpected:
+        raise RuntimeError(
+            f"Unexpected per-fit directories were created under {parent}: "
+            f"{unexpected}"
+        )
+
+
 def _verify_iterative_model_callbacks(log_root: Path) -> None:
     """Fit tiny XGBoost and MLP models and inspect their real callback tags."""
 
     training_data = _model_dataset(24, seed=11)
     validation_data = _model_dataset(8, seed=12)
 
-    xgboost_context = TrainingRunContext(
-        stage="step_5",
-        model_family="xgboost",
-        representation="tabular",
-        outer_fold=0,
-        seed=13,
-        configuration_id="verification_xgboost",
-        candidate_number=2,
-        inner_fold=0,
-        feature_set="verification_features",
-    )
     xgboost_hyperparameters = {
         "maximum_trees": 12,
         "learning_rate": 0.1,
@@ -107,149 +118,255 @@ def _verify_iterative_model_callbacks(log_root: Path) -> None:
         "reg_alpha": 0.0,
         "reg_lambda": 1.0,
     }
-    with create_training_monitor(xgboost_context, log_root=log_root) as monitor:
-        monitor.start_fit(
-            hyperparameters=xgboost_hyperparameters,
-            training_data=training_data,
-            validation_data=validation_data,
-        )
-        model = XGBoostAdapter(
-            hyperparameters=xgboost_hyperparameters,
+    with create_study_monitor(
+        stage="step_5",
+        model_family="xgboost",
+        outer_fold=0,
+        log_root=log_root,
+    ) as xgboost_study:
+        xgboost_context = TrainingRunContext(
+            stage="step_5",
+            model_family="xgboost",
+            representation="tabular",
+            outer_fold=0,
             seed=13,
-            early_stopping_patience=3,
-            training_monitor=monitor,
+            configuration_id="verification_xgboost",
+            candidate_number=2,
+            inner_fold=0,
+            feature_set="verification_features",
         )
-        summary = model.fit(training_data, validation_data)
-        predictions = model.predict(validation_data)
-        monitor.complete_fit(
-            training_summary=summary.to_dict(),
-            inference_seconds=0.0,
-            evaluation_metrics=calculate_regression_metrics(
-                validation_data.target,
-                predictions,
-            ),
-            prediction_rows=len(predictions),
-        )
-        model.detach_training_monitor()
-        xgboost_model_path = model.save(log_root / "verification_xgboost.joblib")
-        restored_xgboost = XGBoostAdapter.load(xgboost_model_path)
-        restored_xgboost.predict(validation_data)
-        xgboost_log_directory = monitor.log_directory
+        with xgboost_study.fit(xgboost_context) as monitor:
+            monitor.start_fit(
+                hyperparameters=xgboost_hyperparameters,
+                training_data=training_data,
+                validation_data=validation_data,
+            )
+            model = XGBoostAdapter(
+                hyperparameters=xgboost_hyperparameters,
+                seed=13,
+                early_stopping_patience=3,
+                training_monitor=monitor,
+            )
+            summary = model.fit(training_data, validation_data)
+            predictions = model.predict(validation_data)
+            monitor.complete_fit(
+                training_summary=summary.to_dict(),
+                inference_seconds=0.0,
+                evaluation_metrics=calculate_regression_metrics(
+                    validation_data.target,
+                    predictions,
+                ),
+                prediction_rows=len(predictions),
+            )
+            model.detach_training_monitor()
+            xgboost_model_path = model.save(log_root / "verification_xgboost.joblib")
+            restored_xgboost = XGBoostAdapter.load(xgboost_model_path)
+            restored_xgboost.predict(validation_data)
 
+        # A second candidate inside the same study must reuse the study's
+        # directory instead of creating a new one. That reuse is the entire
+        # point of the shared writer.
+        second_xgboost_context = TrainingRunContext(
+            stage="step_5",
+            model_family="xgboost",
+            representation="tabular",
+            outer_fold=0,
+            seed=13,
+            configuration_id="verification_xgboost_second",
+            candidate_number=3,
+            inner_fold=1,
+            feature_set="verification_features",
+        )
+        with xgboost_study.fit(second_xgboost_context) as second_monitor:
+            second_monitor.start_fit(
+                hyperparameters=xgboost_hyperparameters,
+                training_data=training_data,
+                validation_data=validation_data,
+            )
+            second_monitor.complete_fit(
+                training_summary={
+                    "training_seconds": 0.1,
+                    "epochs_or_iterations": 5,
+                    "best_epoch_or_iteration": None,
+                    "trainable_parameters": None,
+                },
+                inference_seconds=0.0,
+                evaluation_metrics=None,
+                prediction_rows=4,
+            )
+        xgboost_log_directory = xgboost_study.log_directory
+
+    _require_no_per_fit_subdirectories(xgboost_log_directory)
     xgboost_tags = set(
         EventAccumulator(str(xgboost_log_directory)).Reload().Tags()["scalars"]
     )
     required_xgboost_tags = {
-        "optimization/training_rmse",
-        "optimization/validation_rmse",
-        "timing/seconds_per_iteration",
+        "candidate_002/inner_fold_00/optimization/training_rmse",
+        "candidate_002/inner_fold_00/optimization/validation_rmse",
+        "candidate_002/inner_fold_00/timing/seconds_per_iteration",
+        "candidate_003/inner_fold_01/progress/status",
+        "candidate_003/inner_fold_01/data/training_rows",
     }
     if missing := sorted(required_xgboost_tags - xgboost_tags):
         raise RuntimeError(f"XGBoost callback tags are missing: {missing}")
 
-    mlp_context = TrainingRunContext(
-        stage="step_5",
-        model_family="mlp",
-        representation="tabular",
-        outer_fold=0,
-        seed=13,
-        configuration_id="verification_mlp",
-        candidate_number=2,
-        inner_fold=1,
-        feature_set="verification_features",
-    )
     mlp_hyperparameters = {
         "hidden_layers": [8],
         "dropout": 0.0,
         "learning_rate": 0.001,
         "weight_decay": 0.0,
     }
-    with create_training_monitor(mlp_context, log_root=log_root) as monitor:
-        monitor.start_fit(
-            hyperparameters=mlp_hyperparameters,
-            training_data=training_data,
-            validation_data=validation_data,
-        )
-        model = MLPAdapter(
-            hyperparameters=mlp_hyperparameters,
+    with create_study_monitor(
+        stage="step_5",
+        model_family="mlp",
+        outer_fold=0,
+        log_root=log_root,
+    ) as mlp_study:
+        mlp_context = TrainingRunContext(
+            stage="step_5",
+            model_family="mlp",
+            representation="tabular",
+            outer_fold=0,
             seed=13,
-            training_config=NeuralTrainingConfig(
-                batch_size=8,
-                maximum_epochs=3,
-                early_stopping_patience=2,
-                gradient_clip_global_norm=1.0,
-            ),
-            training_monitor=monitor,
+            configuration_id="verification_mlp",
+            candidate_number=2,
+            inner_fold=1,
+            feature_set="verification_features",
         )
-        summary = model.fit(training_data, validation_data)
-        predictions = model.predict(validation_data)
-        monitor.complete_fit(
-            training_summary=summary.to_dict(),
-            inference_seconds=0.0,
-            evaluation_metrics=calculate_regression_metrics(
-                validation_data.target,
-                predictions,
-            ),
-            prediction_rows=len(predictions),
-        )
-        model.detach_training_monitor()
-        mlp_model_path = model.save(log_root / "verification_mlp.joblib")
-        restored_mlp = MLPAdapter.load(mlp_model_path)
-        restored_mlp.predict(validation_data)
-        mlp_log_directory = monitor.log_directory
+        with mlp_study.fit(mlp_context) as monitor:
+            monitor.start_fit(
+                hyperparameters=mlp_hyperparameters,
+                training_data=training_data,
+                validation_data=validation_data,
+            )
+            model = MLPAdapter(
+                hyperparameters=mlp_hyperparameters,
+                seed=13,
+                training_config=NeuralTrainingConfig(
+                    batch_size=8,
+                    maximum_epochs=3,
+                    early_stopping_patience=2,
+                    gradient_clip_global_norm=1.0,
+                ),
+                training_monitor=monitor,
+            )
+            summary = model.fit(training_data, validation_data)
+            predictions = model.predict(validation_data)
+            monitor.complete_fit(
+                training_summary=summary.to_dict(),
+                inference_seconds=0.0,
+                evaluation_metrics=calculate_regression_metrics(
+                    validation_data.target,
+                    predictions,
+                ),
+                prediction_rows=len(predictions),
+            )
+            model.detach_training_monitor()
+            mlp_model_path = model.save(log_root / "verification_mlp.joblib")
+            restored_mlp = MLPAdapter.load(mlp_model_path)
+            restored_mlp.predict(validation_data)
+        mlp_log_directory = mlp_study.log_directory
 
+    _require_no_per_fit_subdirectories(mlp_log_directory)
     mlp_tags = set(
         EventAccumulator(str(mlp_log_directory)).Reload().Tags()["scalars"]
     )
     required_mlp_tags = {
-        "optimization/training_weighted_mse",
-        "optimization/validation_rmse",
-        "optimization/learning_rate",
-        "timing/seconds_per_epoch",
-        "early_stopping/patience_used",
+        "candidate_002/inner_fold_01/optimization/training_weighted_mse",
+        "candidate_002/inner_fold_01/optimization/validation_rmse",
+        "candidate_002/inner_fold_01/optimization/learning_rate",
+        "candidate_002/inner_fold_01/timing/seconds_per_epoch",
+        "candidate_002/inner_fold_01/early_stopping/patience_used",
     }
     if missing := sorted(required_mlp_tags - mlp_tags):
         raise RuntimeError(f"Neural callback tags are missing: {missing}")
+
+    # The xgboost and mlp studies are distinct families and must never share
+    # a directory, even though both used outer fold 0.
+    if xgboost_log_directory == mlp_log_directory:
+        raise RuntimeError(
+            "Distinct model families unexpectedly shared one study directory"
+        )
 
 
 def _verify_locked_metric_boundary(log_root: Path) -> None:
     """Confirm Step 6 hides scores and Step 7 publishes them after completion."""
 
-    context = TrainingRunContext(
+    training_data = _SmallDataset(rows=8, columns=3)
+    with create_study_monitor(
         stage="step_6",
         model_family="random_forest",
-        representation="tabular",
         outer_fold=0,
-        seed=13,
-        configuration_id="verification_locked_run",
-        feature_set="verification_features",
-    )
-    training_data = _SmallDataset(rows=8, columns=3)
-    with create_training_monitor(context, log_root=log_root) as monitor:
-        monitor.start_fit(
-            hyperparameters={"n_estimators": 10},
-            training_data=training_data,
-            validation_data=None,
+        log_root=log_root,
+    ) as step_6_study:
+        first_seed_context = TrainingRunContext(
+            stage="step_6",
+            model_family="random_forest",
+            representation="tabular",
+            outer_fold=0,
+            seed=13,
+            configuration_id="verification_locked_run",
+            feature_set="verification_features",
         )
-        monitor.complete_fit(
-            training_summary={
-                "training_seconds": 1.0,
-                "epochs_or_iterations": 10,
-                "best_epoch_or_iteration": None,
-                "trainable_parameters": None,
-            },
-            inference_seconds=0.1,
-            evaluation_metrics=None,
-            prediction_rows=4,
-        )
-        step_6_log_directory = monitor.log_directory
+        with step_6_study.fit(first_seed_context) as monitor:
+            monitor.start_fit(
+                hyperparameters={"n_estimators": 10},
+                training_data=training_data,
+                validation_data=None,
+            )
+            monitor.complete_fit(
+                training_summary={
+                    "training_seconds": 1.0,
+                    "epochs_or_iterations": 10,
+                    "best_epoch_or_iteration": None,
+                    "trainable_parameters": None,
+                },
+                inference_seconds=0.1,
+                evaluation_metrics=None,
+                prediction_rows=4,
+            )
 
+        # A second retraining seed for the same family/outer fold must reuse
+        # the same Step 6 study directory instead of creating a new one.
+        second_seed_context = TrainingRunContext(
+            stage="step_6",
+            model_family="random_forest",
+            representation="tabular",
+            outer_fold=0,
+            seed=37,
+            configuration_id="verification_locked_run_seed_37",
+            feature_set="verification_features",
+        )
+        with step_6_study.fit(second_seed_context) as second_monitor:
+            second_monitor.start_fit(
+                hyperparameters={"n_estimators": 10},
+                training_data=training_data,
+                validation_data=None,
+            )
+            second_monitor.complete_fit(
+                training_summary={
+                    "training_seconds": 1.0,
+                    "epochs_or_iterations": 10,
+                    "best_epoch_or_iteration": None,
+                    "trainable_parameters": None,
+                },
+                inference_seconds=0.1,
+                evaluation_metrics=None,
+                prediction_rows=4,
+            )
+        step_6_log_directory = step_6_study.log_directory
+
+    _require_no_per_fit_subdirectories(step_6_log_directory)
     step_6_tags = set(
         EventAccumulator(str(step_6_log_directory)).Reload().Tags()["scalars"]
     )
-    leaked = sorted(tag for tag in step_6_tags if tag.startswith("performance/"))
+    leaked = sorted(tag for tag in step_6_tags if "/performance/" in tag)
     if leaked:
         raise RuntimeError(f"Step 6 exposed locked performance tags: {leaked}")
+    if "seed_013/progress/status" not in step_6_tags:
+        raise RuntimeError("Step 6 seed 13 run is missing its progress tag")
+    if "seed_037/progress/status" not in step_6_tags:
+        raise RuntimeError("Step 6 seed 37 run is missing its progress tag")
 
     comparison = pd.DataFrame(
         [
@@ -324,7 +441,7 @@ def _verify_locked_metric_boundary(log_root: Path) -> None:
 
 
 def main() -> None:
-    """Write one isolated run and confirm TensorBoard can read every key tag."""
+    """Write one isolated study and confirm TensorBoard can read every key tag."""
 
     installed_version = ensure_tensorboard_available()
     context = TrainingRunContext(
@@ -353,60 +470,137 @@ def main() -> None:
     DEFAULT_LOG_ROOT.mkdir(parents=True, exist_ok=True)
     log_root = DEFAULT_LOG_ROOT / "verification_scratch"
     try:
-        with create_training_monitor(context, log_root=log_root) as monitor:
-            monitor.start_fit(
-                hyperparameters={"learning_rate": 0.05},
-                training_data=training_data,
-                validation_data=validation_data,
-            )
-            monitor.log_training_step(
-                step=10,
-                scalars={
-                    "optimization/training_rmse": 2.0,
-                    "optimization/validation_rmse": 2.5,
-                },
-            )
-            monitor.complete_fit(
-                training_summary={
-                    "training_seconds": 1.25,
-                    "epochs_or_iterations": 10,
-                    "best_epoch_or_iteration": 8,
-                    "trainable_parameters": None,
-                },
-                inference_seconds=0.05,
-                evaluation_metrics={**metrics, **age_band_metrics},
-                prediction_rows=4,
-            )
-            run_directory = monitor.log_directory
+        with create_study_monitor(
+            stage="step_5",
+            model_family="xgboost",
+            outer_fold=0,
+            log_root=log_root,
+        ) as study_monitor:
+            with study_monitor.fit(context) as monitor:
+                monitor.start_fit(
+                    hyperparameters={"learning_rate": 0.05},
+                    training_data=training_data,
+                    validation_data=validation_data,
+                )
+                monitor.log_training_step(
+                    step=10,
+                    scalars={
+                        "optimization/training_rmse": 2.0,
+                        "optimization/validation_rmse": 2.5,
+                    },
+                )
+                monitor.complete_fit(
+                    training_summary={
+                        "training_seconds": 1.25,
+                        "epochs_or_iterations": 10,
+                        "best_epoch_or_iteration": 8,
+                        "trainable_parameters": None,
+                    },
+                    inference_seconds=0.05,
+                    evaluation_metrics={**metrics, **age_band_metrics},
+                    prediction_rows=4,
+                )
+            run_directory = study_monitor.log_directory
 
         events = EventAccumulator(str(run_directory)).Reload()
         scalar_tags = set(events.Tags()["scalars"])
+        prefix = "candidate_001/inner_fold_00"
         required_tags = {
-            "data/training_rows",
-            "data/validation_rows",
-            "data/input_features",
-            "optimization/training_rmse",
-            "optimization/validation_rmse",
-            "performance/rmse",
-            "performance/mae",
-            "performance/r2",
-            "performance/bias",
-            "performance/age_band/1_50/rmse",
-            "performance/age_band/51_100/rmse",
-            "timing/training_seconds",
-            "timing/inference_seconds",
-            "progress/status",
+            f"{prefix}/data/training_rows",
+            f"{prefix}/data/validation_rows",
+            f"{prefix}/data/input_features",
+            f"{prefix}/optimization/training_rmse",
+            f"{prefix}/optimization/validation_rmse",
+            f"{prefix}/performance/rmse",
+            f"{prefix}/performance/mae",
+            f"{prefix}/performance/r2",
+            f"{prefix}/performance/bias",
+            f"{prefix}/performance/age_band/1_50/rmse",
+            f"{prefix}/performance/age_band/51_100/rmse",
+            f"{prefix}/timing/training_seconds",
+            f"{prefix}/timing/inference_seconds",
+            f"{prefix}/progress/status",
         }
         missing = sorted(required_tags - scalar_tags)
         if missing:
             raise RuntimeError(
                 f"TensorBoard verification is missing scalar tags: {missing}"
             )
-        status_values = events.Scalars("progress/status")
+        status_values = events.Scalars(f"{prefix}/progress/status")
         if not status_values or float(status_values[-1].value) != 1.0:
             raise RuntimeError(
                 "TensorBoard verification did not record a completed fit"
             )
+
+        # A fit that never calls complete_fit must fail loudly instead of
+        # silently leaving an incomplete curve in the dashboard.
+        incomplete_context = TrainingRunContext(
+            stage="step_5",
+            model_family="xgboost",
+            representation="tabular",
+            outer_fold=0,
+            seed=13,
+            configuration_id="verification_incomplete",
+            candidate_number=4,
+            inner_fold=2,
+            feature_set="verification_features",
+        )
+        raised = False
+        with create_study_monitor(
+            stage="step_5",
+            model_family="xgboost",
+            outer_fold=0,
+            log_root=log_root,
+        ) as reopened_study:
+            try:
+                with reopened_study.fit(incomplete_context) as incomplete_monitor:
+                    incomplete_monitor.start_fit(
+                        hyperparameters={"learning_rate": 0.05},
+                        training_data=training_data,
+                        validation_data=validation_data,
+                    )
+            except Exception as error:  # noqa: BLE001 - verifying the failure itself
+                raised = True
+                if "exited without a completion record" not in str(error):
+                    raise RuntimeError(
+                        f"Unexpected error for an incomplete fit: {error}"
+                    ) from error
+        if not raised:
+            raise RuntimeError(
+                "An incomplete fit did not raise the mandatory completion error"
+            )
+
+        # A mismatched context (wrong family/outer fold) must be rejected
+        # before it can write into the wrong study's shared writer.
+        mismatched_context = TrainingRunContext(
+            stage="step_5",
+            model_family="mlp",
+            representation="tabular",
+            outer_fold=0,
+            seed=13,
+            configuration_id="verification_mismatch",
+            candidate_number=1,
+            inner_fold=0,
+            feature_set="verification_features",
+        )
+        with create_study_monitor(
+            stage="step_5",
+            model_family="xgboost",
+            outer_fold=0,
+            log_root=log_root,
+        ) as xgboost_only_study:
+            try:
+                xgboost_only_study.fit(mismatched_context)
+            except Exception as error:  # noqa: BLE001 - verifying the failure itself
+                if "does not belong to this study" not in str(error):
+                    raise RuntimeError(
+                        f"Unexpected error for a mismatched context: {error}"
+                    ) from error
+            else:
+                raise RuntimeError(
+                    "A mismatched fit context was accepted by the wrong study"
+                )
+
         _verify_iterative_model_callbacks(log_root)
         _verify_locked_metric_boundary(log_root)
     finally:

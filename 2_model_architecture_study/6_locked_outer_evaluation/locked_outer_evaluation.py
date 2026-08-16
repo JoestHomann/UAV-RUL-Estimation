@@ -39,7 +39,7 @@ from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
-    create_training_monitor,
+    create_study_monitor,
     ensure_tensorboard_available,
 )
 
@@ -331,14 +331,24 @@ class LockedOuterEvaluationRunner:
         for family in selected_families:
             for outer_fold in selected_folds:
                 selected = self.plan.configuration(family, outer_fold)
-                for seed in self.plan.seeds_for(family):
-                    self.run_model(selected, seed)
+                # One shared writer covers every retraining seed for this
+                # family/outer-fold pair, so the generated directory count
+                # stays fixed at one study instead of growing with the
+                # retraining seed count.
+                with create_study_monitor(
+                    stage="step_6",
+                    model_family=family,
+                    outer_fold=outer_fold,
+                ) as study_monitor:
+                    for seed in self.plan.seeds_for(family):
+                        self.run_model(selected, seed, study_monitor)
         return self.consolidate_artifacts()
 
     def run_model(
         self,
         selected: SelectedConfiguration,
         seed: int,
+        study_monitor: Any,
     ) -> dict[str, Any]:
         """Retrain and evaluate one selected family/fold/seed combination."""
 
@@ -367,7 +377,7 @@ class LockedOuterEvaluationRunner:
                 lookback=selected.lookback,
             )
             model = None
-            with create_training_monitor(context) as monitor:
+            with study_monitor.fit(context) as monitor:
                 # The locked validation dataset is deliberately omitted here.
                 # Step 6 may display training progress and operating timings,
                 # but no locked predictive metric before Step 7 completes.

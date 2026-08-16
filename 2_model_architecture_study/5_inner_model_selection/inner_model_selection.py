@@ -63,7 +63,7 @@ from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
     calculate_age_band_regression_metrics,
     calculate_regression_metrics,
-    create_training_monitor,
+    create_study_monitor,
     ensure_tensorboard_available,
     log_step_5_candidate,
     log_step_5_selection,
@@ -606,59 +606,69 @@ class InnerModelSelectionRunner:
         split_repository = InnerSplitRepository(self.development_scenarios)
         seen_configurations: set[str] = set()
 
-        def objective(trial: Trial) -> float:
-            candidate = self.candidate_space.resolve(family, trial)
-            canonical = candidate.canonical_json()
-            if canonical in seen_configurations:
-                raise optuna.TrialPruned(
-                    "Resolved candidate duplicates an earlier complete candidate"
-                )
-            candidate_number = len(seen_configurations) + 1
-            candidate_record, fold_records = self._evaluate_candidate(
-                trial=trial,
-                family=family,
-                architecture=architecture,
-                candidate=candidate,
-                candidate_number=candidate_number,
-                outer_fold=outer_fold,
-                split_repository=split_repository,
-            )
-            trial.set_user_attr("candidate_number", candidate_number)
-            trial.set_user_attr("candidate_record", candidate_record)
-            trial.set_user_attr("fold_records", fold_records)
-            trial.set_user_attr("configuration_json", canonical)
-            seen_configurations.add(canonical)
-            return float(candidate_record["mean_inner_rmse"])
-
-        maximum_attempts = candidate_budget * 20
-        attempts = 0
-        try:
-            while len(seen_configurations) < candidate_budget:
-                if attempts >= maximum_attempts:
-                    raise InnerModelSelectionError(
-                        f"Could not generate {candidate_budget} distinct "
-                        f"candidates for {family!r}"
-                    )
-                study.optimize(
-                    objective,
-                    n_trials=1,
-                    n_jobs=1,
-                    callbacks=[writer.checkpoint],
-                    gc_after_trial=True,
-                    show_progress_bar=False,
-                )
-                attempts += 1
-        except Exception as error:
-            writer.fail(str(error))
-            self.consolidate_artifacts()
-            raise
-
-        selected = writer.finish(study)
-        log_step_5_selection(
+        # One shared writer covers every candidate and inner fold in this
+        # study, so the generated directory count stays fixed at one study
+        # instead of growing with the candidate budget and inner-fold count.
+        with create_study_monitor(
+            stage="step_5",
             model_family=family,
             outer_fold=outer_fold,
-            selected_record=selected,
-        )
+        ) as study_monitor:
+
+            def objective(trial: Trial) -> float:
+                candidate = self.candidate_space.resolve(family, trial)
+                canonical = candidate.canonical_json()
+                if canonical in seen_configurations:
+                    raise optuna.TrialPruned(
+                        "Resolved candidate duplicates an earlier complete candidate"
+                    )
+                candidate_number = len(seen_configurations) + 1
+                candidate_record, fold_records = self._evaluate_candidate(
+                    trial=trial,
+                    family=family,
+                    architecture=architecture,
+                    candidate=candidate,
+                    candidate_number=candidate_number,
+                    outer_fold=outer_fold,
+                    split_repository=split_repository,
+                    study_monitor=study_monitor,
+                )
+                trial.set_user_attr("candidate_number", candidate_number)
+                trial.set_user_attr("candidate_record", candidate_record)
+                trial.set_user_attr("fold_records", fold_records)
+                trial.set_user_attr("configuration_json", canonical)
+                seen_configurations.add(canonical)
+                return float(candidate_record["mean_inner_rmse"])
+
+            maximum_attempts = candidate_budget * 20
+            attempts = 0
+            try:
+                while len(seen_configurations) < candidate_budget:
+                    if attempts >= maximum_attempts:
+                        raise InnerModelSelectionError(
+                            f"Could not generate {candidate_budget} distinct "
+                            f"candidates for {family!r}"
+                        )
+                    study.optimize(
+                        objective,
+                        n_trials=1,
+                        n_jobs=1,
+                        callbacks=[writer.checkpoint],
+                        gc_after_trial=True,
+                        show_progress_bar=False,
+                    )
+                    attempts += 1
+            except Exception as error:
+                writer.fail(str(error))
+                self.consolidate_artifacts()
+                raise
+
+            selected = writer.finish(study)
+            log_step_5_selection(
+                model_family=family,
+                outer_fold=outer_fold,
+                selected_record=selected,
+            )
         self.consolidate_artifacts()
         return selected
 
@@ -672,6 +682,7 @@ class InnerModelSelectionRunner:
         candidate_number: int,
         outer_fold: int,
         split_repository: InnerSplitRepository,
+        study_monitor: Any,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Fit one resolved candidate on all four inner UAV folds."""
 
@@ -709,7 +720,7 @@ class InnerModelSelectionRunner:
                 lookback=candidate.lookback,
             )
             model = None
-            with create_training_monitor(context) as monitor:
+            with study_monitor.fit(context) as monitor:
                 monitor.start_fit(
                     hyperparameters=candidate.hyperparameters,
                     training_data=split.training,

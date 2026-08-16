@@ -7,6 +7,13 @@ human-readable run path in the dashboard.
 
 Generated event files are a live monitoring aid. The CSV and JSON artifacts
 written by Steps 5 through 7 remain the authoritative scientific results.
+
+One writer is shared by every fit inside a study (one model family evaluated
+on one outer fold) instead of opening a fresh writer per candidate or inner
+fold. This keeps the generated directory count fixed at one study instead of
+growing with the candidate budget and inner-fold count, while distinct tag
+prefixes still let every individual fit's curves be selected separately in
+TensorBoard.
 """
 
 from __future__ import annotations
@@ -81,20 +88,26 @@ class TrainingRunContext:
                 "Step 6 run paths must not contain candidate or inner-fold labels"
             )
 
-    def relative_log_parts(self) -> tuple[str, ...]:
-        """Return the agreed stable folder hierarchy for this logical fit."""
+    def study_parts(self) -> tuple[str, str, str]:
+        """Return the stable per-study key shared by every fit inside it."""
 
-        base = (
-            self.stage,
-            self.model_family,
-            f"outer_fold_{self.outer_fold:02d}",
-        )
+        return (self.stage, self.model_family, f"outer_fold_{self.outer_fold:02d}")
+
+    def tag_prefix(self) -> str:
+        """Return the tag namespace that keeps this fit's curves distinct.
+
+        Every scalar and text value this fit writes is namespaced under this
+        prefix inside the study's single shared writer, so TensorBoard's
+        regex filter box (for example "^candidate_007/") recovers exactly
+        what a dedicated per-fit directory used to provide.
+        """
+
         if self.stage == "step_5":
-            return base + (
-                f"candidate_{self.candidate_number:03d}",
-                f"inner_fold_{self.inner_fold:02d}",
+            return (
+                f"candidate_{self.candidate_number:03d}/"
+                f"inner_fold_{self.inner_fold:02d}"
             )
-        return base + (f"seed_{self.seed:03d}",)
+        return f"seed_{self.seed:03d}"
 
 
 def _summary_writer_class() -> type[Any]:
@@ -271,20 +284,41 @@ def calculate_age_band_regression_metrics(
     return result
 
 
-class TensorBoardTrainingMonitor:
-    """Own one SummaryWriter for the exact lifetime of one fitted model."""
+class TensorBoardStudyMonitor:
+    """Own one shared SummaryWriter for every fit inside one study.
+
+    A study is one model family evaluated on one outer fold: every candidate
+    and inner fold in Step 5, or every retraining seed in Step 6. Sharing one
+    writer across the whole study keeps the generated directory count fixed
+    at one per study regardless of the candidate budget or inner-fold count,
+    while ``TrainingRunContext.tag_prefix()`` keeps each fit's curves
+    separately selectable inside that one run.
+    """
 
     def __init__(
         self,
-        context: TrainingRunContext,
         *,
+        stage: Literal["step_5", "step_6"],
+        model_family: str,
+        outer_fold: int,
         log_root: Path = DEFAULT_LOG_ROOT,
     ) -> None:
-        self.context = context
+        if stage not in {"step_5", "step_6"}:
+            raise TensorBoardMonitoringError(f"Unsupported monitoring stage {stage!r}")
+        if not model_family:
+            raise TensorBoardMonitoringError(
+                "A monitored study requires a model family"
+            )
+        if outer_fold < 0:
+            raise TensorBoardMonitoringError("Fold labels must be nonnegative")
+        self.stage = stage
+        self.model_family = model_family
+        self.outer_fold = outer_fold
+        self._study_key = (stage, model_family, f"outer_fold_{outer_fold:02d}")
         self.log_root = _validated_log_root(log_root)
         self.log_directory = _safe_run_directory(
             self.log_root,
-            context.relative_log_parts(),
+            self._study_key + ("fit_progress",),
         )
         _replace_run_directory(self.log_directory, self.log_root)
         writer_class = _summary_writer_class()
@@ -299,12 +333,10 @@ class TensorBoardTrainingMonitor:
             raise TensorBoardMonitoringError(
                 f"Cannot create TensorBoard writer at {self.log_directory}: {error}"
             ) from error
-        self._completed = False
         self._closed = False
         self._writer_failed = False
-        self._logged_training_steps: set[int] = set()
 
-    def __enter__(self) -> TensorBoardTrainingMonitor:
+    def __enter__(self) -> TensorBoardStudyMonitor:
         """Return this monitor for a readable with statement in each runner."""
 
         return self
@@ -315,34 +347,21 @@ class TensorBoardTrainingMonitor:
         exception: BaseException | None,
         traceback: Any,
     ) -> bool:
-        """Record failed fits, flush events, and never suppress pipeline errors."""
+        """Close the shared writer without hiding an error from the study."""
 
-        pending_error: BaseException | None = None
-        if exception is not None and not self._writer_failed:
-            try:
-                self._write_text("progress/error", str(exception), step=0)
-                self._write_scalars({"progress/status": -1.0}, step=0)
-            except TensorBoardMonitoringError as error:
-                pending_error = error
-        elif exception is None and not self._completed:
-            pending_error = TensorBoardMonitoringError(
-                f"Monitored fit {self.context.configuration_id!r} exited without "
-                "a completion record"
-            )
         try:
             self.close()
-        except TensorBoardMonitoringError as error:
-            pending_error = pending_error or error
-        if exception is None and pending_error is not None:
-            raise pending_error
+        except TensorBoardMonitoringError:
+            if exception is None:
+                raise
         return False
 
     def _perform_write(self, action: Callable[[], None]) -> None:
-        """Execute and flush one event group so disk failures stop training."""
+        """Execute and flush one event group so disk failures stop the fit."""
 
         if self._closed:
             raise TensorBoardMonitoringError(
-                "Cannot write to a closed TensorBoard training monitor"
+                "Cannot write to a closed TensorBoard study monitor"
             )
         try:
             action()
@@ -353,25 +372,109 @@ class TensorBoardTrainingMonitor:
                 f"TensorBoard failed to write {self.log_directory}: {error}"
             ) from error
 
-    def _write_text(self, tag: str, text: str, *, step: int) -> None:
-        """Write one text event through the mandatory failure boundary."""
+    def close(self) -> None:
+        """Flush and close this writer exactly once."""
 
-        self._perform_write(lambda: self._writer.add_text(tag, text, step))
+        if self._closed:
+            return
+        try:
+            self._writer.flush()
+            self._writer.close()
+        except Exception as error:
+            self._writer_failed = True
+            raise TensorBoardMonitoringError(
+                f"Cannot close TensorBoard writer {self.log_directory}: {error}"
+            ) from error
+        finally:
+            self._closed = True
+
+    def fit(self, context: TrainingRunContext) -> TensorBoardFitMonitor:
+        """Return one tag-scoped monitor for a single fit inside this study."""
+
+        if context.study_parts() != self._study_key:
+            raise TensorBoardMonitoringError(
+                "Fit context does not belong to this study's stage, family, "
+                "and outer fold"
+            )
+        return TensorBoardFitMonitor(self, context)
+
+
+class TensorBoardFitMonitor:
+    """Scope one fit's tagged events onto its study's shared writer.
+
+    Every public method mirrors what a dedicated per-fit writer used to
+    provide, so model adapters and Step 5/6 runners see no behavioral
+    difference beyond the writer being shared with sibling fits.
+    """
+
+    def __init__(
+        self,
+        study: TensorBoardStudyMonitor,
+        context: TrainingRunContext,
+    ) -> None:
+        self.study = study
+        self.context = context
+        self.log_directory = study.log_directory
+        self._prefix = context.tag_prefix()
+        self._completed = False
+        self._logged_training_steps: set[int] = set()
+
+    def __enter__(self) -> TensorBoardFitMonitor:
+        """Return this monitor for a readable with statement in each runner."""
+
+        return self
+
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: Any,
+    ) -> bool:
+        """Record a failed fit or require a completion record, never both."""
+
+        pending_error: BaseException | None = None
+        if exception is not None:
+            try:
+                self._write_text("progress/error", str(exception), step=0)
+                self._write_scalars({"progress/status": -1.0}, step=0)
+            except TensorBoardMonitoringError as error:
+                pending_error = error
+        elif not self._completed:
+            pending_error = TensorBoardMonitoringError(
+                f"Monitored fit {self.context.configuration_id!r} exited without "
+                "a completion record"
+            )
+        if exception is None and pending_error is not None:
+            raise pending_error
+        return False
+
+    def _tag(self, tag: str) -> str:
+        """Namespace one scalar or text tag under this fit's study prefix."""
+
+        return f"{self._prefix}/{tag}"
+
+    def _write_text(self, tag: str, text: str, *, step: int) -> None:
+        """Write one text event through the shared study writer."""
+
+        full_tag = self._tag(tag)
+        self.study._perform_write(
+            lambda: self.study._writer.add_text(full_tag, text, step)
+        )
 
     def _write_scalars(self, values: Mapping[str, Any], *, step: int) -> None:
-        """Write all finite values as one flushed scalar event group."""
+        """Write all finite values as one flushed, tag-prefixed event group."""
 
         normalized = {
-            tag: numeric
+            self._tag(tag): numeric
             for tag, value in values.items()
             if (numeric := _finite_scalar(value)) is not None
         }
 
         def write() -> None:
             for tag, value in normalized.items():
-                self._writer.add_scalar(tag, value, step)
+                self.study._writer.add_scalar(tag, value, step)
 
-        self._perform_write(write)
+        self.study._perform_write(write)
 
     def start_fit(
         self,
@@ -477,32 +580,23 @@ class TensorBoardTrainingMonitor:
         self._write_scalars(values, step=0)
         self._completed = True
 
-    def close(self) -> None:
-        """Flush and close this writer exactly once."""
 
-        if self._closed:
-            return
-        try:
-            self._writer.flush()
-            self._writer.close()
-        except Exception as error:
-            self._writer_failed = True
-            raise TensorBoardMonitoringError(
-                f"Cannot close TensorBoard writer {self.log_directory}: {error}"
-            ) from error
-        finally:
-            self._closed = True
-
-
-def create_training_monitor(
-    context: TrainingRunContext,
+def create_study_monitor(
     *,
+    stage: Literal["step_5", "step_6"],
+    model_family: str,
+    outer_fold: int,
     log_root: Path = DEFAULT_LOG_ROOT,
-) -> TensorBoardTrainingMonitor:
-    """Create the mandatory writer used by one Step 5 or Step 6 model fit."""
+) -> TensorBoardStudyMonitor:
+    """Create the mandatory shared writer used by one Step 5 or Step 6 study."""
 
     ensure_tensorboard_available()
-    return TensorBoardTrainingMonitor(context, log_root=log_root)
+    return TensorBoardStudyMonitor(
+        stage=stage,
+        model_family=model_family,
+        outer_fold=outer_fold,
+        log_root=log_root,
+    )
 
 
 def _write_one_shot_run(
