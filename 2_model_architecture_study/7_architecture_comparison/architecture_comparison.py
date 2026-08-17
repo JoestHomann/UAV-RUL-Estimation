@@ -293,11 +293,15 @@ class ArchitectureComparisonAnalyzer:
                 "Model-run row count differs from the complete Step 6 plan"
             )
 
+        # "scenario" is deliberately absent: Phase 1 labels locked scenarios
+        # locked_01 ... locked_NN, so coercing that column to a number would
+        # turn every row into NaN and fail the finiteness check below -- and
+        # then overwrite the labels with NaN. The scenario column is validated
+        # as text instead, by the label-set and endpoint-alignment checks.
         numeric_prediction_columns = [
             "settings_version",
             "seed",
             "outer_fold",
-            "scenario",
             "cutoff",
             "terminal_lifetime",
             "y_true",
