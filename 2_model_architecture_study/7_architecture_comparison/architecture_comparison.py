@@ -923,9 +923,6 @@ def save_comparison(
         "seed_aggregation": "mean of individual-seed metric values",
         "predictions_ensembled_across_seeds": False,
         "paired_comparison_keys": ["uav_id", "scenario"],
-        "automatic_architecture_ranking": False,
-        "automatic_architecture_selection": False,
-        "winner_artifact_written": False,
         "locked_results_used_for_tuning": False,
         "test_data_loaded": False,
         "artifacts": {

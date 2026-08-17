@@ -39,18 +39,6 @@ from inner_model_selection import (  # noqa: E402
 )
 
 
-def _exit_status(requested_code: object) -> int:
-    """Translate a SystemExit code into an operating-system exit status."""
-
-    if requested_code is None:
-        return 0
-    if isinstance(requested_code, int):
-        return int(requested_code)
-    # argparse and SystemExit("message") pass a message instead of a status.
-    print(requested_code, file=sys.stderr)
-    return 1
-
-
 def _exit_without_interpreter_shutdown(status: int) -> None:
     """Leave the process as soon as every artifact is safely on disk.
 
@@ -183,5 +171,7 @@ if __name__ == "__main__":
     try:
         main()
     except SystemExit as error:
-        _exit_without_interpreter_shutdown(_exit_status(error.code))
+        # Only main's SystemExit(1) and argparse's status reach this, so the
+        # code is None or an integer.
+        _exit_without_interpreter_shutdown(0 if error.code is None else int(error.code))
     _exit_without_interpreter_shutdown(0)

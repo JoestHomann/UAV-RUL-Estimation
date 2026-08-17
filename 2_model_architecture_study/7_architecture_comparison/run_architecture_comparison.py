@@ -90,8 +90,6 @@ def main() -> None:
 
     print("Architecture comparison finished")
     print(f"Compared families: {', '.join(manifest['enabled_families'])}")
-    print("Automatic architecture ranking: disabled")
-    print("Automatic winner selection: disabled")
     print(
         "Saved "
         f"{(args.output_dir / 'architecture_comparison.csv').resolve()}"

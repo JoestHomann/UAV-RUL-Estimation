@@ -549,10 +549,6 @@ def _run_step_7() -> None:
     )
     if manifest.get("status") != "complete":
         raise Phase2PipelineError("Step 7 comparison manifest is not complete")
-    if manifest.get("automatic_architecture_selection") is not False:
-        raise Phase2PipelineError(
-            "Step 7 unexpectedly enabled automatic architecture selection"
-        )
 
 
 def _simple_status(

@@ -553,10 +553,6 @@ def build_locked_evaluation_plan(
         raise LockedEvaluationGateError(
             "Step 5 and the current architecture study settings versions differ"
         )
-    if manifest.get("automatic_architecture_selection") is not False:
-        raise LockedEvaluationGateError(
-            "Step 5 manifest does not preserve manual architecture selection"
-        )
     if manifest.get("locked_data_loaded") is not False:
         raise LockedEvaluationGateError(
             "Step 5 reports locked-data access and cannot authorize evaluation"

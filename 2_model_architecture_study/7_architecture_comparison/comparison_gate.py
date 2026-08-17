@@ -162,7 +162,6 @@ def build_architecture_comparison_plan(
         )
     required_manifest_values = {
         "step_5_prerequisite": "complete",
-        "automatic_architecture_selection": False,
         "locked_results_used_for_tuning": False,
         "fixed_training_duration_from_step_5": True,
         "locked_data_loaded": True,

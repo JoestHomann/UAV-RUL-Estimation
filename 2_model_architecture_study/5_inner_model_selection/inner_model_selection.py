@@ -1023,8 +1023,6 @@ class InnerModelSelectionRunner:
                 else "partial"
             ),
             "tuning_scope": "within_architecture",
-            "automatic_within_family_selection": True,
-            "automatic_architecture_selection": False,
             "primary_metric": "mean_inner_rmse",
             "direction": "minimize",
             "sampler": "Optuna TPESampler",

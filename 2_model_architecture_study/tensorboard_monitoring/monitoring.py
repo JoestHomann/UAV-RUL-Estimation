@@ -791,8 +791,6 @@ def publish_step_7_comparison(
             text_values={
                 "comparison/architecture": {
                     "model_family": family,
-                    "automatic_ranking": False,
-                    "automatic_winner_selection": False,
                 }
             },
             replace=True,
