@@ -1,5 +1,12 @@
 # Human-readable source of truth for the Phase 2 architecture study.
 #
+
+# To watch training progress live while Step 5/6 run, open a second
+# PowerShell terminal in the repository root and launch TensorBoard:
+#   .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
+# Then open the printed address in a browser, normally http://localhost:6006
+
+
 # Later scripts read the generated JSON specification, which is created from
 # this file only after schema and Phase 1 input verification.  Scientific
 # values cannot be overridden through command-line flags.  This keeps every
@@ -8,7 +15,7 @@
 # This integer is incremented manually whenever an experiment setting
 # changes.  It is a simple revision number, not an automatic model or data
 # version.
-settings_version = 4
+settings_version = 2
 
 [execution]
 # How many independent Step 5/6 family/outer-fold studies run at the same
