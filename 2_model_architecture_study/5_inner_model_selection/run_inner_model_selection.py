@@ -38,6 +38,45 @@ from inner_model_selection import (  # noqa: E402
 )
 
 
+def _exit_status(requested_code: object) -> int:
+    """Translate a SystemExit code into an operating-system exit status."""
+
+    if requested_code is None:
+        return 0
+    if isinstance(requested_code, int):
+        return int(requested_code)
+    # argparse and SystemExit("message") pass a message instead of a status.
+    print(requested_code, file=sys.stderr)
+    return 1
+
+
+def _exit_without_interpreter_shutdown(status: int) -> None:
+    """Leave the process as soon as every artifact is safely on disk.
+
+    PyTorch's Windows build intermittently fast-fails while its native
+    libraries are unloaded during interpreter finalization, which the
+    operating system reports as exit code 3221226505 (0xC0000409,
+    STATUS_STACK_BUFFER_OVERRUN). That unload happens after ``main`` has
+    returned, so this study's checkpoint, the consolidated tables, and the
+    manifest are all already written -- but run_phase_2.py can only observe
+    the exit code, so it records a finished study as failed and stops the
+    whole pipeline. Exiting through ``os._exit`` skips finalization, and
+    therefore that unload, so a completed study reports success.
+
+    Skipping finalization is safe here because nothing in this step depends
+    on it: there is no atexit handler and no ``__del__`` side effect, every
+    artifact is written by an atomic replace long before this point, and the
+    only buffered writers are the two standard streams flushed below. They
+    are flushed explicitly because ``os._exit`` bypasses the flush that
+    normal shutdown performs, which would otherwise drop this run's console
+    output whenever stdout is a pipe rather than a console.
+    """
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(status)
+
+
 def main() -> None:
     """Parse optional study filters and run the requested Step 5 work."""
 
@@ -121,4 +160,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # A completed run and a deliberate SystemExit both leave through the hard
+    # exit. An unexpected exception is deliberately left to propagate so its
+    # traceback still reaches the operator; Python then reports a non-zero
+    # status either way, so run_phase_2.py still treats that study as failed.
+    try:
+        main()
+    except SystemExit as error:
+        _exit_without_interpreter_shutdown(_exit_status(error.code))
+    _exit_without_interpreter_shutdown(0)
