@@ -15,10 +15,12 @@ import gc
 from importlib.metadata import version
 import json
 import math
+import os
 from pathlib import Path
 from time import perf_counter, sleep
 import sys
 from typing import Any, Callable
+from uuid import uuid4
 
 import numpy as np
 import optuna
@@ -175,11 +177,28 @@ def _replace_with_retry(temporary_path: Path, path: Path) -> None:
     raise last_error
 
 
+def _unique_temporary_path(path: Path) -> Path:
+    """Choose a per-writer temporary path so concurrent writers never race
+    on the temporary file itself, only on the final atomic replace.
+
+    A fixed name such as ``candidate_results.csv.tmp`` is itself contended
+    when two Step 5 subprocesses consolidate the same shared artifact a few
+    milliseconds apart: one process can still be writing that file when the
+    other tries to open the same path, which raises ``PermissionError``
+    before either process even reaches ``_replace_with_retry``. Mixing in
+    the process id and a random token makes every writer's temporary file
+    unique, so the destination path is the only thing ever shared -- exactly
+    what the retry-wrapped replace above is designed to tolerate.
+    """
+
+    return path.with_suffix(path.suffix + f".{os.getpid()}.{uuid4().hex[:8]}.tmp")
+
+
 def _write_json(payload: dict[str, Any], path: Path) -> None:
     """Replace one generated JSON artifact only after writing it completely."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path = _unique_temporary_path(path)
     temporary_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -192,7 +211,7 @@ def _write_csv(records: list[dict[str, Any]], columns: list[str], path: Path) ->
 
     path.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame.from_records(records, columns=columns)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path = _unique_temporary_path(path)
     frame.to_csv(temporary_path, index=False, float_format="%.12g")
     _replace_with_retry(temporary_path, path)
 

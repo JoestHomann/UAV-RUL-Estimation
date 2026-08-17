@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 from time import sleep
 from typing import Any
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -160,11 +162,25 @@ def _replace_with_retry(temporary_path: Path, path: Path) -> None:
     raise last_error
 
 
+def _unique_temporary_path(path: Path) -> Path:
+    """Choose a per-writer temporary path so concurrent writers never race
+    on the temporary file itself, only on the final atomic replace.
+
+    Step 7 currently runs as a single process, so this cannot yet race in
+    practice. It matches the same helper used in Step 5/6 (where a fixed
+    name such as ``comparison_manifest.json.tmp`` genuinely is contended by
+    concurrent subprocesses) so the write path stays identical everywhere
+    the same shared-artifact hazard could apply.
+    """
+
+    return path.with_suffix(path.suffix + f".{os.getpid()}.{uuid4().hex[:8]}.tmp")
+
+
 def _write_csv(table: pd.DataFrame, path: Path, *, compressed: bool = False) -> None:
     """Atomically write one stable CSV, optionally with deterministic gzip."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path = _unique_temporary_path(path)
     compression: str | dict[str, Any] | None = None
     if compressed:
         compression = {"method": "gzip", "mtime": 0}
@@ -181,7 +197,7 @@ def _write_json(payload: dict[str, Any], path: Path) -> None:
     """Atomically write one readable JSON artifact."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path = _unique_temporary_path(path)
     temporary_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

@@ -565,7 +565,7 @@
       ]
     },
     "execution": {
-      "max_workers": "auto"
+      "max_workers": 7
     },
     "neural_training": {
       "batch_size": 64,
@@ -929,7 +929,7 @@
         "all_nonconstant"
       ]
     },
-    "settings_version": 2,
+    "settings_version": 4,
     "study": {
       "architectures_to_run": [
         "mean_baseline",
