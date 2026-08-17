@@ -8,7 +8,7 @@
 # This integer is incremented manually whenever an experiment setting
 # changes.  It is a simple revision number, not an automatic model or data
 # version.
-settings_version = 2
+settings_version = 3
 
 [study]
 # The architectures that run in the comparison. Nothing here forces any of
