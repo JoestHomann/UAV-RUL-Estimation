@@ -9,16 +9,14 @@
 # changes.  It is a simple revision number, not an automatic model or data
 # version.
 settings_version = 2
-# Options: "model_architecture_study" (the only phase this settings file can
-# describe).
-phase = "model_architecture_study"
 
 [study]
 # The architectures that run in the comparison. Nothing here forces any of
-# them to stay enabled -- disabling one below simply drops it from the run,
-# the same way a conditional or optional architecture is skipped.
+# them to stay enabled -- disabling one via [study.enabled] below simply
+# drops it from the run, the same way a conditional or optional architecture
+# is skipped.
 # Conditional and optional architectures stay explicit in this settings file
-# but are skipped while "enabled = false" in their individual tables below.
+# but are skipped while disabled in [study.enabled] below.
 # Options: any architecture name that also has an [architectures.*] table
 # below (currently mean_baseline, cycle_only_baseline, regularized_linear,
 # random_forest, xgboost, mlp, tcn, lstm, transformer, rbf_svr). Every such
@@ -36,6 +34,24 @@ architectures_to_run = [
 conditional_architectures = ["transformer"]
 optional_architectures = ["rbf_svr"]
 
+[study.enabled]
+# The single on/off switch for every architecture declared above. Setting an
+# entry to false drops that architecture from the run, the same way a
+# conditional or optional architecture is skipped -- nothing else in this
+# file needs to change to turn a model off or on. Every name listed in
+# architectures_to_run, conditional_architectures, and
+# optional_architectures above must appear here exactly once.
+mean_baseline = true
+cycle_only_baseline = true
+regularized_linear = true
+random_forest = true
+xgboost = true
+mlp = true
+tcn = true
+lstm = true
+transformer = false
+rbf_svr = false
+
 # The pipeline always saves every architecture's predictions, metrics, and
 # comparison plots, and never declares a winner: the final selection is made
 # by the user after inspecting the complete evidence. These are fixed
@@ -46,12 +62,6 @@ optional_architectures = ["rbf_svr"]
 # Hyperparameters are optimized independently inside each architecture
 # family.  The tuner may choose the best configuration of a model, but it may
 # not choose one architecture over another.
-# Options: "within_architecture" (the only supported tuning scope).
-scope = "within_architecture"
-# Options: "rmse" (the only supported primary tuning metric).
-primary_metric = "rmse"
-# Options: "minimize" (the only supported optimization direction).
-direction = "minimize"
 # Any positive integer: the number of distinct candidate configurations
 # Optuna tries per tunable architecture family. Architectures with no tunable
 # choices (the two baselines) always use exactly one candidate regardless of
@@ -71,8 +81,6 @@ retraining_seeds = [13, 37, 73]
 # iteration/epoch found in the inner folds when retraining on the outer-fold
 # development data.  This avoids looking at the outer validation targets to
 # decide training duration.
-# Options: "median_inner_best_iteration" (the only supported policy).
-outer_retraining_duration = "median_inner_best_iteration"
 
 [evaluation]
 # Every architecture is evaluated with the same metrics and report
@@ -96,14 +104,9 @@ reported_groups = [
 # having greater influence solely because of their history length.
 # Any float; predictions below this value are clipped up to it.
 prediction_minimum = 0.0
-# Options: true (the only supported value; every UAV always contributes
-# equal total weight).
-equal_total_weight_per_uav = true
 
 # Resampling whole UAVs preserves the dependence among prefixes from the same
 # vehicle when confidence intervals are calculated.
-# Options: "uav_id" (the only supported bootstrap resampling unit).
-bootstrap_unit = "uav_id"
 # Any positive integer: the number of bootstrap resamples drawn.
 bootstrap_repetitions = 1000
 # Any integer.
@@ -164,11 +167,6 @@ sequence_channels = [
 # sequence [architectures.*] table's own "lookbacks" list must be a subset of
 # the list chosen here.
 sequence_lookbacks = [50, 100]
-# Options: "left" (the only supported padding side).
-sequence_padding = "left"
-# Options: true (the only supported value; a padding mask is always
-# produced).
-sequence_padding_mask = true
 
 # Absolute age is supplied alongside telemetry because a fixed-length window
 # alone does not identify the UAV's current point in its observed lifetime.
@@ -184,27 +182,16 @@ scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]
 # Any list of architecture names that should receive unscaled tabular
 # inputs.
 unscaled_tree_architectures = ["random_forest", "xgboost"]
-# Options: "median_iqr" (the only supported tabular scaling method).
-tabular_scaling = "median_iqr"
-# Options: "training_fold_channel_median_iqr" (the only supported sequence
-# scaling method).
-sequence_scaling = "training_fold_channel_median_iqr"
 
 # Every fitted preprocessing statistic is learned only from training UAVs in
 # the current fold.  Validation UAVs may be transformed but never influence
 # the medians or IQRs, preventing validation leakage.
-# Options: "training_uavs_only" (the only supported fit scope).
-fit_scope = "training_uavs_only"
 
 [neural_training]
 # These settings are shared by MLP, TCN, LSTM, and the disabled Transformer
 # so their comparison does not accidentally use different optimization
 # policies.  Architecture-specific sizes, dropout, and learning rates remain
 # tunable below.
-# Options: "weighted_mse" (the only supported loss function).
-loss = "weighted_mse"
-# Options: "adamw" (the only supported optimizer).
-optimizer = "adamw"
 # Any positive integer.
 batch_size = 64
 # Any positive integer; the hard ceiling on training epochs regardless of
@@ -226,8 +213,6 @@ gradient_clip_global_norm = 1.0
 # Options: "included", "conditional", "optional"; must match which of the
 # three [study] lists above this architecture's name appears in.
 status = "included"
-# Options: true, false.
-enabled = true
 # Options: "none", "tabular", "sequence". Determines which of "feature_sets"
 # (tabular) or "lookbacks" (sequence) may be set below; "none" allows
 # neither.
@@ -237,7 +222,6 @@ variants = ["mean"]
 
 [architectures.cycle_only_baseline]
 status = "included"
-enabled = true
 representation = "tabular"
 feature_sets = ["age_only"]
 # Options: exactly {"weighted_linear"} for this architecture.
@@ -249,7 +233,6 @@ variants = ["weighted_linear"]
 
 [architectures.regularized_linear]
 status = "included"
-enabled = true
 representation = "tabular"
 feature_sets = ["age_only", "last_values", "screened", "all_nonconstant"]
 # Options: exactly {"ridge", "elastic_net"} for this architecture.
@@ -282,7 +265,6 @@ values = [0.05, 0.2, 0.5, 0.8, 0.95]
 
 [architectures.random_forest]
 status = "included"
-enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
 # Options: exactly {"random_forest"} for this architecture.
@@ -308,7 +290,6 @@ values = [0.33, 0.67, 1.0]
 
 [architectures.xgboost]
 status = "included"
-enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
 # Options: exactly {"xgboost"} for this architecture.
@@ -367,7 +348,6 @@ high = 100.0
 
 [architectures.mlp]
 status = "included"
-enabled = true
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
 # Options: exactly {"mlp"} for this architecture.
@@ -396,7 +376,6 @@ high = 1e-2
 
 [architectures.tcn]
 status = "included"
-enabled = true
 representation = "sequence"
 # Any subset of the top-level [representations].sequence_lookbacks list.
 lookbacks = [50, 100]
@@ -438,7 +417,6 @@ high = 1e-2
 
 [architectures.lstm]
 status = "included"
-enabled = true
 representation = "sequence"
 lookbacks = [50, 100]
 # Options: exactly {"lstm"} for this architecture.
@@ -475,15 +453,14 @@ high = 1e-2
 
 # Disabled extensions --------------------------------------------------------
 # Disabled architectures remain fully specified so enabling one is a
-# deliberate one-line status change and uses a documented search space.
-# They are not run in the comparison while "enabled = false".
+# deliberate one-line change in [study.enabled] above and uses a documented
+# search space. They are not run in the comparison while disabled there.
 
 [architectures.transformer]
 # Options: "included", "conditional", "optional"; must match which [study]
 # list this architecture's name appears in ("transformer" is in
 # conditional_architectures above).
 status = "conditional"
-enabled = false
 representation = "sequence"
 lookbacks = [50, 100]
 # Options: exactly {"transformer_encoder"} for this architecture.
@@ -528,7 +505,6 @@ high = 1e-2
 # Options: "included", "conditional", "optional"; "rbf_svr" is in
 # optional_architectures above.
 status = "optional"
-enabled = false
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
 # Options: exactly {"rbf_svr"} for this architecture.

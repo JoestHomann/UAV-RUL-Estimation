@@ -26,7 +26,7 @@ STEP_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = STEP_DIR.parent.parent
 DEFAULT_SPECIFICATION_PATH = (
     STEP_DIR.parent
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
@@ -313,15 +313,19 @@ def _build_manifest(
         "channel_count": representations["sequence_channel_count"],
         "lookbacks": representations["sequence_lookbacks"],
         "padding": {
-            "side": representations["sequence_padding"],
+            # "left" is the only padding side the settings schema ever allowed;
+            # the setting itself was removed as dead configuration.
+            "side": "left",
             "value": 0.0,
             "mask_dtype": "bool",
             "mask_true_means": "padding",
         },
         "side_features": representations["sequence_side_features"],
         "scaling": {
-            "method": preprocessing["sequence_scaling"],
-            "fit_scope": preprocessing["fit_scope"],
+            # These were also single-option settings; the values are now fixed
+            # here directly instead of being read back from the settings file.
+            "method": "training_fold_channel_median_iqr",
+            "fit_scope": "training_uavs_only",
             "center": "median",
             "scale": "IQR divided by 1.349",
             "fallback": "standard deviation, then 1.0",

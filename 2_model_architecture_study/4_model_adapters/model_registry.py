@@ -184,7 +184,7 @@ class ModelAdapterFactory:
         if training_iterations is not None and training_iterations <= 0:
             raise ModelAdapterError("Fixed training iterations must be positive")
         architecture = self.settings["architectures"][family]
-        if not architecture["enabled"] and not allow_disabled:
+        if not self.settings["study"]["enabled"][family] and not allow_disabled:
             raise ModelAdapterError(
                 f"Model family {family!r} is disabled in the "
                 "architecture study settings"
@@ -238,7 +238,7 @@ def build_registry_payload(
             "adapter_class": adapter_class.__name__,
             "adapter_module": adapter_class.__module__,
             "implemented": True,
-            "enabled": architecture["enabled"],
+            "enabled": settings["study"]["enabled"][family],
             "status": architecture["status"],
             "representation": architecture["representation"],
             "feature_sets": architecture["feature_sets"],

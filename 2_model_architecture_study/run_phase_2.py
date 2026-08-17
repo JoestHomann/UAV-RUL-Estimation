@@ -187,7 +187,7 @@ def _enabled_families(settings: dict[str, Any]) -> tuple[str, ...]:
     return tuple(
         family
         for family in declared_order
-        if settings["architectures"][family]["enabled"]
+        if settings["study"]["enabled"][family]
     )
 
 

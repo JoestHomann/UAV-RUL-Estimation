@@ -516,7 +516,7 @@ class InnerModelSelectionRunner:
         return [
             family
             for family in configured_order
-            if self.architectures[family]["enabled"]
+            if self.settings["study"]["enabled"][family]
         ]
 
     def validate_request(
@@ -536,7 +536,7 @@ class InnerModelSelectionRunner:
         for family in selected_families:
             if family not in self.architectures:
                 raise InnerModelSelectionError(f"Unknown model family {family!r}")
-            if not self.architectures[family]["enabled"]:
+            if not self.settings["study"]["enabled"][family]:
                 raise InnerModelSelectionError(
                     f"Model family {family!r} is disabled in the settings"
                 )

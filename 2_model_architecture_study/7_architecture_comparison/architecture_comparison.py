@@ -855,7 +855,9 @@ def save_comparison(
         "enabled_families": list(plan.enabled_families),
         "metrics": list(METRICS),
         "reported_groups": list(GROUP_TYPES),
-        "bootstrap_unit": plan.settings["evaluation"]["bootstrap_unit"],
+        # "uav_id" was the only supported value; the setting itself was
+        # removed as dead configuration, so this is now a fixed literal.
+        "bootstrap_unit": "uav_id",
         "bootstrap_repetitions": int(
             plan.settings["evaluation"]["bootstrap_repetitions"]
         ),

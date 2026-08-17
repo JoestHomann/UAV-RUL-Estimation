@@ -23,7 +23,7 @@ STEP_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = STEP_DIR.parent.parent
 DEFAULT_SPECIFICATION_PATH = (
     STEP_DIR.parent
-    / "1_experiment_contract"
+    / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )

@@ -312,11 +312,16 @@ SearchParameter = Annotated[
 
 
 class StudySpecification(StrictModel):
-    """Define which architectures the study runs, and in what priority."""
+    """Define which architectures the study runs, and in what priority.
+
+    "enabled" is the single on/off switch for every declared architecture,
+    checked against the other three lists below by "sections_are_consistent".
+    """
 
     architectures_to_run: list[str]
     conditional_architectures: list[str]
     optional_architectures: list[str]
+    enabled: dict[str, bool]
 
 
 class TuningSpecification(StrictModel):
@@ -326,13 +331,9 @@ class TuningSpecification(StrictModel):
     enabled—from the manual comparison between architecture families.
     """
 
-    scope: Literal["within_architecture"]
-    primary_metric: Literal["rmse"]
-    direction: Literal["minimize"]
     candidate_budget_per_architecture: PositiveInt
     search_seed: int
     retraining_seeds: list[int]
-    outer_retraining_duration: Literal["median_inner_best_iteration"]
 
     @field_validator("retraining_seeds")
     @classmethod
@@ -364,8 +365,6 @@ class EvaluationSpecification(StrictModel):
         ]
     ]
     prediction_minimum: float
-    equal_total_weight_per_uav: Literal[True]
-    bootstrap_unit: Literal["uav_id"]
     bootstrap_repetitions: PositiveInt
     bootstrap_seed: int
 
@@ -385,8 +384,6 @@ class RepresentationSpecification(StrictModel):
     sequence_channel_count: PositiveInt
     sequence_channels: list[str]
     sequence_lookbacks: list[PositiveInt]
-    sequence_padding: Literal["left"]
-    sequence_padding_mask: Literal[True]
     sequence_side_features: list[
         Literal["flight_cycle", "log1p_flight_cycle"]
     ]
@@ -415,9 +412,6 @@ class PreprocessingSpecification(StrictModel):
 
     scaled_tabular_architectures: list[str]
     unscaled_tree_architectures: list[str]
-    tabular_scaling: Literal["median_iqr"]
-    sequence_scaling: Literal["training_fold_channel_median_iqr"]
-    fit_scope: Literal["training_uavs_only"]
 
 
 class NeuralTrainingSpecification(StrictModel):
@@ -427,8 +421,6 @@ class NeuralTrainingSpecification(StrictModel):
     neural family tunes its own capacity, dropout, and learning rate.
     """
 
-    loss: Literal["weighted_mse"]
-    optimizer: Literal["adamw"]
     batch_size: PositiveInt
     maximum_epochs: PositiveInt
     early_stopping_patience: PositiveInt
@@ -445,7 +437,6 @@ class ArchitectureSpecification(StrictModel):
     """
 
     status: Literal["included", "conditional", "optional"]
-    enabled: bool
     representation: Literal["none", "tabular", "sequence"]
     feature_sets: list[str] = Field(default_factory=list)
     lookbacks: list[PositiveInt] = Field(default_factory=list)
@@ -537,7 +528,6 @@ class ArchitectureStudySettings(StrictModel):
     """
 
     settings_version: PositiveInt
-    phase: Literal["model_architecture_study"]
     study: StudySpecification
     tuning: TuningSpecification
     evaluation: EvaluationSpecification
@@ -567,6 +557,11 @@ class ArchitectureStudySettings(StrictModel):
         if listed != set(self.architectures):
             raise ValueError(
                 "study architecture lists must exactly match the architecture tables"
+            )
+        if set(self.study.enabled) != listed:
+            raise ValueError(
+                "study.enabled must contain exactly one entry per declared "
+                "architecture"
             )
 
         # Derive the expected per-model status from the three top-level lists.
