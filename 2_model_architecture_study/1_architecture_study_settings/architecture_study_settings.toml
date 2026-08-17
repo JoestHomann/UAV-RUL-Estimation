@@ -15,7 +15,7 @@
 # This integer is incremented manually whenever an experiment setting
 # changes.  It is a simple revision number, not an automatic model or data
 # version.
-settings_version = 2
+settings_version = 4
 
 [execution]
 # How many independent Step 5/6 family/outer-fold studies run at the same

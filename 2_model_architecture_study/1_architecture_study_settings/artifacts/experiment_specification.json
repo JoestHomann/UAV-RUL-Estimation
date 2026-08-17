@@ -564,6 +564,9 @@
         "lifetime_quantile"
       ]
     },
+    "execution": {
+      "max_workers": "auto"
+    },
     "neural_training": {
       "batch_size": 64,
       "early_stopping_patience": 15,
@@ -926,7 +929,7 @@
         "all_nonconstant"
       ]
     },
-    "settings_version": 3,
+    "settings_version": 2,
     "study": {
       "architectures_to_run": [
         "mean_baseline",
@@ -943,15 +946,15 @@
       ],
       "enabled": {
         "cycle_only_baseline": true,
-        "lstm": false,
+        "lstm": true,
         "mean_baseline": true,
-        "mlp": false,
+        "mlp": true,
         "random_forest": true,
         "rbf_svr": false,
         "regularized_linear": true,
-        "tcn": false,
+        "tcn": true,
         "transformer": false,
-        "xgboost": false
+        "xgboost": true
       },
       "optional_architectures": [
         "rbf_svr"
