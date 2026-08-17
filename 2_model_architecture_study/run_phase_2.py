@@ -203,6 +203,23 @@ def _default_max_workers() -> int:
     return max(1, os.cpu_count() or 1)
 
 
+def _resolve_max_workers(settings: dict[str, Any], cli_value: int | None) -> int:
+    """Resolve the effective Step 5/6 concurrency for this run.
+
+    The TOML "[execution].max_workers" setting is the source of truth. The
+    "--max-workers" CLI flag is an optional one-off override, consistent with
+    "--force": it never changes the settings file, and it is honored only
+    when the user actually passes it (the argparse default is "None").
+    """
+
+    if cli_value is not None:
+        return cli_value
+    configured = settings["execution"]["max_workers"]
+    if configured == "auto":
+        return _default_max_workers()
+    return int(configured)
+
+
 def _single_process_environment() -> dict[str, str]:
     """Cap BLAS/OpenMP thread pools so concurrent studies cannot oversubscribe.
 
@@ -346,11 +363,12 @@ def _settings_version_matches(
     )
 
 
-def _run_step_5(*, force: bool, max_workers: int) -> None:
+def _run_step_5(*, force: bool, max_workers: int | None) -> None:
     """Run only missing family/fold tuning studies unless forced to rerun all."""
 
     settings = _load_settings()
     settings_version = int(settings["settings_version"])
+    resolved_max_workers = _resolve_max_workers(settings, max_workers)
     families = _enabled_families(settings)
     outer_folds = tuple(
         range(int(settings["phase_1"]["expected_outer_folds"]))
@@ -394,7 +412,7 @@ def _run_step_5(*, force: bool, max_workers: int) -> None:
         _run_pairs_in_parallel(
             step=STEPS[5],
             pairs=pending_pairs,
-            max_workers=max_workers,
+            max_workers=resolved_max_workers,
             describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
         )
 
@@ -459,11 +477,12 @@ def _step_6_expected_runs(
     return expected_by_family_fold, expected_run_count
 
 
-def _run_step_6(*, force: bool, max_workers: int) -> None:
+def _run_step_6(*, force: bool, max_workers: int | None) -> None:
     """Run missing complete family/fold evaluations and preserve finished ones."""
 
     settings = _load_settings()
     settings_version = int(settings["settings_version"])
+    resolved_max_workers = _resolve_max_workers(settings, max_workers)
     expected_by_pair, expected_run_count = _step_6_expected_runs(settings)
     manifest = _read_optional_json(
         STEP_6_MANIFEST_PATH,
@@ -498,7 +517,7 @@ def _run_step_6(*, force: bool, max_workers: int) -> None:
         _run_pairs_in_parallel(
             step=STEPS[6],
             pairs=pending_pairs,
-            max_workers=max_workers,
+            max_workers=resolved_max_workers,
             describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
         )
 
@@ -617,7 +636,7 @@ def run_pipeline(
     last_step: int,
     *,
     force: bool,
-    max_workers: int,
+    max_workers: int | None,
 ) -> None:
     """Execute a validated inclusive step range in dependency order."""
 
@@ -645,10 +664,17 @@ def run_pipeline(
             flush=True,
         )
     if 5 in requested_steps or 6 in requested_steps:
+        if max_workers is None:
+            workers_description = (
+                "up to [execution].max_workers from the settings (resolved "
+                "once Step 1 has run)"
+            )
+        else:
+            workers_description = f"up to {max_workers} at a time (--max-workers)"
         print(
-            f"Step 5/6 studies run up to {max_workers} at a time "
-            "(--max-workers); output from concurrent studies interleaves in "
-            "this console, but each study's own checkpoint files stay separate",
+            f"Step 5/6 studies run {workers_description}; output from "
+            "concurrent studies interleaves in this console, but each "
+            "study's own checkpoint files stay separate",
             flush=True,
         )
 
@@ -701,16 +727,18 @@ def main() -> None:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=_default_max_workers(),
+        default=None,
         help=(
             "Maximum number of independent Step 5/6 family/outer-fold "
             "studies to run at the same time, each as its own subprocess. "
-            "Defaults to the number of available CPU cores. Use 1 to run "
-            "sequentially, matching the previous behavior."
+            "Defaults to [execution].max_workers in the settings TOML "
+            "(itself normally \"auto\", meaning every available CPU core). "
+            "Passing this flag overrides the settings for this run only, "
+            "without editing the TOML. Use 1 to run sequentially."
         ),
     )
     args = parser.parse_args()
-    if args.max_workers < 1:
+    if args.max_workers is not None and args.max_workers < 1:
         parser.error("--max-workers must be at least 1")
 
     try:

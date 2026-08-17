@@ -1,0 +1,971 @@
+{
+  "phase_1_verification": {
+    "artifacts": {
+      "development_features": {
+        "columns": 614,
+        "feature_columns": 606,
+        "format": "csv",
+        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
+        "rows": 500
+      },
+      "development_scenarios": {
+        "columns": 8,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/development_validation_scenarios.csv",
+        "rows": 500
+      },
+      "feature_catalog": {
+        "columns": 9,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv",
+        "rows": 606
+      },
+      "fold_config": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/fold_config.json",
+        "rows": null
+      },
+      "inner_folds": {
+        "columns": 7,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/inner_folds.csv",
+        "rows": 400
+      },
+      "locked_features": {
+        "columns": 614,
+        "feature_columns": 606,
+        "format": "csv",
+        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
+        "rows": 2000
+      },
+      "locked_scenarios": {
+        "columns": 8,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/locked_validation_scenarios.csv",
+        "rows": 2000
+      },
+      "metric_specification": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/8_validation_metrics/artifacts/metric_specification.json",
+        "rows": null
+      },
+      "outer_folds": {
+        "columns": 6,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv",
+        "rows": 100
+      },
+      "preprocessing_config": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
+        "rows": null
+      },
+      "scenario_config": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/scenario_config.json",
+        "rows": null
+      },
+      "test_features": {
+        "columns": 609,
+        "feature_columns": 606,
+        "format": "csv",
+        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
+        "rows": 100
+      },
+      "training_features": {
+        "columns": 612,
+        "feature_columns": 606,
+        "format": "csv",
+        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
+        "rows": 2000
+      },
+      "training_prefix_config": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json",
+        "rows": null
+      },
+      "training_prefixes": {
+        "columns": 6,
+        "feature_columns": 0,
+        "format": "csv",
+        "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv",
+        "rows": 2000
+      },
+      "verification_report": {
+        "columns": null,
+        "feature_columns": null,
+        "format": "json",
+        "path": "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json",
+        "rows": null
+      }
+    },
+    "checked_artifacts": 16,
+    "phase_1_assertions": 10,
+    "status": "passed"
+  },
+  "settings": {
+    "architectures": {
+      "cycle_only_baseline": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "age_only"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {},
+        "status": "included",
+        "variants": [
+          "weighted_linear"
+        ]
+      },
+      "lstm": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [
+          50,
+          100
+        ],
+        "representation": "sequence",
+        "search": {
+          "direction": {
+            "kind": "fixed",
+            "value": "unidirectional"
+          },
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.1
+          },
+          "hidden_units": {
+            "kind": "categorical",
+            "values": [
+              32,
+              64,
+              128
+            ]
+          },
+          "layers": {
+            "kind": "categorical",
+            "values": [
+              1,
+              2
+            ]
+          },
+          "learning_rate": {
+            "high": 0.003,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "included",
+        "variants": [
+          "lstm"
+        ]
+      },
+      "mean_baseline": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [],
+        "representation": "none",
+        "search": {},
+        "status": "included",
+        "variants": [
+          "mean"
+        ]
+      },
+      "mlp": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.0
+          },
+          "hidden_layers": {
+            "kind": "categorical_integer_sequences",
+            "values": [
+              [
+                64
+              ],
+              [
+                128,
+                64
+              ],
+              [
+                256,
+                128
+              ]
+            ]
+          },
+          "learning_rate": {
+            "high": 0.003,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "included",
+        "variants": [
+          "mlp"
+        ]
+      },
+      "random_forest": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "max_depth": {
+            "kind": "categorical",
+            "values": [
+              "none",
+              5,
+              10,
+              20
+            ]
+          },
+          "max_features": {
+            "kind": "categorical",
+            "values": [
+              0.33,
+              0.67,
+              1.0
+            ]
+          },
+          "min_samples_leaf": {
+            "kind": "categorical",
+            "values": [
+              1,
+              2,
+              5,
+              10
+            ]
+          },
+          "n_estimators": {
+            "kind": "fixed",
+            "value": 500
+          }
+        },
+        "status": "included",
+        "variants": [
+          "random_forest"
+        ]
+      },
+      "rbf_svr": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "c": {
+            "high": 1000.0,
+            "kind": "log_uniform",
+            "low": 0.01
+          },
+          "epsilon": {
+            "high": 10.0,
+            "kind": "log_uniform",
+            "low": 0.001
+          },
+          "gamma": {
+            "high": 1.0,
+            "kind": "log_uniform",
+            "low": 1e-05
+          }
+        },
+        "status": "optional",
+        "variants": [
+          "rbf_svr"
+        ]
+      },
+      "regularized_linear": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "age_only",
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "elastic_net_alpha": {
+            "high": 100.0,
+            "kind": "log_uniform",
+            "low": 1e-05
+          },
+          "elastic_net_l1_ratio": {
+            "kind": "categorical",
+            "values": [
+              0.05,
+              0.2,
+              0.5,
+              0.8,
+              0.95
+            ]
+          },
+          "ridge_alpha": {
+            "high": 10000.0,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "variant": {
+            "kind": "categorical",
+            "values": [
+              "ridge",
+              "elastic_net"
+            ]
+          }
+        },
+        "status": "included",
+        "variants": [
+          "ridge",
+          "elastic_net"
+        ]
+      },
+      "tcn": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [
+          50,
+          100
+        ],
+        "representation": "sequence",
+        "search": {
+          "channels": {
+            "kind": "categorical",
+            "values": [
+              32,
+              64,
+              128
+            ]
+          },
+          "dilation_base": {
+            "kind": "fixed",
+            "value": 2
+          },
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.1
+          },
+          "kernel_size": {
+            "kind": "categorical",
+            "values": [
+              3,
+              5,
+              7
+            ]
+          },
+          "learning_rate": {
+            "high": 0.003,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "residual_blocks": {
+            "kind": "categorical",
+            "values": [
+              2,
+              3,
+              4
+            ]
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "included",
+        "variants": [
+          "tcn"
+        ]
+      },
+      "transformer": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [
+          50,
+          100
+        ],
+        "representation": "sequence",
+        "search": {
+          "attention_heads": {
+            "kind": "categorical",
+            "values": [
+              2,
+              4,
+              8
+            ]
+          },
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.1
+          },
+          "encoder_layers": {
+            "kind": "categorical",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "feed_forward_ratio": {
+            "kind": "categorical",
+            "values": [
+              2,
+              4
+            ]
+          },
+          "learning_rate": {
+            "high": 0.003,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "model_width": {
+            "kind": "categorical",
+            "values": [
+              32,
+              64,
+              128
+            ]
+          },
+          "position_encoding": {
+            "kind": "fixed",
+            "value": "sinusoidal"
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "conditional",
+        "variants": [
+          "transformer_encoder"
+        ]
+      },
+      "xgboost": {
+        "early_stopping_patience": 35,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "colsample_bytree": {
+            "high": 1.0,
+            "kind": "uniform",
+            "low": 0.5
+          },
+          "learning_rate": {
+            "high": 0.2,
+            "kind": "log_uniform",
+            "low": 0.01
+          },
+          "max_depth": {
+            "kind": "categorical",
+            "values": [
+              2,
+              3,
+              4,
+              6,
+              8
+            ]
+          },
+          "maximum_trees": {
+            "kind": "fixed",
+            "value": 1500
+          },
+          "min_child_weight": {
+            "high": 20.0,
+            "kind": "log_uniform",
+            "low": 0.5
+          },
+          "reg_alpha": {
+            "high": 10.0,
+            "kind": "log_uniform",
+            "low": 1e-08
+          },
+          "reg_lambda": {
+            "high": 100.0,
+            "kind": "log_uniform",
+            "low": 0.001
+          },
+          "subsample": {
+            "high": 1.0,
+            "kind": "uniform",
+            "low": 0.6
+          }
+        },
+        "status": "included",
+        "variants": [
+          "xgboost"
+        ]
+      }
+    },
+    "evaluation": {
+      "bootstrap_repetitions": 1000,
+      "bootstrap_seed": 20260814,
+      "metrics": [
+        "r2",
+        "rmse",
+        "mae",
+        "bias"
+      ],
+      "prediction_minimum": 0.0,
+      "reported_groups": [
+        "overall",
+        "scenario",
+        "outer_fold",
+        "age_band",
+        "lifetime_quantile"
+      ]
+    },
+    "neural_training": {
+      "batch_size": 64,
+      "early_stopping_patience": 15,
+      "gradient_clip_global_norm": 1.0,
+      "maximum_epochs": 150
+    },
+    "phase_1": {
+      "artifacts": {
+        "development_features": {
+          "feature_columns": 606,
+          "format": "csv",
+          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
+          "required_columns": [
+            "sample_id",
+            "scenario",
+            "outer_fold",
+            "uav_id",
+            "cutoff",
+            "RUL",
+            "terminal_lifetime",
+            "lifetime_quantile"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 500,
+          "total_columns": 614
+        },
+        "development_scenarios": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/development_validation_scenarios.csv",
+          "required_columns": [
+            "sample_id",
+            "scenario",
+            "outer_fold",
+            "uav_id",
+            "cutoff",
+            "RUL",
+            "terminal_lifetime",
+            "lifetime_quantile"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 500,
+          "total_columns": 8
+        },
+        "feature_catalog": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv",
+          "required_columns": [
+            "feature_name",
+            "channel",
+            "channel_role",
+            "statistic",
+            "window",
+            "age_only",
+            "last_values",
+            "screened",
+            "all_nonconstant"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 606,
+          "total_columns": 9
+        },
+        "fold_config": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/fold_config.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "group_key",
+            "outer_folds",
+            "inner_folds",
+            "seed"
+          ],
+          "required_json_values": {
+            "group_key": "uav_id",
+            "inner_folds": 4,
+            "outer_folds": 5
+          },
+          "rows": null,
+          "total_columns": null
+        },
+        "inner_folds": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/inner_folds.csv",
+          "required_columns": [
+            "outer_fold",
+            "uav_id",
+            "row_count",
+            "final_cycle",
+            "terminal_lifetime",
+            "lifetime_quantile",
+            "inner_fold"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 400,
+          "total_columns": 7
+        },
+        "locked_features": {
+          "feature_columns": 606,
+          "format": "csv",
+          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
+          "required_columns": [
+            "sample_id",
+            "scenario",
+            "outer_fold",
+            "uav_id",
+            "cutoff",
+            "RUL",
+            "terminal_lifetime",
+            "lifetime_quantile"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 2000,
+          "total_columns": 614
+        },
+        "locked_scenarios": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/locked_validation_scenarios.csv",
+          "required_columns": [
+            "sample_id",
+            "scenario",
+            "outer_fold",
+            "uav_id",
+            "cutoff",
+            "RUL",
+            "terminal_lifetime",
+            "lifetime_quantile"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 2000,
+          "total_columns": 8
+        },
+        "metric_specification": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/8_validation_metrics/artifacts/metric_specification.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "metrics",
+            "prediction_unit",
+            "reported_groups",
+            "uncertainty"
+          ],
+          "required_json_values": {},
+          "rows": null,
+          "total_columns": null
+        },
+        "outer_folds": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv",
+          "required_columns": [
+            "uav_id",
+            "row_count",
+            "final_cycle",
+            "terminal_lifetime",
+            "lifetime_quantile",
+            "outer_fold"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 100,
+          "total_columns": 6
+        },
+        "preprocessing_config": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "feature_counts",
+            "fit_scope",
+            "outer_folds",
+            "scaling"
+          ],
+          "required_json_values": {
+            "outer_folds": 5
+          },
+          "rows": null,
+          "total_columns": null
+        },
+        "scenario_config": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/3_test_like_validation_scenarios/artifacts/scenario_config.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "cutoff_source",
+            "development_scenarios",
+            "locked_scenarios",
+            "seed",
+            "terminal_training_cutoffs_excluded"
+          ],
+          "required_json_values": {
+            "development_scenarios": 5,
+            "locked_scenarios": 20,
+            "terminal_training_cutoffs_excluded": true
+          },
+          "rows": null,
+          "total_columns": null
+        },
+        "test_features": {
+          "feature_columns": 606,
+          "format": "csv",
+          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
+          "required_columns": [
+            "sample_id",
+            "uav_id",
+            "cutoff"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 100,
+          "total_columns": 609
+        },
+        "training_features": {
+          "feature_columns": 606,
+          "format": "csv",
+          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
+          "required_columns": [
+            "sample_id",
+            "uav_id",
+            "prefix_number",
+            "cutoff",
+            "RUL",
+            "sample_weight"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 2000,
+          "total_columns": 612
+        },
+        "training_prefix_config": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "cutoff_source",
+            "cutoffs_per_uav",
+            "equal_total_weight_per_uav",
+            "seed"
+          ],
+          "required_json_values": {
+            "cutoffs_per_uav": 20,
+            "equal_total_weight_per_uav": true
+          },
+          "rows": null,
+          "total_columns": null
+        },
+        "training_prefixes": {
+          "feature_columns": null,
+          "format": "csv",
+          "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv",
+          "required_columns": [
+            "sample_id",
+            "uav_id",
+            "prefix_number",
+            "cutoff",
+            "RUL",
+            "sample_weight"
+          ],
+          "required_json_keys": [],
+          "required_json_values": {},
+          "rows": 2000,
+          "total_columns": 6
+        },
+        "verification_report": {
+          "feature_columns": null,
+          "format": "json",
+          "path": "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json",
+          "required_columns": [],
+          "required_json_keys": [
+            "status",
+            "assertions",
+            "feature_files",
+            "feature_sets"
+          ],
+          "required_json_values": {
+            "development_scenarios": 5,
+            "locked_scenarios": 20,
+            "status": "passed"
+          },
+          "rows": null,
+          "total_columns": null
+        }
+      },
+      "expected_development_scenarios": 5,
+      "expected_feature_sets": {
+        "age_only": 2,
+        "all_nonconstant": 606,
+        "last_values": 24,
+        "screened": 310
+      },
+      "expected_generated_features": 606,
+      "expected_inner_folds_per_outer_fold": 4,
+      "expected_locked_scenarios": 20,
+      "expected_outer_folds": 5,
+      "expected_prefixes_per_training_uav": 20,
+      "expected_training_uavs": 100
+    },
+    "preprocessing": {
+      "scaled_tabular_architectures": [
+        "regularized_linear",
+        "mlp",
+        "rbf_svr"
+      ],
+      "unscaled_tree_architectures": [
+        "random_forest",
+        "xgboost"
+      ]
+    },
+    "representations": {
+      "sequence_channel_count": 22,
+      "sequence_channels": [
+        "telemetry_01",
+        "telemetry_02",
+        "telemetry_04",
+        "telemetry_05",
+        "telemetry_06",
+        "telemetry_07",
+        "telemetry_09",
+        "telemetry_10",
+        "telemetry_11",
+        "telemetry_12",
+        "telemetry_13",
+        "telemetry_15",
+        "telemetry_16",
+        "telemetry_18",
+        "telemetry_19",
+        "telemetry_21",
+        "telemetry_22",
+        "telemetry_23",
+        "telemetry_24",
+        "telemetry_25",
+        "telemetry_26",
+        "telemetry_28"
+      ],
+      "sequence_lookbacks": [
+        50,
+        100
+      ],
+      "sequence_side_features": [
+        "flight_cycle",
+        "log1p_flight_cycle"
+      ],
+      "tabular_feature_sets": [
+        "age_only",
+        "last_values",
+        "screened",
+        "all_nonconstant"
+      ]
+    },
+    "settings_version": 3,
+    "study": {
+      "architectures_to_run": [
+        "mean_baseline",
+        "cycle_only_baseline",
+        "regularized_linear",
+        "random_forest",
+        "xgboost",
+        "mlp",
+        "tcn",
+        "lstm"
+      ],
+      "conditional_architectures": [
+        "transformer"
+      ],
+      "enabled": {
+        "cycle_only_baseline": true,
+        "lstm": false,
+        "mean_baseline": true,
+        "mlp": false,
+        "random_forest": true,
+        "rbf_svr": false,
+        "regularized_linear": true,
+        "tcn": false,
+        "transformer": false,
+        "xgboost": false
+      },
+      "optional_architectures": [
+        "rbf_svr"
+      ]
+    },
+    "tuning": {
+      "candidate_budget_per_architecture": 20,
+      "retraining_seeds": [
+        13,
+        37,
+        73
+      ],
+      "search_seed": 13
+    }
+  },
+  "settings_source": "2_model_architecture_study/1_architecture_study_settings/architecture_study_settings.toml"
+}

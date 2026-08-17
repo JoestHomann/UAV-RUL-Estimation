@@ -311,6 +311,18 @@ SearchParameter = Annotated[
 # either boundary.
 
 
+class ExecutionSpecification(StrictModel):
+    """Define the default Step 5/6 concurrency, an execution/performance knob.
+
+    Unlike every other section in this file, this is not a scientific
+    setting: it only changes wall-clock time, never results.  "run_phase_2.py"
+    is therefore still allowed to override it for one-off runs with its
+    "--max-workers" flag without touching this file.
+    """
+
+    max_workers: PositiveInt | Literal["auto"]
+
+
 class StudySpecification(StrictModel):
     """Define which architectures the study runs, and in what priority.
 
@@ -528,6 +540,7 @@ class ArchitectureStudySettings(StrictModel):
     """
 
     settings_version: PositiveInt
+    execution: ExecutionSpecification
     study: StudySpecification
     tuning: TuningSpecification
     evaluation: EvaluationSpecification

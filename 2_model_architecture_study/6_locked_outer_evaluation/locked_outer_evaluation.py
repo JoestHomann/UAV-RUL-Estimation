@@ -11,7 +11,7 @@ from __future__ import annotations
 from importlib.metadata import version
 import json
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 import sys
 from typing import Any
 
@@ -104,6 +104,30 @@ class LockedOuterEvaluationError(ValueError):
     """Represent a locked split, prediction, or artifact consistency failure."""
 
 
+def _replace_with_retry(temporary_path: Path, path: Path) -> None:
+    """Atomically replace ``path`` with ``temporary_path``, tolerating Windows locks.
+
+    POSIX ``rename`` succeeds even while another process has ``path`` open.
+    Windows instead raises ``PermissionError`` (WinError 32) if any process --
+    including a sibling Step 6 family/outer-fold subprocess consolidating this
+    same shared artifact a few milliseconds apart -- currently has it open.
+    That lock is always transient (the other process releases it as soon as
+    its own read or replace finishes), so a short bounded retry resolves it
+    without weakening the atomicity of the replace itself.
+    """
+
+    last_error: PermissionError | None = None
+    for attempt in range(10):
+        try:
+            temporary_path.replace(path)
+            return
+        except PermissionError as error:
+            last_error = error
+            sleep(0.1 * (attempt + 1))
+    assert last_error is not None
+    raise last_error
+
+
 def _write_json(payload: dict[str, Any], path: Path) -> None:
     """Atomically replace one readable generated JSON artifact."""
 
@@ -113,7 +137,7 @@ def _write_json(payload: dict[str, Any], path: Path) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 def _write_csv(
@@ -137,7 +161,7 @@ def _write_csv(
         float_format="%.12g",
         compression=compression,
     )
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 def _atomic_save_model(model: ModelAdapter, path: Path) -> int:
@@ -146,7 +170,7 @@ def _atomic_save_model(model: ModelAdapter, path: Path) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_suffix(path.suffix + ".tmp")
     model.save(temporary_path)
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
     return int(path.stat().st_size)
 
 

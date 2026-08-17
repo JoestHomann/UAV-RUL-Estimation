@@ -8,7 +8,19 @@
 # This integer is incremented manually whenever an experiment setting
 # changes.  It is a simple revision number, not an automatic model or data
 # version.
-settings_version = 3
+settings_version = 4
+
+[execution]
+# How many independent Step 5/6 family/outer-fold studies run at the same
+# time, each as its own subprocess. "auto" uses every available CPU core
+# (matching the previous hardcoded default); any positive integer runs
+# exactly that many at once, and 1 runs strictly sequentially.
+# Unlike every other setting in this file, this is an execution/performance
+# knob rather than a scientific one -- it changes wall-clock time only, never
+# results -- so run_phase_2.py's --max-workers flag is allowed to override it
+# for one-off runs without touching this file.
+# Options: "auto", or any positive integer.
+max_workers = "auto"
 
 [study]
 # The architectures that run in the comparison. Nothing here forces any of
@@ -45,11 +57,10 @@ mean_baseline = true
 cycle_only_baseline = true
 regularized_linear = true
 random_forest = true
-xgboost = false
-mlp = false
-tcn = false
-lstm = false
-
+xgboost = true
+mlp = true
+tcn = true
+lstm = true
 transformer = false
 rbf_svr = false
 

@@ -16,7 +16,7 @@ from importlib.metadata import version
 import json
 import math
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 import sys
 from typing import Any, Callable
 
@@ -151,6 +151,30 @@ def _stable_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def _replace_with_retry(temporary_path: Path, path: Path) -> None:
+    """Atomically replace ``path`` with ``temporary_path``, tolerating Windows locks.
+
+    POSIX ``rename`` succeeds even while another process has ``path`` open.
+    Windows instead raises ``PermissionError`` (WinError 32) if any process --
+    including a sibling Step 5 family/outer-fold subprocess consolidating this
+    same shared artifact a few milliseconds apart -- currently has it open.
+    That lock is always transient (the other process releases it as soon as
+    its own read or replace finishes), so a short bounded retry resolves it
+    without weakening the atomicity of the replace itself.
+    """
+
+    last_error: PermissionError | None = None
+    for attempt in range(10):
+        try:
+            temporary_path.replace(path)
+            return
+        except PermissionError as error:
+            last_error = error
+            sleep(0.1 * (attempt + 1))
+    assert last_error is not None
+    raise last_error
+
+
 def _write_json(payload: dict[str, Any], path: Path) -> None:
     """Replace one generated JSON artifact only after writing it completely."""
 
@@ -160,7 +184,7 @@ def _write_json(payload: dict[str, Any], path: Path) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 def _write_csv(records: list[dict[str, Any]], columns: list[str], path: Path) -> None:
@@ -170,7 +194,7 @@ def _write_csv(records: list[dict[str, Any]], columns: list[str], path: Path) ->
     frame = pd.DataFrame.from_records(records, columns=columns)
     temporary_path = path.with_suffix(path.suffix + ".tmp")
     frame.to_csv(temporary_path, index=False, float_format="%.12g")
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 class InnerSplitRepository:

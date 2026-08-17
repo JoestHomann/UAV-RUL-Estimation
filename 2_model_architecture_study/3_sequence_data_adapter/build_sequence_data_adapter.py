@@ -162,10 +162,10 @@ def _load_experiment_specification(path: Path) -> dict[str, Any]:
         ) from error
 
     try:
-        contract = payload["contract"]
-        representations = contract["representations"]
-        phase_1_artifacts = contract["phase_1"]["artifacts"]
-        contract_version = contract["contract_version"]
+        settings = payload["settings"]
+        representations = settings["representations"]
+        phase_1_artifacts = settings["phase_1"]["artifacts"]
+        settings_version = settings["settings_version"]
     except (KeyError, TypeError) as error:
         raise SequenceBuildError(
             f"Experiment specification is missing required field {error}"
@@ -175,8 +175,8 @@ def _load_experiment_specification(path: Path) -> dict[str, Any]:
         raise SequenceBuildError("Sequence representation settings must be an object")
     if not isinstance(phase_1_artifacts, dict):
         raise SequenceBuildError("Phase 1 artifact settings must be an object")
-    if not isinstance(contract_version, int):
-        raise SequenceBuildError("Experiment contract version must be an integer")
+    if not isinstance(settings_version, int):
+        raise SequenceBuildError("Experiment settings version must be an integer")
     return payload
 
 
@@ -221,7 +221,7 @@ def _source_label(
         return fixed_path, None
 
     try:
-        artifact = specification["contract"]["phase_1"]["artifacts"][artifact_key]
+        artifact = specification["settings"]["phase_1"]["artifacts"][artifact_key]
         source_path = artifact["path"]
         expected_rows = artifact.get("rows")
     except (KeyError, TypeError) as error:
@@ -302,12 +302,11 @@ def _build_manifest(
 ) -> dict[str, Any]:
     """Create the runtime sequence interface without materializing tensors."""
 
-    contract = specification["contract"]
-    representations = contract["representations"]
-    preprocessing = contract["preprocessing"]
+    settings = specification["settings"]
+    representations = settings["representations"]
     return {
         "adapter_version": 1,
-        "contract_version": contract["contract_version"],
+        "settings_version": settings["settings_version"],
         "experiment_specification": _repository_relative(specification_path),
         "channels": representations["sequence_channels"],
         "channel_count": representations["sequence_channel_count"],

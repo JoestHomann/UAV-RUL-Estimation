@@ -125,11 +125,11 @@ def _load_experiment_specification(path: Path) -> dict[str, Any]:
         ) from error
 
     try:
-        contract = payload["contract"]
-        phase_1 = contract["phase_1"]
+        settings = payload["settings"]
+        phase_1 = settings["phase_1"]
         artifacts = phase_1["artifacts"]
         feature_sets = phase_1["expected_feature_sets"]
-        contract_version = contract["contract_version"]
+        settings_version = settings["settings_version"]
     except (KeyError, TypeError) as error:
         raise AdapterBuildError(
             f"Experiment specification is missing required field {error}"
@@ -139,8 +139,8 @@ def _load_experiment_specification(path: Path) -> dict[str, Any]:
         raise AdapterBuildError(
             "Experiment specification has invalid Phase 1 artifact metadata"
         )
-    if not isinstance(contract_version, int):
-        raise AdapterBuildError("Experiment contract version must be an integer")
+    if not isinstance(settings_version, int):
+        raise AdapterBuildError("Experiment settings version must be an integer")
     return payload
 
 
@@ -179,7 +179,7 @@ def _artifact_specification(
     """Return one Phase 1 artifact entry with a readable missing-key error."""
 
     try:
-        artifact = specification["contract"]["phase_1"]["artifacts"][artifact_key]
+        artifact = specification["settings"]["phase_1"]["artifacts"][artifact_key]
     except (KeyError, TypeError) as error:
         raise AdapterBuildError(
             f"Experiment specification does not define artifact {artifact_key!r}"
@@ -260,13 +260,13 @@ def _build_manifest(
 ) -> dict[str, Any]:
     """Create the compact machine-readable interface for the copied data."""
 
-    contract = specification["contract"]
-    feature_sets = contract["phase_1"]["expected_feature_sets"]
+    settings = specification["settings"]
+    feature_sets = settings["phase_1"]["expected_feature_sets"]
     files["feature_catalog"]["membership_columns"] = list(feature_sets)
 
     return {
         "adapter_version": 1,
-        "contract_version": contract["contract_version"],
+        "settings_version": settings["settings_version"],
         "experiment_specification": _repository_relative(specification_path),
         "feature_sets": {
             name: {"feature_count": count}

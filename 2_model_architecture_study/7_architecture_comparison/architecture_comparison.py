@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 import numpy as np
@@ -136,6 +137,29 @@ def _numeric_then_text_sort_key(value: Any) -> tuple[int, float | str]:
         return (1, str(value))
 
 
+def _replace_with_retry(temporary_path: Path, path: Path) -> None:
+    """Atomically replace ``path`` with ``temporary_path``, tolerating Windows locks.
+
+    POSIX ``rename`` succeeds even while another process has ``path`` open.
+    Windows instead raises ``PermissionError`` (WinError 32) if some other
+    process -- for example a lingering antivirus/indexer scan right after the
+    file is created -- currently has it open. That lock is always transient,
+    so a short bounded retry resolves it without weakening the atomicity of
+    the replace itself.
+    """
+
+    last_error: PermissionError | None = None
+    for attempt in range(10):
+        try:
+            temporary_path.replace(path)
+            return
+        except PermissionError as error:
+            last_error = error
+            sleep(0.1 * (attempt + 1))
+    assert last_error is not None
+    raise last_error
+
+
 def _write_csv(table: pd.DataFrame, path: Path, *, compressed: bool = False) -> None:
     """Atomically write one stable CSV, optionally with deterministic gzip."""
 
@@ -150,7 +174,7 @@ def _write_csv(table: pd.DataFrame, path: Path, *, compressed: bool = False) -> 
         float_format="%.12g",
         compression=compression,
     )
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 def _write_json(payload: dict[str, Any], path: Path) -> None:
@@ -162,7 +186,7 @@ def _write_json(payload: dict[str, Any], path: Path) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    temporary_path.replace(path)
+    _replace_with_retry(temporary_path, path)
 
 
 class ArchitectureComparisonAnalyzer:
