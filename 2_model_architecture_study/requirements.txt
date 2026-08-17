@@ -1,3 +1,6 @@
+# Resolves the CUDA-enabled torch build pinned below.
+--extra-index-url https://download.pytorch.org/whl/cu126
+
 # Builds sequence tensors, padding masks, side features, and robust scalers.
 numpy>=1.26,<3
 
@@ -20,7 +23,9 @@ optuna>=4.8,<5
 xgboost>=3.0,<4
 
 # Implements the MLP, TCN, LSTM, and optional Transformer architectures.
-torch>=2.7,<3
+# Pinned to the verified CUDA build, not a range, so training doesn't
+# silently fall back to the CPU-only PyPI build.
+torch==2.13.0+cu126
 
 # Provides mandatory real-time monitoring for every Phase 2 training run.
 tensorboard>=2.20,<3
