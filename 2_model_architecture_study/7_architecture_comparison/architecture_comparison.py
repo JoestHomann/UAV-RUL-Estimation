@@ -83,6 +83,20 @@ class ComparisonTables:
     efficiency_summary: pd.DataFrame
 
 
+def _locked_scenario_labels(expected_scenarios: int) -> list[str]:
+    """List Phase 1's locked scenario labels in their generated order.
+
+    Phase 1 names each locked scenario ``locked_01`` ... ``locked_NN`` (see
+    1_dataset_construction/3_test_like_validation_scenarios), so the
+    ``scenario`` column carries those text labels rather than the numbers
+    1..N. Deriving the labels from the settings keeps both the validation
+    check and the reported scenario axis in Phase 1's fixed order instead of
+    whichever label happens to appear first in the prediction table.
+    """
+
+    return [f"locked_{number:02d}" for number in range(1, expected_scenarios + 1)]
+
+
 def _regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Calculate the four metrics fixed by the architecture study settings."""
 
@@ -447,7 +461,9 @@ class ArchitectureComparisonAnalyzer:
                 raise ArchitectureComparisonError(
                     f"Run {family}/{outer_fold}/{seed} has an invalid UAV count"
                 )
-            if set(group["scenario"].astype(int)) != set(range(1, expected_scenarios + 1)):
+            if set(group["scenario"].astype(str)) != set(
+                _locked_scenario_labels(expected_scenarios)
+            ):
                 raise ArchitectureComparisonError(
                     f"Run {family}/{outer_fold}/{seed} has invalid scenario labels"
                 )
@@ -578,14 +594,12 @@ class ArchitectureComparisonAnalyzer:
                             )
                         elif group_type == "scenario":
                             ordered_values = list(
-                                range(
-                                    1,
+                                _locked_scenario_labels(
                                     int(
                                         self.settings["phase_1"][
                                             "expected_locked_scenarios"
                                         ]
                                     )
-                                    + 1,
                                 )
                             )
                         elif group_type == "age_band":

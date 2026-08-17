@@ -780,12 +780,17 @@ class LockedOuterEvaluationRunner:
             run_records.append(record)
             completed_runs.append(prefix)
 
+        # Phase 1 labels locked scenarios ``locked_01`` ... ``locked_NN``
+        # (1_dataset_construction/3_test_like_validation_scenarios), so
+        # ``scenario`` is text and must not be coerced to an integer. The
+        # labels are zero padded, so sorting them as text still orders the
+        # rows by scenario number.
         prediction_records.sort(
             key=lambda row: (
                 row["model_family"],
                 int(row["seed"]),
                 int(row["outer_fold"]),
-                int(row["scenario"]),
+                str(row["scenario"]),
                 str(row["uav_id"]),
             )
         )

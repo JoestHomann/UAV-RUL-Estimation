@@ -14,6 +14,7 @@ import os
 # CPU-only machines.
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
+import ctypes
 from pathlib import Path
 import sys
 
@@ -50,26 +51,41 @@ def _exit_without_interpreter_shutdown(status: int) -> None:
     """Leave the process as soon as every artifact is safely on disk.
 
     PyTorch's Windows build intermittently fast-fails while its native
-    libraries are unloaded during interpreter finalization, which the
-    operating system reports as exit code 3221226505 (0xC0000409,
-    STATUS_STACK_BUFFER_OVERRUN). That unload happens after ``main`` has
+    libraries are torn down at the very end of a process, which the operating
+    system reports as exit code 3221226505 (0xC0000409,
+    STATUS_STACK_BUFFER_OVERRUN). That teardown happens after ``main`` has
     returned, so this request's checkpoints, predictions, run facts, and
     manifest are all already written -- but run_phase_2.py can only observe
     the exit code, so it records finished work as failed and stops the whole
-    pipeline. Exiting through ``os._exit`` skips finalization, and therefore
-    that unload, so a completed run reports success.
+    pipeline.
 
-    Skipping finalization is safe here because nothing in this step depends
-    on it: there is no atexit handler and no ``__del__`` side effect, every
+    ``os._exit`` alone is not enough to avoid this. It skips Python's
+    interpreter finalization but still reaches the Win32 ``ExitProcess``,
+    which abruptly terminates the remaining threads and then calls every
+    loaded DLL's detach handler -- exactly the native teardown that
+    fast-fails. ``TerminateProcess`` is documented not to notify attached
+    DLLs, so calling it on this process is the one self-exit that leaves the
+    reported status ours rather than the crash code. ``os._exit`` stays as
+    the fallback for other platforms, and as an unreachable safety net if
+    the call ever fails.
+
+    Bypassing teardown is safe here because nothing in this step depends on
+    it: there is no atexit handler and no ``__del__`` side effect, every
     artifact is written by an atomic replace long before this point, and the
-    only buffered writers are the two standard streams flushed below. They
-    are flushed explicitly because ``os._exit`` bypasses the flush that
-    normal shutdown performs, which would otherwise drop this run's console
-    output whenever stdout is a pipe rather than a console.
+    TensorBoard writer flushes each event group as it is written and is
+    closed by its own context manager. The two standard streams are flushed
+    explicitly below, since neither exit path performs the flush that normal
+    shutdown would, which would otherwise drop this run's console output
+    whenever stdout is a pipe rather than a console.
     """
 
     sys.stdout.flush()
     sys.stderr.flush()
+    if sys.platform == "win32":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel32.TerminateProcess.argtypes = (ctypes.c_void_p, ctypes.c_uint)
+        kernel32.TerminateProcess(kernel32.GetCurrentProcess(), status)
     os._exit(status)
 
 
