@@ -27,7 +27,7 @@ settings_version = 4
 # results -- so run_phase_2.py's --max-workers flag is allowed to override it
 # for one-off runs without touching this file.
 # Options: "auto", or any positive integer.
-max_workers = "auto"
+max_workers = 7
 
 [study]
 # The architectures that run in the comparison. Nothing here forces any of
