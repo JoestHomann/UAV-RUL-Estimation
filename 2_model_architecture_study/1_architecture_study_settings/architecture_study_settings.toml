@@ -31,8 +31,8 @@ architectures_to_run = [
     "tcn",
     "lstm",
 ]
-conditional_architectures = ["transformer"]
-optional_architectures = ["rbf_svr"]
+conditional_architectures = ["transformer"]  # gated on a prerequisite, not results: promote once TCN/LSTM prove out (data has only 100 independent UAVs, so attention is an overfitting risk until then)
+optional_architectures = ["rbf_svr"]  # not prerequisite-gated: a reasonable extra nonlinear reference, added only if the core comparison leaves a question open or time allows
 
 [study.enabled]
 # The single on/off switch for every architecture declared above. Setting an
@@ -45,10 +45,11 @@ mean_baseline = true
 cycle_only_baseline = true
 regularized_linear = true
 random_forest = true
-xgboost = true
-mlp = true
-tcn = true
-lstm = true
+xgboost = false
+mlp = false
+tcn = false
+lstm = false
+
 transformer = false
 rbf_svr = false
 
