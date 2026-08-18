@@ -63,12 +63,10 @@ from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
-    calculate_age_band_regression_metrics,
     calculate_regression_metrics,
     create_study_monitor,
     ensure_tensorboard_available,
     log_step_5_candidate,
-    log_step_5_selection,
 )
 
 from candidate_space import CandidateSpace, ResolvedCandidate  # noqa: E402
@@ -707,11 +705,6 @@ class InnerModelSelectionRunner:
                 raise
 
             selected = writer.finish(study)
-            log_step_5_selection(
-                model_family=family,
-                outer_fold=outer_fold,
-                selected_record=selected,
-            )
         self.consolidate_artifacts()
         return selected
 
@@ -764,11 +757,6 @@ class InnerModelSelectionRunner:
             )
             model = None
             with study_monitor.fit(context) as monitor:
-                monitor.start_fit(
-                    hyperparameters=candidate.hyperparameters,
-                    training_data=split.training,
-                    validation_data=split.validation,
-                )
                 model = self.factory.create(
                     family,
                     candidate.hyperparameters,
@@ -785,14 +773,6 @@ class InnerModelSelectionRunner:
                         observed_targets,
                         predictions,
                     )
-                    monitored_metrics = {
-                        **development_metrics,
-                        **calculate_age_band_regression_metrics(
-                            observed_targets,
-                            predictions,
-                            split.validation.metadata["cutoff"],
-                        ),
-                    }
                     rmse = development_metrics["rmse"]
                     if not np.isfinite(rmse):
                         raise InnerModelSelectionError(
@@ -809,12 +789,6 @@ class InnerModelSelectionRunner:
                             "Adapter and Step 5 validation RMSE calculations "
                             "disagree"
                         )
-                    monitor.complete_fit(
-                        training_summary=summary.to_dict(),
-                        inference_seconds=inference_seconds,
-                        evaluation_metrics=monitored_metrics,
-                        prediction_rows=len(predictions),
-                    )
                 finally:
                     # Live writers must never become part of a fitted model or
                     # survive beyond this isolated fold fit.
@@ -897,7 +871,7 @@ class InnerModelSelectionRunner:
             model_family=family,
             outer_fold=outer_fold,
             candidate_number=candidate_number,
-            candidate_record=candidate_record,
+            mean_inner_rmse=candidate_record["mean_inner_rmse"],
             hyperparameters=candidate.hyperparameters,
         )
         return candidate_record, fold_records

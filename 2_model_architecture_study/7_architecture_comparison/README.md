@@ -90,6 +90,21 @@ different validation samples. The output includes:
 The pairwise table reports signed differences only. It is evidence for manual
 comparison, not a ranking or significance-driven winner rule.
 
+"paired_rmse_differences.png" shows the same RMSE differences as a symmetric
+matrix. A cell is boxed, and its value printed in bold, when that pair's 95%
+interval excludes zero; an unboxed cell is a difference this evaluation cannot
+separate from no difference at all. Marking the cells keeps the figure readable
+on its own instead of requiring the CSV alongside it, and it remains a
+statement about one pair rather than a ranking: no cell is converted into a
+winner, and the 28 intervals carry no multiple-comparison correction.
+
+The diverging colour scale saturates at twice the median absolute difference.
+Without that, a single badly diverged family sets the range and renders every
+difference among the remaining architectures the same near-white. The median
+has a 50% breakdown point, so the scale survives until half of all pairs are
+extreme, and the printed values stay exact, so a saturated cell hides nothing.
+The subtitle states the saturation point whenever any difference exceeds it.
+
 ## Efficiency
 
 Training time, inference time, trainable parameter count when the adapter can
@@ -99,11 +114,11 @@ not reported because Step 6 does not currently measure it reliably.
 No weighted score combines performance and efficiency. The cost plots expose
 the trade-off for manual interpretation.
 
-After every comparison table and figure has been generated successfully, Step
-7 publishes final locked metric means, seed variation, bootstrap intervals, and
-efficiency facts to "tensorboard_monitoring/logs/step_7/final_comparison". The
-architecture order remains the settings order, and no TensorBoard
-value is converted into a rank or winner.
+Step 7 writes no TensorBoard events. Its output is a set of static final
+tables and figures -- locked metric means, seed variation, bootstrap intervals,
+and efficiency facts -- and those belong in the CSV artifacts and the generated
+figures, where they can be read and cited. The architecture order remains the
+settings order, and no value is converted into a rank or winner.
 
 ## Files
 

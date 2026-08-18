@@ -422,14 +422,10 @@ class LockedOuterEvaluationRunner:
             )
             model = None
             with study_monitor.fit(context) as monitor:
-                # The locked validation dataset is deliberately omitted here.
-                # Step 6 may display training progress and operating timings,
-                # but no locked predictive metric before Step 7 completes.
-                monitor.start_fit(
-                    hyperparameters=selected.hyperparameters,
-                    training_data=split.training,
-                    validation_data=None,
-                )
+                # Step 6 publishes only the training-loss curve. No locked
+                # predictive metric is written anywhere before Step 7
+                # completes, and the fit is never given the locked validation
+                # dataset that would let it compute one.
                 model = self.factory.create(
                     selected.model_family,
                     selected.hyperparameters,
@@ -509,12 +505,6 @@ class LockedOuterEvaluationRunner:
                             self.output_dir
                         ).as_posix(),
                     }
-                    monitor.complete_fit(
-                        training_summary=training_summary.to_dict(),
-                        inference_seconds=inference_seconds,
-                        evaluation_metrics=None,
-                        prediction_rows=len(predictions),
-                    )
                 finally:
                     if model is not None:
                         model.detach_training_monitor()

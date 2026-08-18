@@ -52,12 +52,13 @@ factory creates an adapter, so those values do not have to be passed again to
 time, completed epochs or iterations, the selected stopping point when
 available, validation RMSE, and the trainable parameter count when meaningful.
 
-The factory can also attach the mandatory neutral training monitor. Adapter
-modules never import TensorBoard. The shared neural loop reports each epoch,
-and the XGBoost adapter reports sampled boosting rounds through its official
-callback interface. Atomic-fit estimators need no model-specific monitoring
-code because Steps 5 and 6 record their start, completion, dimensions, timing,
-configuration, and permitted final metrics.
+The factory can also attach the neutral training monitor. Adapter modules
+never import TensorBoard. The shared neural loop reports "train/loss" and,
+where a development fold exists, "val/rmse" each epoch; the XGBoost adapter
+reports the same two tags on sampled boosting rounds through its official
+callback interface. Atomic-fit estimators expose no optimization iterations and
+therefore publish no curve; everything about their fits is recorded in the Step
+5 and Step 6 artifacts, which is where every family's finished numbers live.
 
 Every adapter also declares whether its family is stochastic. Random Forest,
 XGBoost, and the neural adapters use the three retraining seeds from the

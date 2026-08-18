@@ -26,11 +26,6 @@ from comparison_gate import (  # noqa: E402
     DEFAULT_SPECIFICATION_PATH,
     build_architecture_comparison_plan,
 )
-from tensorboard_monitoring import (  # noqa: E402
-    TensorBoardMonitoringError,
-    ensure_tensorboard_available,
-    publish_step_7_comparison,
-)
 
 
 def main() -> None:
@@ -58,7 +53,6 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        ensure_tensorboard_available()
         # This call examines only the settings and Step 6 manifest. The two
         # locked result tables are not opened until the completion gate passes.
         plan = build_architecture_comparison_plan(
@@ -71,19 +65,10 @@ def main() -> None:
         analyzer = ArchitectureComparisonAnalyzer(predictions, model_runs, plan)
         tables = analyzer.calculate()
         manifest = save_comparison(tables, plan, args.output_dir)
-        # Locked performance is withheld from the live Step 6 runs. It becomes
-        # visible only here, after the completion gate and all fixed comparison
-        # calculations have succeeded.
-        publish_step_7_comparison(
-            tables.architecture_comparison,
-            tables.efficiency_summary,
-            tables.grouped_architecture_metrics,
-        )
     except (
         ValueError,
         OSError,
         pd.errors.ParserError,
-        TensorBoardMonitoringError,
     ) as error:
         print(f"Architecture comparison did not run:\n{error}", file=sys.stderr)
         raise SystemExit(1) from error

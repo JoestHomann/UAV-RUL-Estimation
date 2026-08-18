@@ -11,6 +11,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
@@ -292,48 +293,93 @@ def _paired_rmse_figure(
     plan: ArchitectureComparisonPlan,
     output_path: Path,
 ) -> Path:
-    """Show every pairwise RMSE difference in one symmetric matrix."""
+    """Show every pairwise RMSE difference, and which of them exclude zero.
+
+    The point difference on its own cannot say whether a pair is separated,
+    so a cell whose 95% paired UAV-bootstrap interval excludes zero is boxed
+    and its value is printed in bold. Everything unboxed is a difference this
+    evaluation cannot distinguish from no difference at all.
+    """
 
     families = plan.enabled_families
     family_index = {family: index for index, family in enumerate(families)}
-    matrix = np.zeros((len(families), len(families)), dtype=float)
+    size = len(families)
+    matrix = np.zeros((size, size), dtype=float)
+    separated = np.zeros((size, size), dtype=bool)
     rmse_rows = paired.loc[paired["metric"] == "rmse"]
     for row in rmse_rows.itertuples(index=False):
         first = family_index[row.family_a]
         second = family_index[row.family_b]
-        matrix[first, second] = float(row.difference_a_minus_b)
-        matrix[second, first] = -float(row.difference_a_minus_b)
+        difference = float(row.difference_a_minus_b)
+        matrix[first, second] = difference
+        matrix[second, first] = -difference
+        excludes_zero = bool(
+            float(row.ci_lower_95) > 0.0 or float(row.ci_upper_95) < 0.0
+        )
+        separated[first, second] = excludes_zero
+        separated[second, first] = excludes_zero
 
-    maximum = float(np.max(np.abs(matrix)))
-    if maximum <= 0.0:
-        maximum = 1.0
-    figure, axis = plt.subplots(figsize=(11, 9))
+    # One badly diverged family would otherwise set the colour range and flatten
+    # every difference among the remaining architectures to the same near-white.
+    # Twice the median absolute difference is used instead: the median has a 50%
+    # breakdown point, so the scale stays meaningful until half of all pairs are
+    # extreme, and no fixed quantile has to be tuned to a particular study. The
+    # printed values remain exact, so a saturated cell hides nothing.
+    off_diagonal = np.abs(matrix[~np.eye(size, dtype=bool)])
+    maximum = float(np.max(off_diagonal)) if off_diagonal.size else 0.0
+    scale = 2.0 * float(np.median(off_diagonal)) if off_diagonal.size else 0.0
+    if scale <= 0.0 or scale >= maximum:
+        scale = maximum if maximum > 0.0 else 1.0
+    clipped = maximum > scale
+
+    figure, axis = plt.subplots(figsize=(11.5, 9))
     image = axis.imshow(
         matrix,
         cmap="RdBu_r",
-        norm=TwoSlopeNorm(vmin=-maximum, vcenter=0.0, vmax=maximum),
+        norm=TwoSlopeNorm(vmin=-scale, vcenter=0.0, vmax=scale),
     )
     labels = [_display_name(family) for family in families]
-    positions = np.arange(len(families))
+    positions = np.arange(size)
     axis.set_xticks(positions, labels, rotation=35, ha="right")
     axis.set_yticks(positions, labels)
     axis.set_xlabel("Column architecture")
     axis.set_ylabel("Row architecture")
     for row_index in positions:
         for column_index in positions:
+            difference = matrix[row_index, column_index]
+            is_separated = separated[row_index, column_index]
             axis.text(
                 column_index,
                 row_index,
-                f"{matrix[row_index, column_index]:.1f}",
+                f"{difference:.1f}",
                 ha="center",
                 va="center",
                 fontsize=8,
-                color="white" if abs(matrix[row_index, column_index]) > 0.55 * maximum else "black",
+                fontweight="bold" if is_separated else "normal",
+                color="white" if abs(difference) > 0.55 * scale else "black",
             )
+            if is_separated:
+                axis.add_patch(
+                    Rectangle(
+                        (column_index - 0.5, row_index - 0.5),
+                        1.0,
+                        1.0,
+                        fill=False,
+                        edgecolor="black",
+                        linewidth=1.6,
+                    )
+                )
     figure.colorbar(image, ax=axis, label="Row RMSE minus column RMSE (RUL cycles)")
-    axis.set_title(
-        "Paired RMSE differences\nnegative values mean the row architecture has lower RMSE"
+    subtitle = (
+        "negative values mean the row architecture has lower RMSE; "
+        "boxed cells have a 95% interval that excludes zero"
     )
+    if clipped:
+        subtitle += (
+            f"\ncolour saturates at {scale:.0f} cycles so the largest "
+            f"difference ({maximum:.0f}) does not flatten the rest"
+        )
+    axis.set_title(f"Paired RMSE differences\n{subtitle}", fontsize=11)
     return _finish_figure(figure, output_path)
 
 

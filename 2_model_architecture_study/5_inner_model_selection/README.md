@@ -104,14 +104,19 @@ all five outer folds. Later steps must require a "complete" manifest.
 
 ## TensorBoard monitoring
 
-Every inner-fold fit writes to a stable run below
-"tensorboard_monitoring/logs/step_5". All architectures record configuration,
-dimensions, status, training and inference time, and overall and age-band
-development RMSE, MAE, R2, and bias. Neural models additionally record every
-epoch; XGBoost records every
-tenth boosting round plus its final round. The study-level run records mean
-candidate RMSE, fold variation, timing, and the selected candidate inside that
-family and outer fold.
+"tensorboard_monitoring/logs/step_5/<family>/outer_fold_N/study_progress"
+holds the search curve: "search/candidate_rmse" carries one point per completed
+candidate, with that candidate's hyperparameters attached as text. This is the
+view to watch during a run -- whether tuning is still improving, and whether it
+has plateaued.
+
+Per-fit "train/loss" and "val/rmse" curves are switched off by default, because
+a study fits (candidate budget x inner fold count) models and one prefix per fit
+makes the scalar panel unreadable. Set "PHASE2_TENSORBOARD_FIT_CURVES=1" to
+publish them below ".../outer_fold_N/fit_progress" while debugging a single
+architecture. Every finished quantity -- development RMSE, MAE, R2, bias, the
+age-band breakdown, timings, and the selected candidate -- lives in this step's
+CSV artifacts, not in TensorBoard.
 
 These are development metrics from the five permitted scenarios. No locked or
 test target is accessed by Step 5 monitoring.

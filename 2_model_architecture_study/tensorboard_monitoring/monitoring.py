@@ -5,8 +5,19 @@ to this module. They never construct TensorBoard writers directly. This keeps
 the experiment code readable while giving every fitted model a stable,
 human-readable run path in the dashboard.
 
-Generated event files are a live monitoring aid. The CSV and JSON artifacts
-written by Steps 5 through 7 remain the authoritative scientific results.
+Generated event files are a live monitoring aid only. The CSV and JSON
+artifacts written by Steps 5 through 7 remain the authoritative scientific
+results, so this module deliberately publishes the smallest set of values that
+answers "is this run alive and is it going anywhere":
+
+- "train/loss" and "val/rmse" per optimization step, for one fit
+- "search/candidate_rmse" per completed Step 5 candidate, for one study
+
+Every other quantity that used to be written here -- final performance
+metrics, age-band breakdowns, timings, row counts, parameter counts, progress
+flags, and the whole Step 7 comparison -- is a terminal value that renders as
+a single point and already exists in the authoritative artifacts. Reading it
+from the CSV is better than reading it from an event file.
 
 One writer is shared by every fit inside a study (one model family evaluated
 on one outer fold) instead of opening a fresh writer per candidate or inner
@@ -18,12 +29,14 @@ TensorBoard.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 import json
 import math
+import os
 from pathlib import Path
 import shutil
+import sys
 from typing import Any, Callable, Literal, Mapping
 
 import numpy as np
@@ -39,13 +52,31 @@ NEURAL_LOG_INTERVAL = 1
 XGBOOST_LOG_INTERVAL = 10
 
 # SummaryWriter performs asynchronous disk writes. A short flush interval keeps
-# the browser current, while explicit flush calls make write failures visible to
-# the training process instead of silently losing an entire fit's monitoring.
+# the browser current, while explicit flush calls surface write failures while
+# the fit that caused them is still running.
 WRITER_FLUSH_SECONDS = 5
+
+# Step 5 evaluates (candidate budget x inner fold count) fits per study, so
+# writing a curve for each one produces hundreds of tag prefixes in a single
+# scalar panel. During a normal search the study-level candidate curve is the
+# useful view, so per-fit curves are opt-in for debugging one architecture.
+# Step 6 retrains are few and each one matters, so they always write curves.
+FIT_CURVE_ENVIRONMENT_VARIABLE = "PHASE2_TENSORBOARD_FIT_CURVES"
 
 
 class TensorBoardMonitoringError(RuntimeError):
-    """Explain a missing dependency, unsafe path, or event-writing failure."""
+    """Explain a missing dependency or an unsafe generated run path."""
+
+
+def step_5_fit_curves_enabled() -> bool:
+    """Report whether Step 5 inner fits may write per-epoch curves."""
+
+    return os.environ.get(FIT_CURVE_ENVIRONMENT_VARIABLE, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 @dataclass(frozen=True)
@@ -96,10 +127,10 @@ class TrainingRunContext:
     def tag_prefix(self) -> str:
         """Return the tag namespace that keeps this fit's curves distinct.
 
-        Every scalar and text value this fit writes is namespaced under this
-        prefix inside the study's single shared writer, so TensorBoard's
-        regex filter box (for example "^candidate_007/") recovers exactly
-        what a dedicated per-fit directory used to provide.
+        Every scalar this fit writes is namespaced under this prefix inside
+        the study's single shared writer, so TensorBoard's regex filter box
+        (for example "^candidate_007/") recovers exactly what a dedicated
+        per-fit directory used to provide.
         """
 
         if self.stage == "step_5":
@@ -193,38 +224,38 @@ def _finite_scalar(value: Any) -> float | None:
         return None
     try:
         numeric = float(value)
-    except (TypeError, ValueError) as error:
-        raise TensorBoardMonitoringError(
-            f"TensorBoard scalar value is not numeric: {value!r}"
-        ) from error
+    except (TypeError, ValueError):
+        return None
     return numeric if math.isfinite(numeric) else None
 
 
-def _input_feature_count(dataset: Any, representation: str) -> int:
-    """Describe model inputs without retaining or writing any training rows."""
+def _report_monitoring_failure(description: str, error: BaseException) -> None:
+    """Warn about a monitoring failure without stopping the experiment.
 
-    if representation == "none":
-        return 0
-    features = getattr(dataset, "features", None)
-    if features is not None and hasattr(features, "shape"):
-        return int(features.shape[1])
-    sequences = getattr(dataset, "sequences", None)
-    side_features = getattr(dataset, "side_features", None)
-    if sequences is not None and getattr(sequences, "ndim", 0) == 3:
-        side_count = (
-            int(side_features.shape[1])
-            if side_features is not None and getattr(side_features, "ndim", 0) == 2
-            else 0
-        )
-        return int(sequences.shape[2]) + side_count
-    return 0
+    Monitoring is a convenience layer over the training that produces the real
+    results. Losing an event file costs a live curve; aborting a multi-hour
+    Step 6 retraining because a flush failed costs the run. The authoritative
+    CSV and JSON artifacts are written by the pipeline steps themselves and are
+    unaffected by anything that happens in this module.
+    """
+
+    print(
+        f"TensorBoard monitoring disabled for {description}: {error}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def calculate_regression_metrics(
     targets: Any,
     predictions: Any,
 ) -> dict[str, float]:
-    """Calculate the four development metrics displayed for Step 5 fits."""
+    """Calculate the four regression metrics used across Phase 2.
+
+    This is not a monitoring helper. Step 5 selects candidates on the RMSE
+    this function returns, so it is a load-bearing calculation that happens to
+    live beside the code that once displayed it.
+    """
 
     observed = np.asarray(targets, dtype=np.float64).reshape(-1)
     predicted = np.asarray(predictions, dtype=np.float64).reshape(-1)
@@ -234,7 +265,7 @@ def calculate_regression_metrics(
         )
     if not np.isfinite(observed).all() or not np.isfinite(predicted).all():
         raise TensorBoardMonitoringError(
-            "Cannot monitor non-finite targets or predictions"
+            "Cannot evaluate non-finite targets or predictions"
         )
     residual = predicted - observed
     denominator = float(np.sum(np.square(observed - np.mean(observed))))
@@ -250,49 +281,18 @@ def calculate_regression_metrics(
     }
 
 
-def calculate_age_band_regression_metrics(
-    targets: Any,
-    predictions: Any,
-    cutoffs: Any,
-) -> dict[str, float]:
-    """Calculate permitted development metrics inside the fixed age bands."""
-
-    observed = np.asarray(targets, dtype=np.float64).reshape(-1)
-    predicted = np.asarray(predictions, dtype=np.float64).reshape(-1)
-    ages = np.asarray(cutoffs, dtype=np.float64).reshape(-1)
-    if observed.shape != predicted.shape or observed.shape != ages.shape:
-        raise TensorBoardMonitoringError(
-            "Age-band targets, predictions, and cutoffs must have equal shapes"
-        )
-    if not np.isfinite(ages).all():
-        raise TensorBoardMonitoringError("Age-band cutoffs must be finite")
-
-    bands = {
-        "1_50": (ages >= 1.0) & (ages <= 50.0),
-        "51_100": (ages >= 51.0) & (ages <= 100.0),
-        "101_200": (ages >= 101.0) & (ages <= 200.0),
-        "over_200": ages > 200.0,
-    }
-    result: dict[str, float] = {}
-    for label, mask in bands.items():
-        if not np.any(mask):
-            continue
-        result[f"age_band/{label}/rows"] = float(np.sum(mask))
-        metrics = calculate_regression_metrics(observed[mask], predicted[mask])
-        for metric, value in metrics.items():
-            result[f"age_band/{label}/{metric}"] = value
-    return result
-
-
 class TensorBoardStudyMonitor:
     """Own one shared SummaryWriter for every fit inside one study.
 
     A study is one model family evaluated on one outer fold: every candidate
     and inner fold in Step 5, or every retraining seed in Step 6. Sharing one
-    writer across the whole study keeps the generated directory count fixed
-    at one per study regardless of the candidate budget or inner-fold count,
-    while ``TrainingRunContext.tag_prefix()`` keeps each fit's curves
-    separately selectable inside that one run.
+    writer across the whole study keeps the generated directory count fixed at
+    one per study regardless of the candidate budget or inner-fold count, while
+    ``TrainingRunContext.tag_prefix()`` keeps each fit's curves separately
+    selectable inside that one run.
+
+    A writer that cannot be created or written to disables monitoring for the
+    remainder of the study instead of interrupting training.
     """
 
     def __init__(
@@ -320,6 +320,15 @@ class TensorBoardStudyMonitor:
             self.log_root,
             self._study_key + ("fit_progress",),
         )
+        # Step 6 always publishes curves. Step 5 does so only when an operator
+        # is debugging one architecture, because a full search would otherwise
+        # fill one scalar panel with a prefix per candidate and inner fold.
+        self.fit_curves_enabled = stage == "step_6" or step_5_fit_curves_enabled()
+        self._writer: Any | None = None
+        self._closed = False
+
+        if not self.fit_curves_enabled:
+            return
         _replace_run_directory(self.log_directory, self.log_root)
         writer_class = _summary_writer_class()
         try:
@@ -330,11 +339,8 @@ class TensorBoardStudyMonitor:
                 purge_step=0,
             )
         except Exception as error:
-            raise TensorBoardMonitoringError(
-                f"Cannot create TensorBoard writer at {self.log_directory}: {error}"
-            ) from error
-        self._closed = False
-        self._writer_failed = False
+            _report_monitoring_failure(str(self.log_directory), error)
+            self._writer = None
 
     def __enter__(self) -> TensorBoardStudyMonitor:
         """Return this monitor for a readable with statement in each runner."""
@@ -347,46 +353,38 @@ class TensorBoardStudyMonitor:
         exception: BaseException | None,
         traceback: Any,
     ) -> bool:
-        """Close the shared writer without hiding an error from the study."""
+        """Close the shared writer without ever masking the study's own error."""
 
-        try:
-            self.close()
-        except TensorBoardMonitoringError:
-            if exception is None:
-                raise
+        self.close()
         return False
 
     def _perform_write(self, action: Callable[[], None]) -> None:
-        """Execute and flush one event group so disk failures stop the fit."""
+        """Execute and flush one event group, disabling monitoring on failure."""
 
-        if self._closed:
-            raise TensorBoardMonitoringError(
-                "Cannot write to a closed TensorBoard study monitor"
-            )
+        if self._writer is None or self._closed:
+            return
         try:
             action()
             self._writer.flush()
         except Exception as error:
-            self._writer_failed = True
-            raise TensorBoardMonitoringError(
-                f"TensorBoard failed to write {self.log_directory}: {error}"
-            ) from error
+            _report_monitoring_failure(str(self.log_directory), error)
+            self._writer = None
 
     def close(self) -> None:
         """Flush and close this writer exactly once."""
 
         if self._closed:
             return
+        self._closed = True
+        if self._writer is None:
+            return
         try:
             self._writer.flush()
             self._writer.close()
         except Exception as error:
-            self._writer_failed = True
-            raise TensorBoardMonitoringError(
-                f"Cannot close TensorBoard writer {self.log_directory}: {error}"
-            ) from error
+            _report_monitoring_failure(str(self.log_directory), error)
         finally:
-            self._closed = True
+            self._writer = None
 
     def fit(self, context: TrainingRunContext) -> TensorBoardFitMonitor:
         """Return one tag-scoped monitor for a single fit inside this study."""
@@ -400,11 +398,11 @@ class TensorBoardStudyMonitor:
 
 
 class TensorBoardFitMonitor:
-    """Scope one fit's tagged events onto its study's shared writer.
+    """Scope one fit's optimization curves onto its study's shared writer.
 
-    Every public method mirrors what a dedicated per-fit writer used to
-    provide, so model adapters and Step 5/6 runners see no behavioral
-    difference beyond the writer being shared with sibling fits.
+    A fit publishes exactly two curves, "train/loss" and "val/rmse", and only
+    while it is running. Everything a fit produced once it finished belongs to
+    the owning step's own artifacts.
     """
 
     def __init__(
@@ -416,7 +414,6 @@ class TensorBoardFitMonitor:
         self.context = context
         self.log_directory = study.log_directory
         self._prefix = context.tag_prefix()
-        self._completed = False
         self._logged_training_steps: set[int] = set()
 
     def __enter__(self) -> TensorBoardFitMonitor:
@@ -430,82 +427,29 @@ class TensorBoardFitMonitor:
         exception: BaseException | None,
         traceback: Any,
     ) -> bool:
-        """Record a failed fit or require a completion record, never both."""
+        """Leave the shared study writer open for the fits that follow."""
 
-        pending_error: BaseException | None = None
-        if exception is not None:
-            try:
-                self._write_text("progress/error", str(exception), step=0)
-                self._write_scalars({"progress/status": -1.0}, step=0)
-            except TensorBoardMonitoringError as error:
-                pending_error = error
-        elif not self._completed:
-            pending_error = TensorBoardMonitoringError(
-                f"Monitored fit {self.context.configuration_id!r} exited without "
-                "a completion record"
-            )
-        if exception is None and pending_error is not None:
-            raise pending_error
         return False
-
-    def _tag(self, tag: str) -> str:
-        """Namespace one scalar or text tag under this fit's study prefix."""
-
-        return f"{self._prefix}/{tag}"
-
-    def _write_text(self, tag: str, text: str, *, step: int) -> None:
-        """Write one text event through the shared study writer."""
-
-        full_tag = self._tag(tag)
-        self.study._perform_write(
-            lambda: self.study._writer.add_text(full_tag, text, step)
-        )
 
     def _write_scalars(self, values: Mapping[str, Any], *, step: int) -> None:
         """Write all finite values as one flushed, tag-prefixed event group."""
 
+        writer = self.study._writer
+        if writer is None:
+            return
         normalized = {
-            self._tag(tag): numeric
+            f"{self._prefix}/{tag}": numeric
             for tag, value in values.items()
             if (numeric := _finite_scalar(value)) is not None
         }
+        if not normalized:
+            return
 
         def write() -> None:
             for tag, value in normalized.items():
-                self.study._writer.add_scalar(tag, value, step)
+                writer.add_scalar(tag, value, step)
 
         self.study._perform_write(write)
-
-    def start_fit(
-        self,
-        *,
-        hyperparameters: Mapping[str, Any],
-        training_data: Any,
-        validation_data: Any | None,
-    ) -> None:
-        """Write static configuration and data dimensions before model fitting."""
-
-        run_details = asdict(self.context)
-        self._write_text("configuration/run", _json_text(run_details), step=0)
-        self._write_text(
-            "configuration/hyperparameters",
-            _json_text(hyperparameters),
-            step=0,
-        )
-        self._write_scalars(
-            {
-                "data/training_rows": len(training_data),
-                "data/validation_rows": (
-                    0 if validation_data is None else len(validation_data)
-                ),
-                "data/input_features": _input_feature_count(
-                    training_data,
-                    self.context.representation,
-                ),
-                "progress/status": 0.0,
-            },
-            step=0,
-        )
 
     def log_training_step(
         self,
@@ -520,6 +464,8 @@ class TensorBoardFitMonitor:
             raise TensorBoardMonitoringError(
                 "Training progress steps must use positive one-based values"
             )
+        if not self.study.fit_curves_enabled or self.study._writer is None:
+            return False
         interval = (
             XGBOOST_LOG_INTERVAL
             if self.context.model_family == "xgboost"
@@ -545,41 +491,6 @@ class TensorBoardFitMonitor:
 
         return XGBoostProgressCallback(progress_reporter)
 
-    def complete_fit(
-        self,
-        *,
-        training_summary: Mapping[str, Any],
-        inference_seconds: float,
-        evaluation_metrics: Mapping[str, Any] | None,
-        prediction_rows: int,
-    ) -> None:
-        """Record final fit facts and permitted performance values."""
-
-        values: dict[str, Any] = {
-            "timing/training_seconds": training_summary.get("training_seconds"),
-            "timing/inference_seconds": inference_seconds,
-            "model/epochs_or_iterations": training_summary.get(
-                "epochs_or_iterations"
-            ),
-            "model/best_epoch_or_iteration": training_summary.get(
-                "best_epoch_or_iteration"
-            ),
-            "model/trainable_parameters": training_summary.get(
-                "trainable_parameters"
-            ),
-            "data/prediction_rows": prediction_rows,
-            "progress/status": 1.0,
-        }
-        if evaluation_metrics is not None:
-            values.update(
-                {
-                    f"performance/{name}": value
-                    for name, value in evaluation_metrics.items()
-                }
-            )
-        self._write_scalars(values, step=0)
-        self._completed = True
-
 
 def create_study_monitor(
     *,
@@ -588,7 +499,7 @@ def create_study_monitor(
     outer_fold: int,
     log_root: Path = DEFAULT_LOG_ROOT,
 ) -> TensorBoardStudyMonitor:
-    """Create the mandatory shared writer used by one Step 5 or Step 6 study."""
+    """Create the shared writer used by one Step 5 or Step 6 study."""
 
     ensure_tensorboard_available()
     return TensorBoardStudyMonitor(
@@ -599,61 +510,21 @@ def create_study_monitor(
     )
 
 
-def _write_one_shot_run(
-    run_directory: Path,
-    *,
-    log_root: Path,
-    scalars: Mapping[str, Any],
-    step: int,
-    text_values: Mapping[str, Mapping[str, Any]] | None = None,
-    replace: bool,
-    purge_step: int | None = None,
-) -> None:
-    """Write a small summary run without leaking writer logic to a pipeline step."""
-
-    ensure_tensorboard_available()
-    if replace:
-        _replace_run_directory(run_directory, log_root)
-    else:
-        run_directory.mkdir(parents=True, exist_ok=True)
-    writer_class = _summary_writer_class()
-    writer: Any | None = None
-    try:
-        writer = writer_class(
-            log_dir=str(run_directory),
-            max_queue=1,
-            flush_secs=WRITER_FLUSH_SECONDS,
-            purge_step=purge_step,
-        )
-        for tag, value in scalars.items():
-            numeric = _finite_scalar(value)
-            if numeric is not None:
-                writer.add_scalar(tag, numeric, step)
-        for tag, value in (text_values or {}).items():
-            writer.add_text(tag, _json_text(value), step)
-        writer.flush()
-        writer.close()
-    except Exception as error:
-        if writer is not None:
-            try:
-                writer.close()
-            except Exception:
-                pass
-        raise TensorBoardMonitoringError(
-            f"Cannot write TensorBoard summary at {run_directory}: {error}"
-        ) from error
-
-
 def log_step_5_candidate(
     *,
     model_family: str,
     outer_fold: int,
     candidate_number: int,
-    candidate_record: Mapping[str, Any],
+    mean_inner_rmse: Any,
     hyperparameters: Mapping[str, Any],
     log_root: Path = DEFAULT_LOG_ROOT,
 ) -> None:
-    """Append one completed tuning candidate to its study-level live curve."""
+    """Append one completed tuning candidate to its study's search curve.
+
+    This is the curve an operator actually watches during a Step 5 run: has
+    the search improved, and has it plateaued. The accompanying text makes a
+    point on that curve interpretable without opening the Step 5 CSV.
+    """
 
     run_directory = _safe_run_directory(
         log_root,
@@ -664,134 +535,39 @@ def log_step_5_candidate(
             "study_progress",
         ),
     )
-    _write_one_shot_run(
-        run_directory,
-        log_root=log_root,
-        scalars={
-            "candidate/mean_inner_rmse": candidate_record.get("mean_inner_rmse"),
-            "candidate/inner_rmse_standard_deviation": candidate_record.get(
-                "inner_rmse_standard_deviation"
-            ),
-            "candidate/mean_training_seconds": candidate_record.get(
-                "mean_training_seconds"
-            ),
-            "candidate/total_training_seconds": candidate_record.get(
-                "total_training_seconds"
-            ),
-            "candidate/mean_inference_seconds": candidate_record.get(
-                "mean_inference_seconds"
-            ),
-            "candidate/outer_retraining_iterations": candidate_record.get(
-                "outer_retraining_iterations"
-            ),
-        },
-        step=candidate_number,
-        text_values={
-            f"configuration/candidate_{candidate_number:03d}": hyperparameters,
-        },
-        replace=candidate_number == 1,
-        purge_step=None if candidate_number == 1 else candidate_number,
-    )
-
-
-def log_step_5_selection(
-    *,
-    model_family: str,
-    outer_fold: int,
-    selected_record: Mapping[str, Any],
-    log_root: Path = DEFAULT_LOG_ROOT,
-) -> None:
-    """Mark the automatically selected candidate inside one model family."""
-
-    candidate_number = int(selected_record["candidate_number"])
-    run_directory = _safe_run_directory(
-        log_root,
-        (
-            "step_5",
-            model_family,
-            f"outer_fold_{outer_fold:02d}",
-            "study_progress",
-        ),
-    )
-    _write_one_shot_run(
-        run_directory,
-        log_root=log_root,
-        scalars={
-            "selection/selected_candidate_number": candidate_number,
-            "selection/selected_mean_inner_rmse": selected_record.get(
-                "mean_inner_rmse"
-            ),
-        },
-        step=candidate_number,
-        text_values={"selection/configuration": selected_record},
-        replace=False,
-    )
-
-
-def publish_step_7_comparison(
-    architecture_comparison: Any,
-    efficiency_summary: Any,
-    grouped_architecture_metrics: Any | None = None,
-    *,
-    log_root: Path = DEFAULT_LOG_ROOT,
-) -> None:
-    """Publish final locked metrics only after Step 7 has passed its gate."""
-
-    efficiency_lookup = efficiency_summary.set_index("model_family")
-    for row in architecture_comparison.to_dict("records"):
-        family = str(row["model_family"])
-        efficiency = efficiency_lookup.loc[family].to_dict()
-        run_directory = _safe_run_directory(
-            log_root,
-            ("step_7", "final_comparison", family),
+    try:
+        ensure_tensorboard_available()
+        if candidate_number == 1:
+            _replace_run_directory(run_directory, log_root)
+        else:
+            run_directory.mkdir(parents=True, exist_ok=True)
+        writer_class = _summary_writer_class()
+        writer = writer_class(
+            log_dir=str(run_directory),
+            max_queue=1,
+            flush_secs=WRITER_FLUSH_SECONDS,
+            # A repeated candidate number replaces its earlier point instead
+            # of appending a second one, so a resumed study stays readable.
+            purge_step=None if candidate_number == 1 else candidate_number,
         )
-        scalars: dict[str, Any] = {"progress/status": 1.0}
-        for metric in ("rmse", "mae", "r2", "bias"):
-            scalars[f"locked_performance/{metric}_mean"] = row.get(
-                f"{metric}_mean"
-            )
-            scalars[f"locked_performance/{metric}_seed_sd"] = row.get(
-                f"{metric}_seed_sd"
-            )
-            scalars[f"locked_uncertainty/{metric}_ci_lower_95"] = row.get(
-                f"{metric}_ci_lower_95"
-            )
-            scalars[f"locked_uncertainty/{metric}_ci_upper_95"] = row.get(
-                f"{metric}_ci_upper_95"
-            )
-        for name in (
-            "training_seconds_mean_per_run",
-            "training_seconds_total",
-            "inference_seconds_mean_per_run",
-            "inference_milliseconds_per_endpoint",
-            "trainable_parameters_mean",
-            "serialized_model_bytes_mean",
-        ):
-            scalars[f"efficiency/{name}"] = efficiency.get(name)
-        if grouped_architecture_metrics is not None:
-            age_rows = grouped_architecture_metrics.loc[
-                (grouped_architecture_metrics["model_family"] == family)
-                & (grouped_architecture_metrics["group_type"] == "age_band")
-            ]
-            for age_row in age_rows.to_dict("records"):
-                label = str(age_row["group_value"]).replace(">", "over_")
-                label = label.replace("-", "_").replace(" ", "")
-                for metric in ("rmse", "mae", "r2", "bias"):
-                    scalars[f"locked_age_band/{label}/{metric}_mean"] = (
-                        age_row.get(f"{metric}_mean")
-                    )
-                    scalars[f"locked_age_band/{label}/{metric}_seed_sd"] = (
-                        age_row.get(f"{metric}_seed_sd")
-                    )
-        _write_one_shot_run(
-            run_directory,
-            log_root=log_root,
-            scalars=scalars,
-            step=0,
-            text_values={
-                "comparison/architecture": {
-                    "model_family": family,
-                }
-            },
-            replace=True,
+    except Exception as error:
+        _report_monitoring_failure(str(run_directory), error)
+        return
+
+    try:
+        rmse = _finite_scalar(mean_inner_rmse)
+        if rmse is not None:
+            writer.add_scalar("search/candidate_rmse", rmse, candidate_number)
+        writer.add_text(
+            f"search/candidate_{candidate_number:03d}",
+            _json_text(hyperparameters),
+            candidate_number,
         )
+        writer.flush()
+    except Exception as error:
+        _report_monitoring_failure(str(run_directory), error)
+    finally:
+        try:
+            writer.close()
+        except Exception:
+            pass

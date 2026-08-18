@@ -113,8 +113,14 @@ class ModelAdapter(ABC):
 
         Only neural models and XGBoost call this method because the remaining
         libraries expose one atomic fitting operation rather than meaningful
-        optimization iterations. Their start, finish, timing, and performance
-        facts are recorded by the shared Step 5 and Step 6 runners.
+        optimization iterations. Those families therefore have no live curve;
+        everything about their fits is recorded in the Step 5 and Step 6
+        artifacts, which is where every family's finished numbers belong.
+
+        The monitor accepts exactly two scalar tags, "train/loss" and
+        "val/rmse", and returns False whenever the value was not written --
+        because the configured logging interval was not due, or because
+        per-fit curves are switched off for this study.
         """
 
         if self._training_monitor is None:

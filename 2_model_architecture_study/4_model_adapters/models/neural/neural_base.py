@@ -6,7 +6,6 @@ from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 import random
-from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -185,7 +184,6 @@ class NeuralModelAdapter(ModelAdapter):
         epochs_completed = 0
 
         for epoch in range(1, maximum_epochs + 1):
-            epoch_started_at = perf_counter()
             epoch_weighted_squared_error = 0.0
             epoch_weight_total = 0.0
             self.network.train()
@@ -229,25 +227,16 @@ class NeuralModelAdapter(ModelAdapter):
                 else:
                     epochs_without_improvement += 1
 
+            # Only the two shared curve tags are published. The best score is
+            # the running minimum of "val/rmse", the early-stopping patience is
+            # the flat stretch that follows that minimum, and the learning rate
+            # is constant while no schedule is attached, so none of them need a
+            # tag of their own.
             progress_scalars: dict[str, Any] = {
-                "optimization/training_weighted_mse": (
-                    epoch_weighted_squared_error / epoch_weight_total
-                ),
-                "optimization/learning_rate": optimizer.param_groups[0]["lr"],
-                "timing/seconds_per_epoch": perf_counter() - epoch_started_at,
+                "train/loss": epoch_weighted_squared_error / epoch_weight_total,
             }
             if validation_rmse is not None:
-                progress_scalars.update(
-                    {
-                        "optimization/validation_rmse": validation_rmse,
-                        "optimization/best_validation_rmse": best_rmse,
-                        "early_stopping/patience_used": epochs_without_improvement,
-                        "early_stopping/patience_remaining": (
-                            self.training_config.early_stopping_patience
-                            - epochs_without_improvement
-                        ),
-                    }
-                )
+                progress_scalars["val/rmse"] = validation_rmse
             self.log_training_step(step=epoch, scalars=progress_scalars)
 
             if (

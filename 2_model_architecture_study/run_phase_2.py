@@ -26,8 +26,10 @@ REPOSITORY_ROOT = PHASE_DIR.parent
 
 from tensorboard_monitoring import (  # noqa: E402
     DEFAULT_LOG_ROOT,
+    FIT_CURVE_ENVIRONMENT_VARIABLE,
     TensorBoardMonitoringError,
     ensure_tensorboard_available,
+    step_5_fit_curves_enabled,
 )
 
 SPECIFICATION_PATH = (
@@ -654,6 +656,12 @@ def run_pipeline(
         f"TensorBoard {tensorboard_version} logging to {DEFAULT_LOG_ROOT}",
         flush=True,
     )
+    if step_5_fit_curves_enabled():
+        print(
+            f"{FIT_CURVE_ENVIRONMENT_VARIABLE} is set: Step 5 inner fits will "
+            "write per-epoch curves",
+            flush=True,
+        )
     if force:
         print(
             "Force mode is enabled for the expensive Step 5 and Step 6 work",

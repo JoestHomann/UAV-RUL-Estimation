@@ -2,58 +2,35 @@
 
 from __future__ import annotations
 
-from time import perf_counter
 from typing import Any, Callable
 
 from xgboost.callback import TrainingCallback
 
 
 class XGBoostProgressCallback(TrainingCallback):
-    """Translate XGBoost evaluation history into stable scalar event names."""
+    """Translate XGBoost evaluation history into the two shared curve tags."""
 
     def __init__(self, progress_reporter: Callable[..., bool]) -> None:
         self.progress_reporter = progress_reporter
-        self.last_logged_at = perf_counter()
-        self.last_logged_step = 0
 
     @staticmethod
     def _round_scalars(
         evaluations: dict[str, dict[str, list[float]]],
     ) -> dict[str, float]:
-        """Map XGBoost evaluation-set names to dashboard scalar tags."""
+        """Map XGBoost evaluation-set names to the shared curve tags.
+
+        The first evaluation set is the training data and the second, when
+        present, is the inner validation fold that drives early stopping.
+        """
 
         scalars: dict[str, float] = {}
         training = evaluations.get("validation_0", {}).get("rmse", [])
         validation = evaluations.get("validation_1", {}).get("rmse", [])
         if training:
-            scalars["optimization/training_rmse"] = float(training[-1])
+            scalars["train/loss"] = float(training[-1])
         if validation:
-            scalars["optimization/validation_rmse"] = float(validation[-1])
+            scalars["val/rmse"] = float(validation[-1])
         return scalars
-
-    def _log(
-        self,
-        *,
-        step: int,
-        evaluations: dict[str, dict[str, list[float]]],
-        force: bool,
-    ) -> None:
-        """Add average iteration time and apply the shared sampling policy."""
-
-        current_time = perf_counter()
-        rounds_since_last_log = max(1, step - self.last_logged_step)
-        scalars = self._round_scalars(evaluations)
-        scalars["timing/seconds_per_iteration"] = (
-            current_time - self.last_logged_at
-        ) / rounds_since_last_log
-        written = self.progress_reporter(
-            step=step,
-            scalars=scalars,
-            force=force,
-        )
-        if written:
-            self.last_logged_at = current_time
-            self.last_logged_step = step
 
     def after_iteration(
         self,
@@ -63,7 +40,11 @@ class XGBoostProgressCallback(TrainingCallback):
     ) -> bool:
         """Receive the official zero-based XGBoost training iteration."""
 
-        self._log(step=epoch + 1, evaluations=evals_log, force=False)
+        self.progress_reporter(
+            step=epoch + 1,
+            scalars=self._round_scalars(evals_log),
+            force=False,
+        )
         return False
 
     def log_final_round(
@@ -73,5 +54,10 @@ class XGBoostProgressCallback(TrainingCallback):
         """Guarantee that a final round outside the ten-round interval is shown."""
 
         training = evaluations.get("validation_0", {}).get("rmse", [])
-        if training:
-            self._log(step=len(training), evaluations=evaluations, force=True)
+        if not training:
+            return
+        self.progress_reporter(
+            step=len(training),
+            scalars=self._round_scalars(evaluations),
+            force=True,
+        )

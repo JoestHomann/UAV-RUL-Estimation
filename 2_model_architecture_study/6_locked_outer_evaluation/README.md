@@ -53,10 +53,11 @@ No early stopping is performed against locked targets.
 
 ## TensorBoard monitoring boundary
 
-Step 6 writes architecture, outer fold, seed, fixed duration, training progress,
-dimensions, timing, and completion state to TensorBoard. It does not publish
-locked RMSE, MAE, R2, bias, predictions, or residuals while evaluation runs are
-in progress. The complete locked comparison appears only after the Step 7 gate
+Step 6 publishes one tag, "train/loss", per retraining seed, below
+"tensorboard_monitoring/logs/step_6/<family>/outer_fold_N/fit_progress". It
+receives no locked validation dataset, so it cannot calculate -- let alone
+publish -- a locked RMSE, MAE, R2, bias, prediction, or residual. The complete
+locked comparison appears only in the Step 7 artifacts, after that step's gate
 passes.
 
 ## Retraining seeds
@@ -116,6 +117,6 @@ evaluation can start.
 
 ## Current state
 
-The earlier partial Step 5 training outputs were removed before mandatory
+The earlier partial Step 5 training outputs were removed before the current
 TensorBoard monitoring was introduced. Step 6 remains closed until the new
 40-study Step 5 run is complete.
