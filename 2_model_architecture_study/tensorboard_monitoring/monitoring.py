@@ -611,7 +611,7 @@ def log_global_progress(
         
     run_directory = _safe_run_directory(
         log_root,
-        ("global_progress", f"step_{step_number}"),
+        ("global_progress", f"step_{step_number}", model_family),
     )
     
     try:
@@ -626,10 +626,9 @@ def log_global_progress(
             flush_secs=1,
         )
         
-        # We use time.time() so the X-axis is absolute wall-clock time,
-        # allowing all families to accurately overlay on the same time scale.
+        # We use time.time() so the X-axis is absolute wall-clock time.
         writer.add_scalar(
-            f"completed_outer_folds/{model_family}", 
+            "completed_outer_folds", 
             completed_count, 
             global_step=int(time.time())
         )
