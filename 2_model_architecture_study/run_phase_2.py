@@ -39,6 +39,7 @@ from tensorboard_monitoring import (  # noqa: E402
     TensorBoardMonitoringError,
     ensure_tensorboard_available,
     step_5_fit_curves_enabled,
+    log_global_progress,
 )
 
 SPECIFICATION_PATH = (
@@ -332,6 +333,11 @@ def _run_pairs_in_parallel(
     environment = _single_process_environment()
     stop_after_failure = threading.Event()
 
+    # Track completions per family and pre-log 0 so the dashboard starts immediately
+    completed_counts = {family: 0 for family, _ in pairs}
+    for family in completed_counts:
+        log_global_progress(step.number, family, 0)
+
     def _run_one(family: str, outer_fold: int) -> None:
         if stop_after_failure.is_set():
             raise _StudySkipped(family, outer_fold)
@@ -351,6 +357,12 @@ def _run_pairs_in_parallel(
             pair = futures[future]
             try:
                 future.result()
+                
+                # On success, increment and log progress
+                family = pair[0]
+                completed_counts[family] += 1
+                log_global_progress(step.number, family, completed_counts[family])
+                
             except (CancelledError, _StudySkipped):
                 # Expected once a failure stops new studies from starting;
                 # the original failure is what gets raised below.

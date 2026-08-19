@@ -596,3 +596,43 @@ def log_step_5_candidate(
             writer.close()
         except Exception:
             pass
+
+import time
+
+def log_global_progress(
+    step_number: int,
+    model_family: str,
+    completed_count: int,
+    log_root: Path | None = None,
+) -> None:
+    """Log the total completed outer folds across an entire step."""
+    if log_root is None:
+        log_root = default_log_root()
+        
+    run_directory = _safe_run_directory(
+        log_root,
+        ("global_progress", f"step_{step_number}"),
+    )
+    
+    try:
+        ensure_tensorboard_available()
+        run_directory.mkdir(parents=True, exist_ok=True)
+        writer_class = _summary_writer_class()
+        
+        # Open and close the writer quickly to ensure it flushes
+        writer = writer_class(
+            log_dir=str(run_directory),
+            max_queue=1,
+            flush_secs=1,
+        )
+        
+        # We use time.time() so the X-axis is absolute wall-clock time,
+        # allowing all families to accurately overlay on the same time scale.
+        writer.add_scalar(
+            f"completed_outer_folds/{model_family}", 
+            completed_count, 
+            global_step=int(time.time())
+        )
+        writer.close()
+    except Exception as error:
+        _report_monitoring_failure(str(run_directory), error)
