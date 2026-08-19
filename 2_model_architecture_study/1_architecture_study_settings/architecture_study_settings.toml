@@ -1,60 +1,27 @@
-# Human-readable source of truth for the Phase 2 architecture study.
+# Human-readable source of truth for the Phase 2 architecture study. Scripts
+# read the JSON specification generated from this file, and only after schema
+# and Phase 1 verification pass, so every run traces to one configuration.
+# Scientific values cannot be overridden with command-line flags.
 #
+# Live training progress: in a second PowerShell terminal at the repository
+# root run tensorboard_monitoring\launch_tensorboard.py, then open the printed
+# address, normally http://localhost:6006
 
-# To watch training progress live while Step 5/6 run, open a second
-# PowerShell terminal in the repository root and launch TensorBoard:
-#   .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
-# Then open the printed address in a browser, normally http://localhost:6006
-
-
-# Later scripts read the generated JSON specification, which is created from
-# this file only after schema and Phase 1 input verification.  Scientific
-# values cannot be overridden through command-line flags.  This keeps every
-# run traceable to one inspectable configuration.
-#
-# This integer is incremented manually whenever an experiment setting
-# changes.  It is a simple revision number, not an automatic model or data
-# version.
-settings_version = 4
-
-# Which numbered run the expensive steps read and write.  Steps 5, 6 and 7
-# place every artifact under "runs/run_<run_number>/", so this integer alone
-# decides whether work continues an existing run or starts a new one.
-#
-# It is never advanced automatically.  That is the point: stopping Phase 2 and
-# resuming it later leaves this value untouched, so the resumed part lands in
-# the same folder as the part that already finished, and a partially complete
-# run can never end up split across two run numbers.  Increment it by hand only
-# when a genuinely new run should begin, which starts that run from nothing
-# rather than resuming.
-#
-# Options: any positive integer.
-run_number = 1
+# Revision number of this configuration, incremented by hand on any change.
+settings_version = 4    # Options: any positive integer
+# Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
+# interrupted run resumes into the folder it started in.
+run_number = 1    # Options: any positive integer
 
 [execution]
-# How many independent Step 5/6 family/outer-fold studies run at the same
-# time, each as its own subprocess. "auto" uses every available CPU core
-# (matching the previous hardcoded default); any positive integer runs
-# exactly that many at once, and 1 runs strictly sequentially.
-# Unlike every other setting in this file, this is an execution/performance
-# knob rather than a scientific one -- it changes wall-clock time only, never
-# results -- so run_phase_2.py's --max-workers flag is allowed to override it
-# for one-off runs without touching this file.
-# Options: "auto", or any positive integer.
-max_workers = 7
+# Step 5/6 studies run at once, each a subprocess; the one performance-only
+# knob here, so --max-workers may override it without editing this file.
+max_workers = 7    # Options: "auto", or any positive integer
 
 [study]
-# The architectures that run in the comparison. Nothing here forces any of
-# them to stay enabled -- disabling one via [study.enabled] below simply
-# drops it from the run, the same way a conditional or optional architecture
-# is skipped.
-# Conditional and optional architectures stay explicit in this settings file
-# but are skipped while disabled in [study.enabled] below.
-# Options: any architecture name that also has an [architectures.*] table
-# below (currently mean_baseline, cycle_only_baseline, regularized_linear,
-# random_forest, xgboost, mlp, tcn, lstm, transformer, rbf_svr). Every such
-# name must appear in exactly one of the three lists below.
-architectures_to_run = [
+# Architectures in the comparison. Every name in the three lists below needs an
+# [architectures.*] table and must appear in exactly one list.
+architectures_to_run = [    # Options: any declared architecture name
     "mean_baseline",
     "cycle_only_baseline",
     "regularized_linear",
@@ -64,16 +31,16 @@ architectures_to_run = [
     "tcn",
     "lstm",
 ]
-conditional_architectures = ["transformer"]  # gated on a prerequisite, not results: promote once TCN/LSTM prove out (data has only 100 independent UAVs, so attention is an overfitting risk until then)
-optional_architectures = ["rbf_svr"]  # not prerequisite-gated: a reasonable extra nonlinear reference, added only if the core comparison leaves a question open or time allows
+# Held back on a prerequisite, not on results: promote the transformer once TCN
+# and LSTM prove out, since 100 UAVs make attention an overfitting risk.
+conditional_architectures = ["transformer"]    # Options: any declared name
+# Neither required nor gated, added only if a question stays open or time allows.
+optional_architectures = ["rbf_svr"]    # Options: any declared name
 
 [study.enabled]
-# The single on/off switch for every architecture declared above. Setting an
-# entry to false drops that architecture from the run, the same way a
-# conditional or optional architecture is skipped -- nothing else in this
-# file needs to change to turn a model off or on. Every name listed in
-# architectures_to_run, conditional_architectures, and
-# optional_architectures above must appear here exactly once.
+# The single on/off switch per architecture; false drops it from the run and
+# nothing else changes. Every name in the three [study] lists appears once here.
+# Options: true, false.
 mean_baseline = true
 cycle_only_baseline = true
 regularized_linear = true
@@ -84,90 +51,55 @@ tcn = true
 lstm = true
 transformer = false
 rbf_svr = false
-
-# The pipeline always saves every architecture's predictions, metrics, and
-# comparison plots, and never declares a winner: the final selection is made
-# by the user after inspecting the complete evidence. These are fixed
-# pipeline behaviors, not configurable settings, so there is nothing to set
-# here for them.
+# Saving every architecture's results and never declaring a winner are fixed
+# pipeline behaviors with nothing to configure.
 
 [tuning]
-# Hyperparameters are optimized independently inside each architecture
-# family.  The tuner may choose the best configuration of a model, but it may
-# not choose one architecture over another.
-# Any positive integer: the number of distinct candidate configurations
-# Optuna tries per tunable architecture family. Architectures with no tunable
-# choices (the two baselines) always use exactly one candidate regardless of
-# this value.
-candidate_budget_per_architecture = 20
-
-# The search seed makes candidate generation repeatable.  The retraining
-# seeds quantify variation in stochastic architectures after tuning has
-# finished.
-# Any integer.
-search_seed = 13
-# Any list of distinct integers; one retraining run is produced per seed for
-# stochastic architectures (random_forest, xgboost, mlp, tcn, lstm).
-retraining_seeds = [13, 37, 73]
-
-# For early-stopped models, outer-fold retraining uses the median best
-# iteration/epoch found in the inner folds when retraining on the outer-fold
-# development data.  This avoids looking at the outer validation targets to
-# decide training duration.
+# Candidate configurations Optuna tries per tunable family; the two baselines
+# have nothing to tune and always use one.
+candidate_budget_per_architecture = 20    # Options: any positive integer
+# Seed making candidate generation repeatable.
+search_seed = 13    # Options: any integer
+# Seeds quantifying run-to-run variation, one retraining run each for the
+# stochastic families (random_forest, xgboost, mlp, tcn, lstm).
+retraining_seeds = [13, 37, 73]    # Options: any list of distinct integers
+# Early-stopped models retrain for the median best iteration found in the inner
+# folds, so training duration never looks at outer validation targets.
 
 [evaluation]
-# Every architecture is evaluated with the same metrics and report
-# breakdowns.  RMSE is the tuning objective; the other metrics expose
-# complementary error properties and are not combined into an automatic
-# ranking score.
-# Options: any subset of "r2", "rmse", "mae", "bias".
-metrics = ["r2", "rmse", "mae", "bias"]
-# Options: any subset of "overall", "scenario", "outer_fold", "age_band",
-# "lifetime_quantile".
-reported_groups = [
+# Metrics for every architecture and group; RMSE is the tuning objective and
+# the rest are never combined into an automatic ranking score.
+metrics = ["r2", "rmse", "mae", "bias"]    # Options: any subset of these four
+# Breakdowns reported alongside the overall result.
+reported_groups = [    # Options: any subset of the five below
     "overall",
     "scenario",
     "outer_fold",
     "age_band",
     "lifetime_quantile",
 ]
-
-# RUL cannot be negative, so reported predictions are clipped at zero.  Equal
-# total UAV weight prevents UAVs that generated more prefix samples from
-# having greater influence solely because of their history length.
-# Any float; predictions below this value are clipped up to it.
-prediction_minimum = 0.0
-
-# Resampling whole UAVs preserves the dependence among prefixes from the same
-# vehicle when confidence intervals are calculated.
-# Any positive integer: the number of bootstrap resamples drawn.
-bootstrap_repetitions = 1000
-# Any integer.
-bootstrap_seed = 20260814
+# Floor on reported predictions, since remaining useful life cannot be negative.
+prediction_minimum = 0.0    # Options: any float
+# Bootstrap resamples for confidence intervals, resampling whole UAVs so
+# prefixes from one vehicle stay together.
+bootstrap_repetitions = 1000    # Options: any positive integer
+# Seed making the bootstrap repeatable.
+bootstrap_seed = 20260814    # Options: any integer
 
 [representations]
-# Tabular adapters select one of the Phase 1 feature-set columns.  Sequence
-# adapters instead receive ordered telemetry windows from the explicit
-# channel list below; the two input forms are kept separate by the verifier.
-# Options: any subset of "age_only", "last_values", "screened",
-# "all_nonconstant". Each [architectures.*] table's own "feature_sets" list
-# must be a subset of the set chosen here.
-tabular_feature_sets = [
+# Feature sets available to tabular architectures; each architecture's own
+# "feature_sets" must be a subset of this.
+tabular_feature_sets = [    # Options: any subset of the four below
     "age_only",
     "last_values",
     "screened",
     "all_nonconstant",
 ]
-
-# These are the 22 telemetry channels retained after Phase 0
-# constant-feature screening.  Storing every name explicitly prevents later
-# code from depending on incidental CSV column order.
-# Any positive integer; must equal the number of entries in
-# "sequence_channels" below.
-sequence_channel_count = 22
-# Any list of unique channel-name strings, with as many entries as
-# "sequence_channel_count" declares.
-sequence_channels = [
+# Telemetry channels sequence models receive; must equal the list length below.
+sequence_channel_count = 22    # Options: any positive integer
+# The channels kept after Phase 0 screening, listed explicitly so later code
+# never depends on CSV column order.
+sequence_channels = [    # Options: any list of unique channel names
     "telemetry_01",
     "telemetry_02",
     "telemetry_04",
@@ -191,387 +123,397 @@ sequence_channels = [
     "telemetry_26",
     "telemetry_28",
 ]
-
-# Each sequence model is compared at the same history-window lengths below.
-# Histories shorter than the selected lookback are padded on the left, and
-# the mask tells the model which time steps are padding rather than
-# observations.
-# Any list of positive integers (history lengths in flight cycles). Each
-# sequence [architectures.*] table's own "lookbacks" list must be a subset of
-# the list chosen here.
-sequence_lookbacks = [50, 100]
-
-# Absolute age is supplied alongside telemetry because a fixed-length window
-# alone does not identify the UAV's current point in its observed lifetime.
-# Options: any subset of "flight_cycle", "log1p_flight_cycle".
-sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]
+# History-window lengths in flight cycles every sequence model is compared at;
+# shorter histories are padded on the left and marked by a mask.
+sequence_lookbacks = [50, 100]    # Options: any list of positive integers
+# Age features sent alongside telemetry, because a fixed window alone does not
+# say where the UAV is in its lifetime.
+sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]    # Options: any subset of these two
 
 [preprocessing]
-# Models sensitive to feature scale use robust median/IQR scaling.  Tree
-# models receive unchanged numeric values because their split ordering does
-# not need scale normalization.
-# Any list of architecture names that should receive scaled tabular inputs.
-scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]
-# Any list of architecture names that should receive unscaled tabular
-# inputs.
-unscaled_tree_architectures = ["random_forest", "xgboost"]
-
-# Every fitted preprocessing statistic is learned only from training UAVs in
-# the current fold.  Validation UAVs may be transformed but never influence
-# the medians or IQRs, preventing validation leakage.
+# Architectures receiving robust median/IQR scaled tabular inputs.
+scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]    # Options: any architecture names
+# Architectures receiving unscaled values, since split ordering needs no scaling.
+unscaled_tree_architectures = ["random_forest", "xgboost"]    # Options: any architecture names
+# Every fitted statistic comes only from the current fold's training UAVs;
+# validation UAVs are transformed but never influence a median or IQR.
 
 [neural_training]
-# These settings are shared by MLP, TCN, LSTM, and the disabled Transformer
-# so their comparison does not accidentally use different optimization
-# policies.  Architecture-specific sizes, dropout, and learning rates remain
-# tunable below.
-# Any positive integer.
-batch_size = 64
-# Any positive integer; the hard ceiling on training epochs regardless of
-# early stopping.
-maximum_epochs = 150
-# Any positive integer; epochs to wait for validation improvement before
-# stopping early.
-early_stopping_patience = 15
-# Any positive float; the maximum global gradient norm allowed before
-# clipping.
-gradient_clip_global_norm = 1.0
+# Shared by MLP, TCN, LSTM and the disabled Transformer so their comparison
+# never uses different optimization policies.
+# Training examples per gradient step.
+batch_size = 64    # Options: any positive integer
+# Hard ceiling on epochs regardless of early stopping.
+maximum_epochs = 150    # Options: any positive integer
+# Epochs to wait for a validation improvement before stopping early.
+early_stopping_patience = 15    # Options: any positive integer
+# Maximum global gradient norm allowed before clipping.
+gradient_clip_global_norm = 1.0    # Options: any positive float
 
-# Baselines ------------------------------------------------------------------
-# Baselines verify that complex models improve on simple references.  The
-# mean baseline needs no model input; the cycle-only baseline receives only
-# age.
+# Architectures ==============================================================
+# Each [architectures.*] table declares:
+#   status          Options: "included", "conditional", "optional" (must match
+#                   the [study] list the name appears in)
+#   representation  Options: "none", "tabular", "sequence" (decides whether
+#                   "feature_sets" or "lookbacks" applies)
+#   feature_sets    Options: any subset of [representations].tabular_feature_sets
+#   lookbacks       Options: any subset of [representations].sequence_lookbacks
+#   variants        Options: the exact set the verifier requires per family
+#
+# Each [architectures.*.search.*] table declares one tunable hyperparameter as a
+# "kind" plus its matching fields:
+#   fixed                          value
+#   categorical                    values
+#   categorical_integer_sequences  values (a list of integer lists)
+#   integer_range                  low, high, optionally step
+#   uniform                        low, high
+#   log_uniform                    low, high
 
+# Predicts one constant, so it needs no model input at all.
 [architectures.mean_baseline]
-# Options: "included", "conditional", "optional"; must match which of the
-# three [study] lists above this architecture's name appears in.
 status = "included"
-# Options: "none", "tabular", "sequence". Determines which of "feature_sets"
-# (tabular) or "lookbacks" (sequence) may be set below; "none" allows
-# neither.
 representation = "none"
-# Options: exactly {"mean"} for this architecture (enforced by the verifier).
 variants = ["mean"]
 
+# Predicts from UAV age alone, the simplest reference using any input.
 [architectures.cycle_only_baseline]
 status = "included"
 representation = "tabular"
 feature_sets = ["age_only"]
-# Options: exactly {"weighted_linear"} for this architecture.
 variants = ["weighted_linear"]
 
-# Tabular architectures ------------------------------------------------------
-# All tabular families consume the same Phase 1 prefix-feature rows.  Their
-# "feature_sets" lists define which predeclared feature subsets are compared.
-
+# Ridge and Elastic Net, the linear reference against the nonlinear families.
 [architectures.regularized_linear]
 status = "included"
 representation = "tabular"
 feature_sets = ["age_only", "last_values", "screened", "all_nonconstant"]
-# Options: exactly {"ridge", "elastic_net"} for this architecture.
 variants = ["ridge", "elastic_net"]
 
+# Which variant is fitted; the choice activates either the ridge penalty or
+# both Elastic Net parameters, and the inactive ones are ignored.
 [architectures.regularized_linear.search.variant]
-# The variant choice activates either the ridge parameter or both Elastic Net
-# parameters.  Inactive variant-specific values are ignored by its adapter.
-# Options: "fixed", "categorical", "categorical_integer_sequences",
-# "integer_range", "uniform", "log_uniform"; each "kind" requires its own
-# matching fields ("value" for fixed; "values" for categorical and
-# categorical_integer_sequences; "low"/"high"[/"step"] for the numeric
-# ranges).
 kind = "categorical"
 values = ["ridge", "elastic_net"]
 
+# Ridge penalty strength.
 [architectures.regularized_linear.search.ridge_alpha]
 kind = "log_uniform"
 low = 1e-4
 high = 1e4
 
+# Elastic Net overall penalty strength.
 [architectures.regularized_linear.search.elastic_net_alpha]
 kind = "log_uniform"
 low = 1e-5
 high = 1e2
 
+# Elastic Net balance between the L1 and L2 penalties.
 [architectures.regularized_linear.search.elastic_net_l1_ratio]
 kind = "categorical"
 values = [0.05, 0.2, 0.5, 0.8, 0.95]
 
+# Bagged decision trees, the first nonlinear tabular reference.
 [architectures.random_forest]
 status = "included"
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
-# Options: exactly {"random_forest"} for this architecture.
 variants = ["random_forest"]
 
+# Trees in the forest.
 [architectures.random_forest.search.n_estimators]
 kind = "fixed"
 value = 500
 
+# Maximum tree depth; "none" is a portable sentinel the adapter turns into
+# Python "None", because TOML has no null value.
 [architectures.random_forest.search.max_depth]
-# "none" is a portable TOML sentinel that the model adapter converts to
-# Python "None". TOML has no native null value.
 kind = "categorical"
 values = ["none", 5, 10, 20]
 
+# Minimum training samples required in a leaf.
 [architectures.random_forest.search.min_samples_leaf]
 kind = "categorical"
 values = [1, 2, 5, 10]
 
+# Fraction of features considered at each split.
 [architectures.random_forest.search.max_features]
 kind = "categorical"
 values = [0.33, 0.67, 1.0]
 
+# Gradient-boosted trees, the second nonlinear tabular reference.
 [architectures.xgboost]
 status = "included"
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
-# Options: exactly {"xgboost"} for this architecture.
 variants = ["xgboost"]
-# Any positive integer; XGBoost-specific early-stopping rounds (this field is
-# only meaningful for xgboost; other architectures share
-# [neural_training].early_stopping_patience instead).
-early_stopping_patience = 35
+# Boosting rounds without improvement before stopping; this family stops on
+# rounds, so it ignores [neural_training].early_stopping_patience.
+early_stopping_patience = 35    # Options: any positive integer
 
-# A large fixed tree ceiling works with early stopping: training may stop
-# well before 1,500 trees when the inner-fold validation score no longer
-# improves.
-
+# Ceiling on boosting rounds, set high because early stopping usually ends
+# training well before it.
 [architectures.xgboost.search.maximum_trees]
 kind = "fixed"
 value = 1500
 
+# Shrinkage applied to each boosting round's contribution.
 [architectures.xgboost.search.learning_rate]
 kind = "log_uniform"
 low = 0.01
 high = 0.2
 
+# Maximum depth of each boosted tree.
 [architectures.xgboost.search.max_depth]
 kind = "categorical"
 values = [2, 3, 4, 6, 8]
 
+# Minimum summed instance weight required in a child node.
 [architectures.xgboost.search.min_child_weight]
 kind = "log_uniform"
 low = 0.5
 high = 20.0
 
+# Fraction of training rows sampled per boosting round.
 [architectures.xgboost.search.subsample]
 kind = "uniform"
 low = 0.6
 high = 1.0
 
+# Fraction of features sampled per tree.
 [architectures.xgboost.search.colsample_bytree]
 kind = "uniform"
 low = 0.5
 high = 1.0
 
+# L1 regularization on leaf weights.
 [architectures.xgboost.search.reg_alpha]
 kind = "log_uniform"
 low = 1e-8
 high = 10.0
 
+# L2 regularization on leaf weights.
 [architectures.xgboost.search.reg_lambda]
 kind = "log_uniform"
 low = 1e-3
 high = 100.0
 
-# Neural architectures -------------------------------------------------------
-# The MLP uses engineered tabular rows.  TCN and LSTM use padded ordered
-# telemetry windows, allowing the study to compare feature-based and
-# end-to-end sequence representations under the same folds and metrics.
-
+# Feed-forward network on the same engineered rows the tree models use.
 [architectures.mlp]
 status = "included"
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
-# Options: exactly {"mlp"} for this architecture.
 variants = ["mlp"]
 
+# Hidden-layer layout; each nested list is one architecture, so [128, 64] means
+# two layers of 128 then 64 units.
 [architectures.mlp.search.hidden_layers]
-# Each nested integer list is one complete hidden-layer layout, e.g.
-# [128, 64] means a two-layer MLP with 128 then 64 hidden units.
 kind = "categorical_integer_sequences"
 values = [[64], [128, 64], [256, 128]]
 
+# Dropout probability after each hidden layer.
 [architectures.mlp.search.dropout]
 kind = "uniform"
 low = 0.0
 high = 0.5
 
+# Adam learning rate.
 [architectures.mlp.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
 high = 3e-3
 
+# L2 weight decay applied by the optimizer.
 [architectures.mlp.search.weight_decay]
 kind = "log_uniform"
 low = 1e-6
 high = 1e-2
 
+# Temporal convolutional network over raw telemetry windows.
 [architectures.tcn]
 status = "included"
 representation = "sequence"
-# Any subset of the top-level [representations].sequence_lookbacks list.
 lookbacks = [50, 100]
-# Options: exactly {"tcn"} for this architecture.
 variants = ["tcn"]
 
+# Stacked residual blocks, which together set the temporal receptive field.
 [architectures.tcn.search.residual_blocks]
 kind = "categorical"
 values = [2, 3, 4]
 
+# Convolution channels per residual block.
 [architectures.tcn.search.channels]
 kind = "categorical"
 values = [32, 64, 128]
 
+# Width of each causal convolution kernel.
 [architectures.tcn.search.kernel_size]
 kind = "categorical"
 values = [3, 5, 7]
 
+# Dilation growth per block, fixed at doubling so the receptive field expands
+# while the search space stays compact.
 [architectures.tcn.search.dilation_base]
-# Fixed doubling of dilation expands the temporal receptive field across
-# residual blocks while keeping the tunable search space compact.
 kind = "fixed"
 value = 2
 
+# Dropout probability inside each residual block.
 [architectures.tcn.search.dropout]
 kind = "uniform"
 low = 0.1
 high = 0.5
 
+# Adam learning rate.
 [architectures.tcn.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
 high = 3e-3
 
+# L2 weight decay applied by the optimizer.
 [architectures.tcn.search.weight_decay]
 kind = "log_uniform"
 low = 1e-6
 high = 1e-2
 
+# Recurrent network over the same telemetry windows the TCN receives.
 [architectures.lstm]
 status = "included"
 representation = "sequence"
 lookbacks = [50, 100]
-# Options: exactly {"lstm"} for this architecture.
 variants = ["lstm"]
 
+# Stacked recurrent layers.
 [architectures.lstm.search.layers]
 kind = "categorical"
 values = [1, 2]
 
+# Hidden state size per layer.
 [architectures.lstm.search.hidden_units]
 kind = "categorical"
 values = [32, 64, 128]
 
+# Recurrence direction, fixed unidirectional so only past and current
+# observations can influence a prediction.
 [architectures.lstm.search.direction]
-# Only past and current observations may influence a prediction.  A
-# unidirectional LSTM makes that temporal direction explicit.
 kind = "fixed"
 value = "unidirectional"
 
+# Dropout probability between recurrent layers.
 [architectures.lstm.search.dropout]
 kind = "uniform"
 low = 0.1
 high = 0.5
 
+# Adam learning rate.
 [architectures.lstm.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
 high = 3e-3
 
+# L2 weight decay applied by the optimizer.
 [architectures.lstm.search.weight_decay]
 kind = "log_uniform"
 low = 1e-6
 high = 1e-2
 
-# Disabled extensions --------------------------------------------------------
-# Disabled architectures remain fully specified so enabling one is a
-# deliberate one-line change in [study.enabled] above and uses a documented
-# search space. They are not run in the comparison while disabled there.
+# Disabled extensions stay fully specified, so enabling one is a deliberate
+# one-line change in [study.enabled] against a documented search space.
 
+# Attention encoder over telemetry windows, held back until TCN and LSTM prove
+# out because 100 UAVs make attention an overfitting risk.
 [architectures.transformer]
-# Options: "included", "conditional", "optional"; must match which [study]
-# list this architecture's name appears in ("transformer" is in
-# conditional_architectures above).
 status = "conditional"
 representation = "sequence"
 lookbacks = [50, 100]
-# Options: exactly {"transformer_encoder"} for this architecture.
 variants = ["transformer_encoder"]
 
+# Stacked encoder layers.
 [architectures.transformer.search.encoder_layers]
 kind = "categorical"
 values = [1, 2, 3]
 
+# Model embedding width.
 [architectures.transformer.search.model_width]
 kind = "categorical"
 values = [32, 64, 128]
 
+# Parallel attention heads per encoder layer.
 [architectures.transformer.search.attention_heads]
 kind = "categorical"
 values = [2, 4, 8]
 
+# Feed-forward block width as a multiple of the model width.
 [architectures.transformer.search.feed_forward_ratio]
 kind = "categorical"
 values = [2, 4]
 
+# How time-step order is encoded.
 [architectures.transformer.search.position_encoding]
 kind = "fixed"
 value = "sinusoidal"
 
+# Dropout probability inside each encoder layer.
 [architectures.transformer.search.dropout]
 kind = "uniform"
 low = 0.1
 high = 0.5
 
+# Adam learning rate.
 [architectures.transformer.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
 high = 3e-3
 
+# L2 weight decay applied by the optimizer.
 [architectures.transformer.search.weight_decay]
 kind = "log_uniform"
 low = 1e-6
 high = 1e-2
 
+# Kernel support vector regression, an extra nonlinear reference.
 [architectures.rbf_svr]
-# Options: "included", "conditional", "optional"; "rbf_svr" is in
-# optional_architectures above.
 status = "optional"
 representation = "tabular"
 feature_sets = ["last_values", "screened", "all_nonconstant"]
-# Options: exactly {"rbf_svr"} for this architecture.
 variants = ["rbf_svr"]
 
+# Penalty on training errors, trading margin width against training fit.
 [architectures.rbf_svr.search.c]
 kind = "log_uniform"
 low = 1e-2
 high = 1e3
 
+# Width of the radial basis kernel.
 [architectures.rbf_svr.search.gamma]
 kind = "log_uniform"
 low = 1e-5
 high = 1.0
 
+# Half-width of the tube inside which errors cost nothing.
 [architectures.rbf_svr.search.epsilon]
 kind = "log_uniform"
 low = 1e-3
 high = 10.0
 
-# Phase 1 inputs -------------------------------------------------------------
-# Phase 2 consumes the already constructed folds, prefix samples, engineered
-# features, preprocessing definition, and metric definition from Phase 1.
-# Paths remain relative to the repository root so the project is portable.
+# Phase 1 inputs =============================================================
+# Phase 2 consumes the folds, prefix samples, features, preprocessing and
+# metric definitions already built in Phase 1. Paths stay relative to the
+# repository root so the project is portable. No hashes or frozen copies are
+# used; the verifier checks the interface Phase 2 needs: existence, dimensions,
+# required fields, critical values, leakage assertions and cross-file agreement.
 #
-# No hashes or frozen copies are used.  Instead, the verifier checks the
-# stable interface needed by Phase 2: file existence, dimensions, required
-# fields, critical values, passed leakage assertions, and cross-file
-# agreement.
+# Each [phase_1.artifacts.*] table declares:
+#   path                  Options: any repository-relative path
+#   format                Options: "csv", "json"
+#   rows, total_columns   Options: any non-negative integer (csv)
+#   feature_columns       Options: any non-negative integer (csv feature tables)
+#   required_columns      Options: any list of column names (csv)
+#   required_json_keys    Options: any list of top-level keys (json)
+# A nested [*.required_json_values] table lists scalars that must match exactly;
+# other metadata in those files may change freely.
 
 [phase_1]
-# These expected quantities summarize the dataset-construction protocol.  A
-# mismatch indicates that Phase 1 changed and these settings must be
-# reviewed.
+# Expected quantities from the dataset-construction protocol; a mismatch means
+# Phase 1 changed and these settings need review. Options: any positive integer.
 expected_training_uavs = 100
 expected_outer_folds = 5
 expected_inner_folds_per_outer_fold = 4
@@ -581,19 +523,15 @@ expected_prefixes_per_training_uav = 20
 expected_generated_features = 606
 
 [phase_1.expected_feature_sets]
-# Values are counts of "feature__*" columns in each named Phase 1 feature
-# set.
+# "feature__*" column count in each named feature set. Options: positive integer.
 age_only = 2
 last_values = 24
 screened = 310
 all_nonconstant = 606
 
+# The Phase 1 leakage-check report, whose passed status gates everything else.
 [phase_1.artifacts.verification_report]
-# JSON artifacts declare keys that must exist and selected scalar values that
-# must match exactly.  Other metadata may evolve without breaking these
-# settings.
 path = "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json"
-# Options: "csv", "json".
 format = "json"
 required_json_keys = ["status", "assertions", "feature_files", "feature_sets"]
 
@@ -602,6 +540,7 @@ status = "passed"
 development_scenarios = 5
 locked_scenarios = 20
 
+# How the UAV-grouped outer and inner folds were generated.
 [phase_1.artifacts.fold_config]
 path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/fold_config.json"
 format = "json"
@@ -612,9 +551,8 @@ group_key = "uav_id"
 outer_folds = 5
 inner_folds = 4
 
+# Outer-fold assignment for every training UAV.
 [phase_1.artifacts.outer_folds]
-# CSV artifacts declare their row/column dimensions and metadata interface.
-# Feature tables additionally declare "feature_columns" below.
 path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
 format = "csv"
 rows = 100
@@ -628,6 +566,7 @@ required_columns = [
     "outer_fold",
 ]
 
+# Inner-fold assignment within each outer fold.
 [phase_1.artifacts.inner_folds]
 path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/inner_folds.csv"
 format = "csv"
@@ -643,6 +582,7 @@ required_columns = [
     "inner_fold",
 ]
 
+# How the test-like cutoff scenarios were generated.
 [phase_1.artifacts.scenario_config]
 path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/scenario_config.json"
 format = "json"
@@ -659,6 +599,7 @@ development_scenarios = 5
 locked_scenarios = 20
 terminal_training_cutoffs_excluded = true
 
+# Development scenario endpoints, the only ones Step 5 may score against.
 [phase_1.artifacts.development_scenarios]
 path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/development_validation_scenarios.csv"
 format = "csv"
@@ -675,6 +616,7 @@ required_columns = [
     "lifetime_quantile",
 ]
 
+# Locked scenario endpoints, opened only after the Step 5 gate passes.
 [phase_1.artifacts.locked_scenarios]
 path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/locked_validation_scenarios.csv"
 format = "csv"
@@ -691,6 +633,7 @@ required_columns = [
     "lifetime_quantile",
 ]
 
+# How the training prefix samples and their weights were generated.
 [phase_1.artifacts.training_prefix_config]
 path = "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json"
 format = "json"
@@ -705,6 +648,7 @@ required_json_keys = [
 cutoffs_per_uav = 20
 equal_total_weight_per_uav = true
 
+# Training prefix samples with the weights that equalize UAV influence.
 [phase_1.artifacts.training_prefixes]
 path = "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv"
 format = "csv"
@@ -719,6 +663,7 @@ required_columns = [
     "sample_weight",
 ]
 
+# Engineered features for the training prefixes.
 [phase_1.artifacts.training_features]
 path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz"
 format = "csv"
@@ -734,6 +679,7 @@ required_columns = [
     "sample_weight",
 ]
 
+# Engineered features for the development scenario endpoints.
 [phase_1.artifacts.development_features]
 path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
 format = "csv"
@@ -751,6 +697,7 @@ required_columns = [
     "lifetime_quantile",
 ]
 
+# Engineered features for the locked scenario endpoints.
 [phase_1.artifacts.locked_features]
 path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz"
 format = "csv"
@@ -768,6 +715,7 @@ required_columns = [
     "lifetime_quantile",
 ]
 
+# Engineered features for the held-out test endpoints, which Phase 2 never opens.
 [phase_1.artifacts.test_features]
 path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz"
 format = "csv"
@@ -776,6 +724,7 @@ total_columns = 609
 feature_columns = 606
 required_columns = ["sample_id", "uav_id", "cutoff"]
 
+# Which generated feature belongs to which named feature set.
 [phase_1.artifacts.feature_catalog]
 path = "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv"
 format = "csv"
@@ -793,6 +742,7 @@ required_columns = [
     "all_nonconstant",
 ]
 
+# How fold-fitted preprocessing was defined in Phase 1.
 [phase_1.artifacts.preprocessing_config]
 path = "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json"
 format = "json"
@@ -801,6 +751,7 @@ required_json_keys = ["feature_counts", "fit_scope", "outer_folds", "scaling"]
 [phase_1.artifacts.preprocessing_config.required_json_values]
 outer_folds = 5
 
+# The Phase 1 metric definition that Phase 2 reporting must agree with.
 [phase_1.artifacts.metric_specification]
 path = "1_dataset_construction/8_validation_metrics/artifacts/metric_specification.json"
 format = "json"
