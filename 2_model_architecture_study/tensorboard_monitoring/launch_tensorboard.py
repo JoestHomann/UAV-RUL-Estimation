@@ -98,7 +98,8 @@ def main() -> None:
     print(f"Open {url}")
     print("Press Ctrl+C to stop the dashboard")
     try:
-        Event().wait()
+        while True:
+            Event().wait(1.0)
     except KeyboardInterrupt:
         print("\nTensorBoard stopped")
 
