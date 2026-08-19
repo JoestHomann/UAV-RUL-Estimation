@@ -299,6 +299,7 @@ def _run_pairs_in_parallel(
     pairs: list[tuple[str, int]],
     max_workers: int,
     describe: Callable[[tuple[str, int]], str],
+    initial_counts: dict[str, int] | None = None,
 ) -> None:
     """Run one independent family/outer-fold study per pair, fanned out.
 
@@ -333,10 +334,14 @@ def _run_pairs_in_parallel(
     environment = _single_process_environment()
     stop_after_failure = threading.Event()
 
-    # Track completions per family and pre-log 0 so the dashboard starts immediately
-    completed_counts = {family: 0 for family, _ in pairs}
+    # Track completions per family and pre-log so the dashboard starts immediately
+    if initial_counts is None:
+        completed_counts = {family: 0 for family, _ in pairs}
+    else:
+        completed_counts = initial_counts.copy()
+        
     for family in completed_counts:
-        log_global_progress(step.number, family, 0)
+        log_global_progress(step.number, family, completed_counts[family])
 
     def _run_one(family: str, outer_fold: int) -> None:
         if stop_after_failure.is_set():
@@ -438,6 +443,14 @@ def _run_step_5(*, force: bool, max_workers: int | None) -> None:
         for outer_fold in outer_folds
         if force or f"{family}__outer_{outer_fold:02d}" not in completed_studies
     ]
+    
+    initial_counts = {family: 0 for family in families}
+    pending_pair_set = set(pending_pairs)
+    expected_pairs = [(f, o) for f in families for o in outer_folds]
+    for pair in expected_pairs:
+        if pair not in pending_pair_set:
+            initial_counts[pair[0]] += 1
+
     if not pending_pairs:
         print("Step 5: every family/fold study is already complete; skipping", flush=True)
     else:
@@ -446,6 +459,7 @@ def _run_step_5(*, force: bool, max_workers: int | None) -> None:
             pairs=pending_pairs,
             max_workers=resolved_max_workers,
             describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
+            initial_counts=initial_counts,
         )
 
     final_manifest = _read_json(
@@ -543,6 +557,16 @@ def _run_step_6(*, force: bool, max_workers: int | None) -> None:
         for pair, required_runs in expected_by_pair.items()
         if force or not required_runs.issubset(completed_runs)
     ]
+    
+    # We can compute initial_counts from expected_by_pair using the same logic
+    # _enabled_families(settings) was used to build expected_by_pair
+    families = _enabled_families(settings)
+    initial_counts = {family: 0 for family in families}
+    pending_pair_set = set(pending_pairs)
+    for pair in expected_by_pair:
+        if pair not in pending_pair_set:
+            initial_counts[pair[0]] += 1
+
     if not pending_pairs:
         print("Step 6: every family/fold evaluation is already complete; skipping", flush=True)
     else:
@@ -551,6 +575,7 @@ def _run_step_6(*, force: bool, max_workers: int | None) -> None:
             pairs=pending_pairs,
             max_workers=resolved_max_workers,
             describe=lambda pair: f"{pair[0]} outer fold {pair[1]}",
+            initial_counts=initial_counts,
         )
 
     final_manifest = _read_json(
