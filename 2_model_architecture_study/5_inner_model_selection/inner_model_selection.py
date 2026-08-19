@@ -62,6 +62,7 @@ from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from run_layout import (  # noqa: E402
     STEP_5_DIRECTORY_NAME,
+    run_number_from_settings,
     step_directory_for_specification,
 )
 from tensorboard_monitoring import (  # noqa: E402
@@ -534,6 +535,9 @@ class InnerModelSelectionRunner:
         self.candidate_space = CandidateSpace(self.architectures)
         self.factory = ModelAdapterFactory(self.specification_path)
         self.settings_version = int(self.settings["settings_version"])
+        # Read from the same resolved settings the output folder came from, so
+        # the manifest can never disagree with the run it was written into.
+        self.run_number = run_number_from_settings(self.settings)
         self.search_seed = int(self.settings["tuning"]["search_seed"])
         self.maximum_candidate_budget = int(
             self.settings["tuning"]["candidate_budget_per_architecture"]
@@ -1002,6 +1006,10 @@ class InnerModelSelectionRunner:
         manifest = {
             "runner_version": RUNNER_VERSION,
             "settings_version": self.settings_version,
+            # The folder path already identifies the run, but recording it
+            # inside the manifest means a manifest read on its own, or copied
+            # somewhere else, still says which run produced it.
+            "run_number": self.run_number,
             "status": (
                 "complete"
                 if len(complete_studies) == expected_studies

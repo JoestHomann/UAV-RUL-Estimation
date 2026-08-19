@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Phase 2 architecture study
+# ---------------------------------------------------------------------------
+
+# Numbered run folders. Steps 5, 6 and 7 write every artifact under
+# runs/run_<n>/: fitted models, locked prediction tables, comparison tables and
+# figures. They are large, reproducible from the tracked settings and code, and
+# a new run appears with every run_number change, so the whole tree stays out
+# of Git rather than needing a new rule per run.
+2_model_architecture_study/runs/
+
+# Generated artifacts of the setup steps. These were previously ignored by a
+# .gitignore inside each folder; naming them here keeps the rule in one place
+# and surviving even if a folder is deleted and recreated.
+2_model_architecture_study/1_architecture_study_settings/artifacts/
+2_model_architecture_study/2_tabular_data_adapter/artifacts/
+2_model_architecture_study/3_sequence_data_adapter/artifacts/
+2_model_architecture_study/4_model_adapters/artifacts/
+
+# TensorBoard event files, written live during Steps 5 and 6.
+2_model_architecture_study/tensorboard_monitoring/logs/

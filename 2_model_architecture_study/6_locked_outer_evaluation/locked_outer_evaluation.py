@@ -40,6 +40,7 @@ from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from run_layout import (  # noqa: E402
     STEP_6_DIRECTORY_NAME,
+    run_number_from_settings,
     step_directory_for_specification,
 )
 from tensorboard_monitoring import (  # noqa: E402
@@ -308,6 +309,9 @@ class LockedOuterEvaluationRunner:
         self.factory = ModelAdapterFactory(specification_path)
         self.settings = self.plan.settings
         self.settings_version = int(self.settings["settings_version"])
+        # Read from the same resolved settings the output folder came from, so
+        # the manifest can never disagree with the run it was written into.
+        self.run_number = run_number_from_settings(self.settings)
         self.locked_scenarios = int(
             self.settings["phase_1"]["expected_locked_scenarios"]
         )
@@ -818,6 +822,10 @@ class LockedOuterEvaluationRunner:
         manifest = {
             "runner_version": RUNNER_VERSION,
             "settings_version": self.settings_version,
+            # The folder path already identifies the run, but recording it
+            # inside the manifest means a manifest read on its own, or copied
+            # somewhere else, still says which run produced it.
+            "run_number": self.run_number,
             "status": (
                 "complete"
                 if len(completed_runs) == len(expected_keys)

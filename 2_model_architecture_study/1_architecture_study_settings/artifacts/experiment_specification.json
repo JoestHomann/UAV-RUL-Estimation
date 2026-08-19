@@ -163,11 +163,12 @@
             "kind": "categorical",
             "values": [
               1,
-              2
+              2,
+              3
             ]
           },
           "learning_rate": {
-            "high": 0.003,
+            "high": 0.01,
             "kind": "log_uniform",
             "low": 0.0001
           },
@@ -221,11 +222,20 @@
               [
                 256,
                 128
+              ],
+              [
+                512,
+                256
+              ],
+              [
+                512,
+                256,
+                128
               ]
             ]
           },
           "learning_rate": {
-            "high": 0.003,
+            "high": 0.01,
             "kind": "log_uniform",
             "low": 0.0001
           },
@@ -262,6 +272,8 @@
           "max_features": {
             "kind": "categorical",
             "values": [
+              0.15,
+              0.2,
               0.33,
               0.67,
               1.0
@@ -331,7 +343,7 @@
           "elastic_net_alpha": {
             "high": 100.0,
             "kind": "log_uniform",
-            "low": 1e-05
+            "low": 0.01
           },
           "elastic_net_l1_ratio": {
             "kind": "categorical",
@@ -397,7 +409,7 @@
             ]
           },
           "learning_rate": {
-            "high": 0.003,
+            "high": 0.01,
             "kind": "log_uniform",
             "low": 0.0001
           },
@@ -458,7 +470,7 @@
             ]
           },
           "learning_rate": {
-            "high": 0.003,
+            "high": 0.01,
             "kind": "log_uniform",
             "low": 0.0001
           },
@@ -569,9 +581,9 @@
     },
     "neural_training": {
       "batch_size": 64,
-      "early_stopping_patience": 15,
+      "early_stopping_patience": 20,
       "gradient_clip_global_norm": 1.0,
-      "maximum_epochs": 150
+      "maximum_epochs": 400
     },
     "phase_1": {
       "artifacts": {
@@ -929,7 +941,8 @@
         "all_nonconstant"
       ]
     },
-    "settings_version": 4,
+    "run_number": 2,
+    "settings_version": 6,
     "study": {
       "architectures_to_run": [
         "mean_baseline",
@@ -961,7 +974,7 @@
       ]
     },
     "tuning": {
-      "candidate_budget_per_architecture": 20,
+      "candidate_budget_per_architecture": 25,
       "retraining_seeds": [
         13,
         37,
