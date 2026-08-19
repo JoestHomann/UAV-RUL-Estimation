@@ -577,7 +577,7 @@
       ]
     },
     "execution": {
-      "max_workers": 7
+      "max_workers": 6
     },
     "neural_training": {
       "batch_size": 64,

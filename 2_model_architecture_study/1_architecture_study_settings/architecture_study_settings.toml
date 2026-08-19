@@ -17,7 +17,7 @@ run_number = 2    # Options: any positive integer
 [execution]
 # Step 5/6 studies run at once, each a subprocess; the one performance-only
 # knob here, so --max-workers may override it without editing this file.
-max_workers = 7    # Options: "auto", or any positive integer
+max_workers = 6    # Options: "auto", or any positive integer
 
 [study]
 # Architectures in the comparison. Every name in the three lists below needs an
