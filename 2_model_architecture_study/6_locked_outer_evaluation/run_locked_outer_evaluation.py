@@ -179,7 +179,7 @@ def main() -> None:
     )
     print(
         "Saved "
-        f"{(args.output_dir / 'locked_predictions.csv.gz').resolve()}"
+        f"{(runner.output_dir / 'locked_predictions.csv.gz').resolve()}"
     )
 
 
