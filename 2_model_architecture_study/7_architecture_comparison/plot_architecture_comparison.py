@@ -383,6 +383,61 @@ def _paired_rmse_figure(
     return _finish_figure(figure, output_path)
 
 
+def _r2_bar_figure(
+    comparison: pd.DataFrame,
+    plan: ArchitectureComparisonPlan,
+    output_path: Path,
+) -> Path:
+    """Show R2 scores as a horizontal bar chart."""
+
+    families = plan.enabled_families
+    labels = [_display_name(family) for family in families]
+    colors = _family_colors(families)
+    table = comparison.set_index("model_family").loc[list(families)]
+    r2_means = table["r2_mean"].to_numpy(float)
+
+    figure, axis = plt.subplots(figsize=(10, 6))
+    y_positions = np.arange(len(families))
+    
+    # Plot bars
+    axis.barh(
+        y_positions, 
+        r2_means, 
+        color=[colors[f] for f in families], 
+        edgecolor="black", 
+        linewidth=0.5
+    )
+
+    # Add text labels on or next to the bars
+    for y, r2 in zip(y_positions, r2_means):
+        offset = 0.01 * max(abs(r2_means)) if max(abs(r2_means)) > 0 else 0.01
+        ha = "left" if r2 >= 0 else "right"
+        x_pos = r2 + offset if r2 >= 0 else r2 - offset
+        axis.text(
+            x_pos,
+            y,
+            f"{r2:.3f}",
+            va="center",
+            ha=ha,
+            fontsize=10,
+        )
+
+    axis.set_yticks(y_positions)
+    axis.set_yticklabels(labels)
+    axis.invert_yaxis()  # Keep settings order top-to-bottom
+    axis.set_xlabel("Mean R² Score")
+    axis.set_title("Overall R² Score by Architecture\n(Higher is better)", fontsize=14)
+    axis.axvline(0, color='#6b7280', linewidth=1.0, linestyle="--")
+    axis.grid(axis="x", alpha=0.25)
+    
+    # Adjust limits to fit text
+    x_min = min(min(r2_means) - abs(min(r2_means))*0.1 - 0.05, 0)
+    x_max = max(max(r2_means) + abs(max(r2_means))*0.1 + 0.05, 0)
+    axis.set_xlim(x_min, x_max)
+
+    return _finish_figure(figure, output_path)
+
+
 def create_comparison_figures(
     tables: "ComparisonTables",
     plan: ArchitectureComparisonPlan,
@@ -440,6 +495,11 @@ def create_comparison_figures(
             tables.paired_metric_differences,
             plan,
             figure_dir / "paired_rmse_differences.png",
+        ),
+        _r2_bar_figure(
+            tables.architecture_comparison,
+            plan,
+            figure_dir / "r2_comparison.png",
         ),
     ]
     return paths
