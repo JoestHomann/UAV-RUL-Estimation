@@ -9,9 +9,10 @@
 
 # Revision number of this configuration, incremented by hand on any change.
 settings_version = 4    # Options: any positive integer
+
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
-run_number = 1    # Options: any positive integer
+run_number = 2    # Options: any positive integer
 
 [execution]
 # Step 5/6 studies run at once, each a subprocess; the one performance-only
@@ -57,7 +58,7 @@ rbf_svr = false
 [tuning]
 # Candidate configurations Optuna tries per tunable family; the two baselines
 # have nothing to tune and always use one.
-candidate_budget_per_architecture = 20    # Options: any positive integer
+candidate_budget_per_architecture = 25    # Options: any positive integer
 # Seed making candidate generation repeatable.
 search_seed = 13    # Options: any integer
 # Seeds quantifying run-to-run variation, one retraining run each for the
@@ -144,9 +145,9 @@ unscaled_tree_architectures = ["random_forest", "xgboost"]    # Options: any arc
 # Training examples per gradient step.
 batch_size = 64    # Options: any positive integer
 # Hard ceiling on epochs regardless of early stopping.
-maximum_epochs = 150    # Options: any positive integer
+maximum_epochs = 400    # Options: any positive integer
 # Epochs to wait for a validation improvement before stopping early.
-early_stopping_patience = 15    # Options: any positive integer
+early_stopping_patience = 20    # Options: any positive integer
 # Maximum global gradient norm allowed before clipping.
 gradient_clip_global_norm = 1.0    # Options: any positive float
 
@@ -238,7 +239,7 @@ values = [1, 2, 5, 10]
 # Fraction of features considered at each split.
 [architectures.random_forest.search.max_features]
 kind = "categorical"
-values = [0.33, 0.67, 1.0]
+values = [0.15, 0.2, 0.33, 0.67, 1.0]
 
 # Gradient-boosted trees, the second nonlinear tabular reference.
 [architectures.xgboost]
@@ -308,7 +309,7 @@ variants = ["mlp"]
 # two layers of 128 then 64 units.
 [architectures.mlp.search.hidden_layers]
 kind = "categorical_integer_sequences"
-values = [[64], [128, 64], [256, 128]]
+values = [[64], [128, 64], [256, 128], [512, 256], [512, 256, 128]]
 
 # Dropout probability after each hidden layer.
 [architectures.mlp.search.dropout]
@@ -320,7 +321,7 @@ high = 0.5
 [architectures.mlp.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
-high = 3e-3
+high = 1e-2
 
 # L2 weight decay applied by the optimizer.
 [architectures.mlp.search.weight_decay]
@@ -366,7 +367,7 @@ high = 0.5
 [architectures.tcn.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
-high = 3e-3
+high = 1e-2
 
 # L2 weight decay applied by the optimizer.
 [architectures.tcn.search.weight_decay]
@@ -384,7 +385,7 @@ variants = ["lstm"]
 # Stacked recurrent layers.
 [architectures.lstm.search.layers]
 kind = "categorical"
-values = [1, 2]
+values = [1, 2, 3]
 
 # Hidden state size per layer.
 [architectures.lstm.search.hidden_units]
@@ -407,7 +408,7 @@ high = 0.5
 [architectures.lstm.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
-high = 3e-3
+high = 1e-2
 
 # L2 weight decay applied by the optimizer.
 [architectures.lstm.search.weight_decay]
@@ -461,7 +462,7 @@ high = 0.5
 [architectures.transformer.search.learning_rate]
 kind = "log_uniform"
 low = 1e-4
-high = 3e-3
+high = 1e-2
 
 # L2 weight decay applied by the optimizer.
 [architectures.transformer.search.weight_decay]
