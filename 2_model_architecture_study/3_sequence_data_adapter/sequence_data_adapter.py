@@ -694,9 +694,23 @@ class SequenceDataAdapter:
             validation_ids,
         )
         scaler = self.fit_channel_scaler(training_ids)
+        
+        from sklearn.preprocessing import RobustScaler
+        side_scaler = RobustScaler(
+            with_centering=True,
+            with_scaling=True,
+            quantile_range=(25.0, 75.0),
+            unit_variance=True,
+        )
+        train_side = side_scaler.fit_transform(raw_training.side_features)
+        val_side = side_scaler.transform(raw_validation.side_features)
+        
+        train_scaled = scaler.transform(raw_training)
+        val_scaled = scaler.transform(raw_validation)
+        
         return SequenceSplit(
-            training=scaler.transform(raw_training),
-            validation=scaler.transform(raw_validation),
+            training=replace(train_scaled, side_features=train_side.astype(np.float32)),
+            validation=replace(val_scaled, side_features=val_side.astype(np.float32)),
             channel_scaler=scaler,
         )
 
@@ -719,8 +733,22 @@ class SequenceDataAdapter:
             validation_ids,
         )
         scaler = self.fit_channel_scaler(training_ids)
+        
+        from sklearn.preprocessing import RobustScaler
+        side_scaler = RobustScaler(
+            with_centering=True,
+            with_scaling=True,
+            quantile_range=(25.0, 75.0),
+            unit_variance=True,
+        )
+        train_side = side_scaler.fit_transform(raw_training.side_features)
+        val_side = side_scaler.transform(raw_validation.side_features)
+        
+        train_scaled = scaler.transform(raw_training)
+        val_scaled = scaler.transform(raw_validation)
+        
         return SequenceSplit(
-            training=scaler.transform(raw_training),
-            validation=scaler.transform(raw_validation),
+            training=replace(train_scaled, side_features=train_side.astype(np.float32)),
+            validation=replace(val_scaled, side_features=val_side.astype(np.float32)),
             channel_scaler=scaler,
         )

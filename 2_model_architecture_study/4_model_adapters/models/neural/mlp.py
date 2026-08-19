@@ -28,6 +28,7 @@ class MLPRegressor(nn.Module):
             modules.extend(
                 [
                     nn.Linear(previous_width, width),
+                    nn.BatchNorm1d(width),
                     nn.ReLU(),
                     nn.Dropout(dropout),
                 ]

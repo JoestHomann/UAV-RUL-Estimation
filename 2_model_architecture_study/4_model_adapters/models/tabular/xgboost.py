@@ -80,6 +80,7 @@ class XGBoostAdapter(ModelAdapter):
             # worker prevents nested CPU oversubscription.
             n_jobs=1,
             tree_method="hist",
+            device="cuda",
             early_stopping_rounds=(
                 int(self.early_stopping_patience) if use_early_stopping else None
             ),

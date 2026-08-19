@@ -49,24 +49,24 @@ class TCNResidualBlock(nn.Module):
         dropout: float,
     ) -> None:
         super().__init__()
-        # The canonical block also weight-normalizes both convolutions. That is
-        # deliberately omitted: torch implements weight normalization as a
-        # module parametrization, and parametrized modules cannot be pickled,
-        # while Steps 5 and 6 persist fitted adapters with joblib. Controlled
-        # runs showed no training benefit from it here, so the persistence
-        # contract wins.
+        # The canonical block weight-normalizes both convolutions, but torch
+        # implements weight normalization as an unpicklable parametrization.
+        # We use BatchNorm1d instead to stabilize the deep ReLU network while
+        # preserving joblib serialization.
         self.conv_1 = CausalConv1d(
             input_channels,
             output_channels,
             kernel_size,
             dilation,
         )
+        self.bn_1 = nn.BatchNorm1d(output_channels)
         self.conv_2 = CausalConv1d(
             output_channels,
             output_channels,
             kernel_size,
             dilation,
         )
+        self.bn_2 = nn.BatchNorm1d(output_channels)
         self.activation = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
         self.residual = (
@@ -88,9 +88,9 @@ class TCNResidualBlock(nn.Module):
         reason.
         """
 
-        hidden = self.dropout(self.activation(self.conv_1(values)))
+        hidden = self.dropout(self.activation(self.bn_1(self.conv_1(values))))
         hidden = hidden * valid_mask
-        hidden = self.dropout(self.activation(self.conv_2(hidden)))
+        hidden = self.dropout(self.activation(self.bn_2(self.conv_2(hidden))))
         hidden = hidden * valid_mask
         return (hidden + self.residual(values)) * valid_mask
 
