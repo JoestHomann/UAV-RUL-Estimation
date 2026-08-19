@@ -8,7 +8,7 @@
 # address, normally http://localhost:6006
 
 # Revision number of this configuration, incremented by hand on any change.
-settings_version = 5    # Options: any positive integer
+settings_version = 6    # Options: any positive integer
 
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
