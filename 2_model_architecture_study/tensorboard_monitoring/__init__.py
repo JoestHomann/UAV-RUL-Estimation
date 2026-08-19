@@ -15,6 +15,7 @@ from .monitoring import (
     ensure_tensorboard_available,
     log_step_5_candidate,
     step_5_fit_curves_enabled,
+    log_global_progress,
 )
 
 
@@ -28,4 +29,5 @@ __all__ = [
     "ensure_tensorboard_available",
     "log_step_5_candidate",
     "step_5_fit_curves_enabled",
+    "log_global_progress",
 ]
