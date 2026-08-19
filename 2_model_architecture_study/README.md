@@ -26,10 +26,10 @@ second terminal before or after starting the pipeline:
 
     .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
 
-Open the printed address, normally "http://localhost:6006". Phase 2 always
-writes to the stable "tensorboard_monitoring/logs/" hierarchy; no monitoring
-flag is required. The dashboard process remains separate from training so it
-can be restarted without interrupting a model fit.
+It opens on the run that "run_number" currently selects, whose events live in
+"runs/run_<n>/tensorboard_logs/"; pass "--all-runs" to compare several runs in
+one view. The dashboard process remains separate from training so it can be
+restarted without interrupting a model fit.
 
 Resume from the expensive tuning stage while keeping completed work:
 

@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -31,8 +32,8 @@ for dependency_dir in DEPENDENCY_DIRS:
     if str(dependency_dir) not in sys.path:
         sys.path.insert(0, str(dependency_dir))
 
+from run_layout import tensorboard_log_root  # noqa: E402
 from tensorboard_monitoring import (  # noqa: E402
-    DEFAULT_LOG_ROOT,
     FIT_CURVE_ENVIRONMENT_VARIABLE,
     TrainingRunContext,
     calculate_regression_metrics,
@@ -406,8 +407,9 @@ def main() -> None:
     """Write isolated studies and confirm TensorBoard reads exactly what is logged."""
 
     installed_version = ensure_tensorboard_available()
-    DEFAULT_LOG_ROOT.mkdir(parents=True, exist_ok=True)
-    log_root = DEFAULT_LOG_ROOT / "verification_scratch"
+    # A scratch root outside any real run folder, so verification can never
+    # touch or replace a run's actual curves.
+    log_root = Path(tempfile.mkdtemp(prefix="tensorboard_verification_"))
     previous = os.environ.get(FIT_CURVE_ENVIRONMENT_VARIABLE)
     # The per-fit checks need the debug curves the pipeline leaves switched
     # off; _verify_step_5_curves_are_opt_in removes the variable again.
@@ -425,6 +427,7 @@ def main() -> None:
         shutil.rmtree(log_root, ignore_errors=True)
 
     print(f"TensorBoard {installed_version} monitoring verified")
+    print(f"Event files are written per run, e.g. {tensorboard_log_root(1)}")
     print("Fit curves: train/loss, val/rmse")
     print("Step 5 study curve: search/candidate_rmse plus candidate text")
     print("Step 6 published no locked predictive metric")

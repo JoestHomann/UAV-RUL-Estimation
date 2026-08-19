@@ -32,9 +32,9 @@ from run_layout import (  # noqa: E402
     read_run_number,
     run_root,
     step_directory_for_specification,
+    tensorboard_log_root,
 )
 from tensorboard_monitoring import (  # noqa: E402
-    DEFAULT_LOG_ROOT,
     FIT_CURVE_ENVIRONMENT_VARIABLE,
     TensorBoardMonitoringError,
     ensure_tensorboard_available,
@@ -606,7 +606,6 @@ def print_status() -> None:
     """Print the seven-step state without importing or running a step module."""
 
     print("Phase 2 pipeline status")
-    print(f"TensorBoard logs: {DEFAULT_LOG_ROOT}")
     print(
         "1. Architecture study settings: "
         + ("available" if SPECIFICATION_PATH.is_file() else "not generated")
@@ -638,6 +637,7 @@ def print_status() -> None:
             print(line + "unknown until Step 1 has run")
         return
     print(f"Run: {run_number} ({run_root(run_number)})")
+    print(f"TensorBoard logs: {tensorboard_log_root(run_number)}")
     print(
         "5. Inner model selection: "
         + _progress_status(
@@ -685,10 +685,7 @@ def run_pipeline(
         f"{sys.executable}",
         flush=True,
     )
-    print(
-        f"TensorBoard {tensorboard_version} logging to {DEFAULT_LOG_ROOT}",
-        flush=True,
-    )
+    print(f"TensorBoard {tensorboard_version} available", flush=True)
     if step_5_fit_curves_enabled():
         print(
             f"{FIT_CURVE_ENVIRONMENT_VARIABLE} is set: Step 5 inner fits will "
@@ -704,6 +701,10 @@ def run_pipeline(
             raise Phase2PipelineError(str(error)) from error
         print(
             f"Run {run_number}: Steps 5-7 read and write {run_root(run_number)}",
+            flush=True,
+        )
+        print(
+            f"TensorBoard logs: {tensorboard_log_root(run_number)}",
             flush=True,
         )
     if force:

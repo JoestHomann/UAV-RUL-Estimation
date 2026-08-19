@@ -20,10 +20,19 @@ Open a second PowerShell terminal in the repository root and run:
 
     .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
 
-Open the printed address, normally "http://localhost:6006". To use another
-port:
+It opens on the run named by "run_number" in the current settings, which is
+the run the pipeline is writing. Open the printed address, normally
+"http://localhost:6006".
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py --port 6007
+Show one specific run, another port, or every run at once for comparison:
+
+    ... launch_tensorboard.py --run 1
+    ... launch_tensorboard.py --port 6007
+    ... launch_tensorboard.py --all-runs
+
+"--all-runs" points the dashboard at the shared "runs" directory, so TensorBoard
+discovers every run's events and prefixes each series with its run folder. That
+is what makes two runs' curves comparable in one view.
 
 The dashboard process is independent from the training pipeline. It can stay
 open while Phase 2 is started, interrupted, and resumed.
@@ -70,17 +79,15 @@ complete Step 6 gate has passed; Step 7 writes no TensorBoard events at all.
 
 ## Run organization
 
-Step 5 fit curves:
+Event files belong to the run that produced them, so they live inside that
+run's folder rather than in a directory shared by every run:
 
-    logs\step_5\architecture\outer_fold_N\fit_progress
+    runs\run_<n>\tensorboard_logs\step_5\architecture\outer_fold_N\fit_progress
+    runs\run_<n>\tensorboard_logs\step_5\architecture\outer_fold_N\study_progress
+    runs\run_<n>\tensorboard_logs\step_6\architecture\outer_fold_N\fit_progress
 
-Step 5 search curve:
-
-    logs\step_5\architecture\outer_fold_N\study_progress
-
-Step 6 fit curves:
-
-    logs\step_6\architecture\outer_fold_N\fit_progress
+A new run therefore cannot overwrite an earlier run's curves, and archiving or
+deleting a run takes its curves with it instead of leaving them behind.
 
 One writer is shared by every fit inside a study, so the generated directory
 count is fixed per study instead of growing with the candidate budget. Each

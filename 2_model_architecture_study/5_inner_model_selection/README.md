@@ -109,9 +109,7 @@ all five outer folds. Later steps must require a "complete" manifest.
 
 ## TensorBoard monitoring
 
-"tensorboard_monitoring/logs/step_5/<family>/outer_fold_N/study_progress"
-(the TensorBoard log root is shared across runs and is not moved into the run
-folder, so the dashboard keeps working across a run-number change)
+"runs/run_<n>/tensorboard_logs/step_5/<family>/outer_fold_N/study_progress"
 holds the search curve: "search/candidate_rmse" carries one point per completed
 candidate, with that candidate's hyperparameters attached as text. This is the
 view to watch during a run -- whether tuning is still improving, and whether it

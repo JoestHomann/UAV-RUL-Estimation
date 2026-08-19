@@ -44,6 +44,11 @@ STEP_5_DIRECTORY_NAME = "5_inner_model_selection"
 STEP_6_DIRECTORY_NAME = "6_locked_outer_evaluation"
 STEP_7_DIRECTORY_NAME = "7_architecture_comparison"
 
+# TensorBoard event files sit beside the step folders rather than in the
+# monitoring package, so a run's curves are archived, copied and deleted with
+# the results they describe instead of outliving them in a shared directory.
+TENSORBOARD_DIRECTORY_NAME = "tensorboard_logs"
+
 
 class RunLayoutError(ValueError):
     """Explain a missing or unusable run number."""
@@ -123,6 +128,30 @@ def step_directory(
             f"Unknown per-run step directory {step_directory_name!r}"
         )
     return run_root(run_number, runs_dir) / step_directory_name
+
+
+def tensorboard_log_root(run_number: int, runs_dir: Path = RUNS_DIR) -> Path:
+    """Return the TensorBoard event directory belonging to one numbered run."""
+
+    return run_root(run_number, runs_dir) / TENSORBOARD_DIRECTORY_NAME
+
+
+def tensorboard_log_root_for_specification(
+    *,
+    specification_path: Path = SPECIFICATION_PATH,
+    runs_dir: Path = RUNS_DIR,
+) -> Path:
+    """Resolve the current run's TensorBoard event directory from the settings.
+
+    Steps 5 and 6 call this so their curves land in the same run folder as
+    their results, and the dashboard launcher calls it so it opens on the run
+    the pipeline is actually writing.
+    """
+
+    return tensorboard_log_root(
+        read_run_number(specification_path),
+        runs_dir,
+    )
 
 
 def step_directory_for_specification(

@@ -54,7 +54,7 @@ No early stopping is performed against locked targets.
 ## TensorBoard monitoring boundary
 
 Step 6 publishes one tag, "train/loss", per retraining seed, below
-"tensorboard_monitoring/logs/step_6/<family>/outer_fold_N/fit_progress". It
+"runs/run_<n>/tensorboard_logs/step_6/<family>/outer_fold_N/fit_progress". It
 receives no locked validation dataset, so it cannot calculate -- let alone
 publish -- a locked RMSE, MAE, R2, bias, prediction, or residual. The complete
 locked comparison appears only in the Step 7 artifacts, after that step's gate

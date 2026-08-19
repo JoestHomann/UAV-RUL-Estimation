@@ -43,7 +43,13 @@ import numpy as np
 
 
 MONITORING_DIR = Path(__file__).resolve().parent
-DEFAULT_LOG_ROOT = MONITORING_DIR / "logs"
+PHASE_DIR = MONITORING_DIR.parent
+if str(PHASE_DIR) not in sys.path:
+    sys.path.insert(0, str(PHASE_DIR))
+
+from run_layout import (  # noqa: E402
+    tensorboard_log_root_for_specification,
+)
 
 # Neural epochs are inexpensive to record and are the natural optimization
 # unit. XGBoost can execute thousands of rounds per fit, so recording every
@@ -66,6 +72,19 @@ FIT_CURVE_ENVIRONMENT_VARIABLE = "PHASE2_TENSORBOARD_FIT_CURVES"
 
 class TensorBoardMonitoringError(RuntimeError):
     """Explain a missing dependency or an unsafe generated run path."""
+
+
+def default_log_root() -> Path:
+    """Return the current run's event directory, resolved when it is needed.
+
+    Event files live inside the run folder they belong to, so run 2's curves
+    can never overwrite run 1's and archiving a run takes its curves with it.
+    This is a function rather than a module constant because the run number
+    comes from Step 1's generated specification, which does not exist yet when
+    this module is first imported.
+    """
+
+    return tensorboard_log_root_for_specification()
 
 
 def step_5_fit_curves_enabled() -> bool:
@@ -301,8 +320,10 @@ class TensorBoardStudyMonitor:
         stage: Literal["step_5", "step_6"],
         model_family: str,
         outer_fold: int,
-        log_root: Path = DEFAULT_LOG_ROOT,
+        log_root: Path | None = None,
     ) -> None:
+        if log_root is None:
+            log_root = default_log_root()
         if stage not in {"step_5", "step_6"}:
             raise TensorBoardMonitoringError(f"Unsupported monitoring stage {stage!r}")
         if not model_family:
@@ -497,11 +518,13 @@ def create_study_monitor(
     stage: Literal["step_5", "step_6"],
     model_family: str,
     outer_fold: int,
-    log_root: Path = DEFAULT_LOG_ROOT,
+    log_root: Path | None = None,
 ) -> TensorBoardStudyMonitor:
     """Create the shared writer used by one Step 5 or Step 6 study."""
 
     ensure_tensorboard_available()
+    if log_root is None:
+        log_root = default_log_root()
     return TensorBoardStudyMonitor(
         stage=stage,
         model_family=model_family,
@@ -517,7 +540,7 @@ def log_step_5_candidate(
     candidate_number: int,
     mean_inner_rmse: Any,
     hyperparameters: Mapping[str, Any],
-    log_root: Path = DEFAULT_LOG_ROOT,
+    log_root: Path | None = None,
 ) -> None:
     """Append one completed tuning candidate to its study's search curve.
 
@@ -526,6 +549,8 @@ def log_step_5_candidate(
     point on that curve interpretable without opening the Step 5 CSV.
     """
 
+    if log_root is None:
+        log_root = default_log_root()
     run_directory = _safe_run_directory(
         log_root,
         (

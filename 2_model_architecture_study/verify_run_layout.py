@@ -36,11 +36,14 @@ from run_layout import (  # noqa: E402
     STEP_5_DIRECTORY_NAME,
     STEP_6_DIRECTORY_NAME,
     STEP_7_DIRECTORY_NAME,
+    TENSORBOARD_DIRECTORY_NAME,
     read_run_number,
     run_number_from_settings,
     run_root,
     step_directory,
     step_directory_for_specification,
+    tensorboard_log_root,
+    tensorboard_log_root_for_specification,
 )
 
 
@@ -96,6 +99,28 @@ def _verify_run_paths() -> None:
     else:
         raise RuntimeError("step_directory accepted a step that has no per-run folder")
 
+    # TensorBoard events belong to the run they describe, so their directory
+    # sits beside the step folders and moves with the run.
+    events = tensorboard_log_root(7)
+    _require(
+        events.parent == run_root(7),
+        "the TensorBoard log root must sit directly inside its run folder",
+    )
+    _require(
+        events.name == TENSORBOARD_DIRECTORY_NAME,
+        "the TensorBoard log root must use the shared directory name",
+    )
+    _require(
+        tensorboard_log_root(7) != tensorboard_log_root(8),
+        "two runs must not share one TensorBoard log root",
+    )
+    for rejected in (0, -1, True):
+        try:
+            tensorboard_log_root(rejected)
+        except RunLayoutError:
+            continue
+        raise RuntimeError(f"tensorboard_log_root accepted {rejected!r}")
+
 
 def _verify_settings_reading() -> None:
     """Confirm the run number is read from a specification and validated."""
@@ -144,10 +169,14 @@ def _verify_settings_reading() -> None:
                 STEP_7_DIRECTORY_NAME,
             )
         }
-        parents = {path.parent for path in resolved.values()}
+        events = tensorboard_log_root_for_specification(
+            specification_path=specification_path,
+            runs_dir=runs_dir,
+        )
+        parents = {path.parent for path in resolved.values()} | {events.parent}
         _require(
             len(parents) == 1 and parents.pop().name == "run_9",
-            "Steps 5, 6 and 7 must resolve to one shared run folder",
+            "Steps 5, 6, 7 and TensorBoard must resolve to one shared run folder",
         )
 
         missing = Path(scratch) / "absent.json"
@@ -233,6 +262,7 @@ def main() -> None:
         STEP_7_DIRECTORY_NAME,
     ):
         print(f"  {step_directory(name, run_number=run_number)}")
+    print(f"  {tensorboard_log_root(run_number)}")
     print(f"Settings snapshot rows: {rows}")
 
 

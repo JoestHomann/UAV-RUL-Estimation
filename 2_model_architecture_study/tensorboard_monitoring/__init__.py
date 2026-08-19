@@ -6,12 +6,12 @@ dashboard server. The numbered pipeline steps use only the names exported here.
 """
 
 from .monitoring import (
-    DEFAULT_LOG_ROOT,
     FIT_CURVE_ENVIRONMENT_VARIABLE,
     TensorBoardMonitoringError,
     TrainingRunContext,
     calculate_regression_metrics,
     create_study_monitor,
+    default_log_root,
     ensure_tensorboard_available,
     log_step_5_candidate,
     step_5_fit_curves_enabled,
@@ -19,12 +19,12 @@ from .monitoring import (
 
 
 __all__ = [
-    "DEFAULT_LOG_ROOT",
     "FIT_CURVE_ENVIRONMENT_VARIABLE",
     "TensorBoardMonitoringError",
     "TrainingRunContext",
     "calculate_regression_metrics",
     "create_study_monitor",
+    "default_log_root",
     "ensure_tensorboard_available",
     "log_step_5_candidate",
     "step_5_fit_curves_enabled",
