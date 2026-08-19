@@ -17,6 +17,20 @@
 # version.
 settings_version = 4
 
+# Which numbered run the expensive steps read and write.  Steps 5, 6 and 7
+# place every artifact under "runs/run_<run_number>/", so this integer alone
+# decides whether work continues an existing run or starts a new one.
+#
+# It is never advanced automatically.  That is the point: stopping Phase 2 and
+# resuming it later leaves this value untouched, so the resumed part lands in
+# the same folder as the part that already finished, and a partially complete
+# run can never end up split across two run numbers.  Increment it by hand only
+# when a genuinely new run should begin, which starts that run from nothing
+# rather than resuming.
+#
+# Options: any positive integer.
+run_number = 1
+
 [execution]
 # How many independent Step 5/6 family/outer-fold studies run at the same
 # time, each as its own subprocess. "auto" uses every available CPU core

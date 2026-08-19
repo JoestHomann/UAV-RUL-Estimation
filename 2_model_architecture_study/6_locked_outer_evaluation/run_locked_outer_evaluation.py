@@ -22,14 +22,11 @@ import torch
 
 
 STEP_DIR = Path(__file__).resolve().parent
-DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 
 if str(STEP_DIR) not in sys.path:
     sys.path.insert(0, str(STEP_DIR))
 
 from evaluation_gate import (  # noqa: E402
-    DEFAULT_SELECTED_CONFIGURATIONS_PATH,
-    DEFAULT_SELECTION_MANIFEST_PATH,
     DEFAULT_SPECIFICATION_PATH,
 )
 from locked_outer_evaluation import LockedOuterEvaluationRunner  # noqa: E402
@@ -99,20 +96,29 @@ def main() -> None:
     parser.add_argument(
         "--selection-manifest",
         type=Path,
-        default=DEFAULT_SELECTION_MANIFEST_PATH,
-        help="Location of Step 5's complete selection manifest.",
+        default=None,
+        help=(
+            "Location of Step 5's complete selection manifest; defaults to "
+            "the current run folder."
+        ),
     )
     parser.add_argument(
         "--selected-configurations",
         type=Path,
-        default=DEFAULT_SELECTED_CONFIGURATIONS_PATH,
-        help="Location of Step 5's selected configuration table.",
+        default=None,
+        help=(
+            "Location of Step 5's selected configuration table; defaults to "
+            "the current run folder."
+        ),
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Directory for models, predictions, run facts, and checkpoints.",
+        default=None,
+        help=(
+            "Directory for models, predictions, run facts, and checkpoints; "
+            "defaults to runs/run_<run_number>/6_locked_outer_evaluation."
+        ),
     )
     parser.add_argument(
         "--family",

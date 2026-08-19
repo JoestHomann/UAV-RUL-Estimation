@@ -82,6 +82,18 @@ family/fold/seed runs and 36,000 locked prediction rows.
 
 ## Generated artifacts
 
+Everything below is written to "runs/run_<n>/6_locked_outer_evaluation/", where
+"n" is the "run_number" in the architecture study settings, and Step 5's inputs
+are read from the matching folder in the same run. That number is only ever
+changed by hand, so an interrupted evaluation resumes into the folder it
+started in. "--output-dir", "--selection-manifest" and
+"--selected-configurations" still accept explicit paths, which is how this step
+can be pointed at another run's Step 5 results.
+
+Note the two levels named "runs": the outer one holds numbered pipeline runs,
+while the "runs/" directory listed below is this step's own per-model record
+folder.
+
 Each family/fold/seed run creates:
 
 - "models/...joblib" containing the fitted model and its preprocessing;

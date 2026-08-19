@@ -24,6 +24,15 @@ from typing import Any, Callable
 PHASE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PHASE_DIR.parent
 
+from run_layout import (  # noqa: E402
+    RunLayoutError,
+    STEP_5_DIRECTORY_NAME,
+    STEP_6_DIRECTORY_NAME,
+    STEP_7_DIRECTORY_NAME,
+    read_run_number,
+    run_root,
+    step_directory_for_specification,
+)
 from tensorboard_monitoring import (  # noqa: E402
     DEFAULT_LOG_ROOT,
     FIT_CURVE_ENVIRONMENT_VARIABLE,
@@ -53,24 +62,33 @@ SEQUENCE_REPORT_PATH = (
 MODEL_REGISTRY_PATH = (
     PHASE_DIR / "4_model_adapters" / "artifacts" / "model_registry.json"
 )
-STEP_5_MANIFEST_PATH = (
-    PHASE_DIR
-    / "5_inner_model_selection"
-    / "artifacts"
-    / "selection_manifest.json"
-)
-STEP_6_MANIFEST_PATH = (
-    PHASE_DIR
-    / "6_locked_outer_evaluation"
-    / "artifacts"
-    / "locked_evaluation_manifest.json"
-)
-STEP_7_MANIFEST_PATH = (
-    PHASE_DIR
-    / "7_architecture_comparison"
-    / "artifacts"
-    / "comparison_manifest.json"
-)
+
+
+def _step_5_manifest_path() -> Path:
+    """Locate Step 5's manifest inside the run folder the settings select."""
+
+    return (
+        step_directory_for_specification(STEP_5_DIRECTORY_NAME)
+        / "selection_manifest.json"
+    )
+
+
+def _step_6_manifest_path() -> Path:
+    """Locate Step 6's manifest inside the run folder the settings select."""
+
+    return (
+        step_directory_for_specification(STEP_6_DIRECTORY_NAME)
+        / "locked_evaluation_manifest.json"
+    )
+
+
+def _step_7_manifest_path() -> Path:
+    """Locate Step 7's manifest inside the run folder the settings select."""
+
+    return (
+        step_directory_for_specification(STEP_7_DIRECTORY_NAME)
+        / "comparison_manifest.json"
+    )
 
 
 class Phase2PipelineError(ValueError):
@@ -381,7 +399,7 @@ def _run_step_5(*, force: bool, max_workers: int | None) -> None:
         for outer_fold in outer_folds
     }
     manifest = _read_optional_json(
-        STEP_5_MANIFEST_PATH,
+        _step_5_manifest_path(),
         "Step 5 selection manifest",
     )
     completed_studies: set[str] = set()
@@ -419,7 +437,7 @@ def _run_step_5(*, force: bool, max_workers: int | None) -> None:
         )
 
     final_manifest = _read_json(
-        STEP_5_MANIFEST_PATH,
+        _step_5_manifest_path(),
         "Step 5 selection manifest",
     )
     if (
@@ -487,7 +505,7 @@ def _run_step_6(*, force: bool, max_workers: int | None) -> None:
     resolved_max_workers = _resolve_max_workers(settings, max_workers)
     expected_by_pair, expected_run_count = _step_6_expected_runs(settings)
     manifest = _read_optional_json(
-        STEP_6_MANIFEST_PATH,
+        _step_6_manifest_path(),
         "Step 6 locked-evaluation manifest",
     )
     completed_runs: set[str] = set()
@@ -524,7 +542,7 @@ def _run_step_6(*, force: bool, max_workers: int | None) -> None:
         )
 
     final_manifest = _read_json(
-        STEP_6_MANIFEST_PATH,
+        _step_6_manifest_path(),
         "Step 6 locked-evaluation manifest",
     )
     if (
@@ -546,7 +564,7 @@ def _run_step_7() -> None:
     # hashes, both of which are deliberately absent from this project design.
     _run_script(STEPS[7])
     manifest = _read_json(
-        STEP_7_MANIFEST_PATH,
+        _step_7_manifest_path(),
         "Step 7 comparison manifest",
     )
     if manifest.get("status") != "complete":
@@ -605,10 +623,25 @@ def print_status() -> None:
         "4. Model adapters: "
         + ("available" if MODEL_REGISTRY_PATH.is_file() else "not generated")
     )
+
+    # Steps 5 to 7 live inside a numbered run folder, so their state can only be
+    # reported once Step 1 has produced the settings that name the run.
+    try:
+        run_number = read_run_number(SPECIFICATION_PATH)
+    except RunLayoutError as error:
+        print(f"Run: unknown ({error})")
+        for line in (
+            "5. Inner model selection: ",
+            "6. Locked outer evaluation: ",
+            "7. Architecture comparison: ",
+        ):
+            print(line + "unknown until Step 1 has run")
+        return
+    print(f"Run: {run_number} ({run_root(run_number)})")
     print(
         "5. Inner model selection: "
         + _progress_status(
-            STEP_5_MANIFEST_PATH,
+            _step_5_manifest_path(),
             "Step 5 selection manifest",
             "completed_study_count",
             "expected_study_count",
@@ -617,7 +650,7 @@ def print_status() -> None:
     print(
         "6. Locked outer evaluation: "
         + _progress_status(
-            STEP_6_MANIFEST_PATH,
+            _step_6_manifest_path(),
             "Step 6 locked-evaluation manifest",
             "completed_run_count",
             "expected_run_count",
@@ -625,7 +658,7 @@ def print_status() -> None:
     )
     print(
         "7. Architecture comparison: "
-        + _simple_status(STEP_7_MANIFEST_PATH, "Step 7 comparison manifest")
+        + _simple_status(_step_7_manifest_path(), "Step 7 comparison manifest")
     )
 
 
@@ -660,6 +693,17 @@ def run_pipeline(
         print(
             f"{FIT_CURVE_ENVIRONMENT_VARIABLE} is set: Step 5 inner fits will "
             "write per-epoch curves",
+            flush=True,
+        )
+    # Steps 1 to 4 rebuild the settings that name the run, so the folder can
+    # only be reported once those steps are not part of this request.
+    if first_step > 1:
+        try:
+            run_number = read_run_number(SPECIFICATION_PATH)
+        except RunLayoutError as error:
+            raise Phase2PipelineError(str(error)) from error
+        print(
+            f"Run {run_number}: Steps 5-7 read and write {run_root(run_number)}",
             flush=True,
         )
     if force:

@@ -81,7 +81,12 @@ outer-validation targets cannot choose the tree or epoch count.
 
 ## Generated artifacts
 
-The "artifacts/studies/" directory contains separate files for every completed
+Everything below is written to "runs/run_<n>/5_inner_model_selection/", where
+"n" is the "run_number" in the architecture study settings. That number is only
+ever changed by hand, so interrupting a study and resuming it later continues
+inside the same folder. "--output-dir" still accepts an explicit path.
+
+The "studies/" directory contains separate files for every completed
 or attempted family/outer-fold study:
 
 - "...__candidates.csv" contains one row per complete candidate;
@@ -105,6 +110,8 @@ all five outer folds. Later steps must require a "complete" manifest.
 ## TensorBoard monitoring
 
 "tensorboard_monitoring/logs/step_5/<family>/outer_fold_N/study_progress"
+(the TensorBoard log root is shared across runs and is not moved into the run
+folder, so the dashboard keeps working across a run-number change)
 holds the search curve: "search/candidate_rmse" carries one point per completed
 candidate, with that candidate's hyperparameters attached as text. This is the
 view to watch during a run -- whether tuning is still improving, and whether it

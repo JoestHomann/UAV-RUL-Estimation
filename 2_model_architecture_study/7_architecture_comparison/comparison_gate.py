@@ -10,23 +10,40 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
+if str(PHASE_DIR) not in sys.path:
+    sys.path.insert(0, str(PHASE_DIR))
+
+from run_layout import (  # noqa: E402
+    STEP_6_DIRECTORY_NAME,
+    step_directory_for_specification,
+)
+
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
     / "1_architecture_study_settings"
     / "artifacts"
     / "experiment_specification.json"
 )
-DEFAULT_LOCKED_MANIFEST_PATH = (
-    PHASE_DIR
-    / "6_locked_outer_evaluation"
-    / "artifacts"
-    / "locked_evaluation_manifest.json"
-)
+
+
+def default_locked_manifest_path() -> Path:
+    """Locate Step 6's manifest inside the current run folder.
+
+    Resolved when it is called rather than at import time, so importing this
+    gate does not require Step 1 to have run yet.
+    """
+
+    return (
+        step_directory_for_specification(STEP_6_DIRECTORY_NAME)
+        / "locked_evaluation_manifest.json"
+    )
+
 
 # These families are retrained with all configured seeds in Step 6. The other
 # implemented families are deterministic and therefore have only the first
@@ -126,10 +143,12 @@ def _artifact_path(
 
 def build_architecture_comparison_plan(
     specification_path: Path = DEFAULT_SPECIFICATION_PATH,
-    locked_manifest_path: Path = DEFAULT_LOCKED_MANIFEST_PATH,
+    locked_manifest_path: Path | None = None,
 ) -> ArchitectureComparisonPlan:
     """Validate the complete Step 6 manifest before returning data paths."""
 
+    if locked_manifest_path is None:
+        locked_manifest_path = default_locked_manifest_path()
     specification = _read_json(
         specification_path,
         "Step 1 experiment specification",

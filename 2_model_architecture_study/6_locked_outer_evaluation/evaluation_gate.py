@@ -28,27 +28,45 @@ DEFAULT_SPECIFICATION_PATH = (
     / "artifacts"
     / "experiment_specification.json"
 )
-DEFAULT_SELECTION_MANIFEST_PATH = (
-    PHASE_DIR
-    / "5_inner_model_selection"
-    / "artifacts"
-    / "selection_manifest.json"
-)
-DEFAULT_SELECTED_CONFIGURATIONS_PATH = (
-    PHASE_DIR
-    / "5_inner_model_selection"
-    / "artifacts"
-    / "selected_configurations.csv"
-)
+
 
 if str(MODEL_ADAPTER_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_ADAPTER_DIR))
+if str(PHASE_DIR) not in sys.path:
+    sys.path.insert(0, str(PHASE_DIR))
+
+from run_layout import (  # noqa: E402
+    STEP_5_DIRECTORY_NAME,
+    step_directory_for_specification,
+)
 
 from model_registry import (  # noqa: E402
     ADAPTER_CLASSES,
     ModelAdapterFactory,
     load_experiment_specification,
 )
+
+
+def default_selection_manifest_path() -> Path:
+    """Locate Step 5's manifest inside the current run folder.
+
+    Resolved when it is called rather than at import time, so importing this
+    gate does not require Step 1 to have run yet.
+    """
+
+    return (
+        step_directory_for_specification(STEP_5_DIRECTORY_NAME)
+        / "selection_manifest.json"
+    )
+
+
+def default_selected_configurations_path() -> Path:
+    """Locate Step 5's selected configurations inside the current run folder."""
+
+    return (
+        step_directory_for_specification(STEP_5_DIRECTORY_NAME)
+        / "selected_configurations.csv"
+    )
 
 
 EARLY_STOPPED_FAMILIES = {"xgboost", "mlp", "tcn", "lstm", "transformer"}
@@ -532,11 +550,15 @@ def _verify_step5_result_tables(
 
 def build_locked_evaluation_plan(
     specification_path: Path = DEFAULT_SPECIFICATION_PATH,
-    selection_manifest_path: Path = DEFAULT_SELECTION_MANIFEST_PATH,
-    selected_configurations_path: Path = DEFAULT_SELECTED_CONFIGURATIONS_PATH,
+    selection_manifest_path: Path | None = None,
+    selected_configurations_path: Path | None = None,
 ) -> LockedEvaluationPlan:
     """Open the locked-evaluation gate only for a complete matching Step 5."""
 
+    if selection_manifest_path is None:
+        selection_manifest_path = default_selection_manifest_path()
+    if selected_configurations_path is None:
+        selected_configurations_path = default_selected_configurations_path()
     specification = load_experiment_specification(specification_path)
     settings = specification["settings"]
     settings_version = int(settings["settings_version"])

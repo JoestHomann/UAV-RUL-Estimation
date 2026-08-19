@@ -39,6 +39,38 @@ The default resume behavior skips completed Step 5 family/fold studies and
 complete Step 6 family/fold evaluations. If a Step 6 family/fold was interrupted
 between stochastic seeds, that family/fold is rerun as one complete unit.
 
+### Numbered runs
+
+Steps 5, 6 and 7 write every artifact under one numbered run folder:
+
+    2_model_architecture_study\runs\run_<n>\5_inner_model_selection\
+    2_model_architecture_study\runs\run_<n>\6_locked_outer_evaluation\
+    2_model_architecture_study\runs\run_<n>\7_architecture_comparison\
+
+"n" is the "run_number" in the architecture study settings. Nothing advances
+it automatically, which is the whole point: stopping Phase 2 and resuming it
+later resolves to the same folder, so the resumed work joins the work that
+already finished and a partially complete run can never be split across two
+run numbers. Increment "run_number" by hand only when a genuinely new run
+should begin -- that starts the new run from nothing rather than resuming.
+
+Steps 1 to 4 keep their fixed "artifacts" directories. Their outputs are the
+validated settings, the copied data adapters, and the model registry: shared by
+every run and reproduced identically from the same inputs, so a per-run copy
+would duplicate large datasets without adding traceability.
+
+"--status" and the pipeline banner both print the active run folder. Each
+step's "--output-dir" and its upstream input flags still accept explicit paths,
+which is how one run can be pointed at another run's Step 5 or Step 6 results.
+
+Confirm the layout without running any training:
+
+    py 2_model_architecture_study\verify_run_layout.py
+
+Step 7 additionally saves "architecture_study_settings.csv" beside its result
+tables, so a finished run records the configuration that produced it even after
+the settings file has moved on.
+
 Use "--through-step" to stop after a chosen step. For example, this prepares
 the settings, both data adapters, and model registry without starting training:
 

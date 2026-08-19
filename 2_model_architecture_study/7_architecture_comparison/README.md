@@ -140,12 +140,41 @@ settings order, and no value is converted into a rank or winner.
 - "paired_metric_differences.csv" contains all pairwise metric differences and
   95% paired intervals.
 - "efficiency_summary.csv" contains timing, parameter, and model-size facts.
+- "architecture_study_settings.csv" is a flat snapshot of the settings that
+  produced this run, one row per leaf value.
 - "figures/" contains overall metrics, uncertainty, fold, scenario, age-band,
   lifetime-group, seed-stability, paired-difference, and efficiency plots.
 - "comparison_manifest.json" records the completed procedure and explicitly
   states that no rank or winner was written.
 
 Generated artifacts remain visible locally and are ignored by Git.
+
+## The settings snapshot
+
+"architecture_study_settings.csv" holds the resolved settings as
+"setting,value" rows. Nested tables become dotted paths and list entries become
+bracketed indices, so "[architectures.tcn.search.channels]" with
+"values = [32, 64, 128]" appears as
+"architectures.tcn.search.channels.values[0]" through "[2]". Indexing rather
+than joining keeps the table lossless: a value containing a separator cannot be
+mistaken for two values, and a list of lists stays readable.
+
+The other tables record what the architectures did; this one records the
+configuration that produced them. It is written from the same validated
+settings the gate used, and it is written first, so a run folder explains its
+own configuration even if the comparison were to fail afterwards. That matters
+because run folders outlive the settings file: the TOML moves on to the next
+"settings_version" and "run_number", while a finished run keeps the exact
+configuration it was produced with.
+
+## Where Step 7 writes
+
+Output goes to "runs/run_<n>/7_architecture_comparison/", where "n" is the
+"run_number" in the architecture study settings, and Step 6's results are read
+from the matching folder in the same run. "--output-dir" and "--locked-manifest"
+still accept explicit paths, which is how this step can compare against another
+run's Step 6 results. The manifest records the run number alongside the settings
+version.
 
 ## Running Step 7
 

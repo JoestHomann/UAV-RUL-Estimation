@@ -540,6 +540,10 @@ class ArchitectureStudySettings(StrictModel):
     """
 
     settings_version: PositiveInt
+    # Selects the runs/run_<n>/ folder that Steps 5, 6 and 7 use. It is edited
+    # by hand and never advanced by the pipeline, so an interrupted run resumes
+    # into the folder it started in.
+    run_number: PositiveInt
     execution: ExecutionSpecification
     study: StudySpecification
     tuning: TuningSpecification

@@ -23,7 +23,6 @@ import pandas as pd
 
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
-DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 
 DEPENDENCY_DIRS = [
     PHASE_DIR,
@@ -39,6 +38,10 @@ from base import ModelAdapter, target_values  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from run_layout import (  # noqa: E402
+    STEP_6_DIRECTORY_NAME,
+    step_directory_for_specification,
+)
 from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
     create_study_monitor,
@@ -46,8 +49,6 @@ from tensorboard_monitoring import (  # noqa: E402
 )
 
 from evaluation_gate import (  # noqa: E402
-    DEFAULT_SELECTED_CONFIGURATIONS_PATH,
-    DEFAULT_SELECTION_MANIFEST_PATH,
     DEFAULT_SPECIFICATION_PATH,
     LockedEvaluationPlan,
     SelectedConfiguration,
@@ -283,9 +284,9 @@ class LockedOuterEvaluationRunner:
     def __init__(
         self,
         specification_path: Path = DEFAULT_SPECIFICATION_PATH,
-        selection_manifest_path: Path = DEFAULT_SELECTION_MANIFEST_PATH,
-        selected_configurations_path: Path = DEFAULT_SELECTED_CONFIGURATIONS_PATH,
-        output_dir: Path = DEFAULT_OUTPUT_DIR,
+        selection_manifest_path: Path | None = None,
+        selected_configurations_path: Path | None = None,
+        output_dir: Path | None = None,
     ) -> None:
         # This is the critical ordering constraint: the gate reads only Step 1,
         # Step 4, and Step 5 metadata. A failure occurs before data adapters are
@@ -296,6 +297,13 @@ class LockedOuterEvaluationRunner:
             selection_manifest_path,
             selected_configurations_path,
         )
+        # The run folder comes from the same specification the gate validated,
+        # so Step 6 always writes beside the Step 5 study it was authorized by.
+        if output_dir is None:
+            output_dir = step_directory_for_specification(
+                STEP_6_DIRECTORY_NAME,
+                specification_path=Path(specification_path),
+            )
         self.output_dir = output_dir.resolve()
         self.factory = ModelAdapterFactory(specification_path)
         self.settings = self.plan.settings

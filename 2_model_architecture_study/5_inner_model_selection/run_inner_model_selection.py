@@ -28,7 +28,6 @@ DEFAULT_SPECIFICATION_PATH = (
     / "artifacts"
     / "experiment_specification.json"
 )
-DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 
 if str(STEP_DIR) not in sys.path:
     sys.path.insert(0, str(STEP_DIR))
@@ -103,8 +102,11 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Directory for Step 5 checkpoints and consolidated results.",
+        default=None,
+        help=(
+            "Directory for Step 5 checkpoints and consolidated results; "
+            "defaults to runs/run_<run_number>/5_inner_model_selection."
+        ),
     )
     parser.add_argument(
         "--family",
@@ -159,7 +161,7 @@ def main() -> None:
     )
     print(
         "Saved "
-        f"{(args.output_dir / 'selected_configurations.csv').resolve()}"
+        f"{(runner.output_dir / 'selected_configurations.csv').resolve()}"
     )
 
 

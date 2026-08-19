@@ -11,7 +11,6 @@ import pandas as pd
 
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
-DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 
 for dependency_dir in (STEP_DIR, PHASE_DIR):
     if str(dependency_dir) not in sys.path:
@@ -22,9 +21,12 @@ from architecture_comparison import (  # noqa: E402
     save_comparison,
 )
 from comparison_gate import (  # noqa: E402
-    DEFAULT_LOCKED_MANIFEST_PATH,
     DEFAULT_SPECIFICATION_PATH,
     build_architecture_comparison_plan,
+)
+from run_layout import (  # noqa: E402
+    STEP_7_DIRECTORY_NAME,
+    step_directory_for_specification,
 )
 
 
@@ -41,14 +43,21 @@ def main() -> None:
     parser.add_argument(
         "--locked-manifest",
         type=Path,
-        default=DEFAULT_LOCKED_MANIFEST_PATH,
-        help="Location of Step 6's complete locked-evaluation manifest.",
+        default=None,
+        help=(
+            "Location of Step 6's complete locked-evaluation manifest; "
+            "defaults to the current run folder."
+        ),
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Directory for comparison tables, figures, and the Step 7 manifest.",
+        default=None,
+        help=(
+            "Directory for comparison tables, figures, and the Step 7 "
+            "manifest; defaults to "
+            "runs/run_<run_number>/7_architecture_comparison."
+        ),
     )
     args = parser.parse_args()
 
@@ -64,7 +73,13 @@ def main() -> None:
         model_runs = pd.read_csv(plan.model_runs_path)
         analyzer = ArchitectureComparisonAnalyzer(predictions, model_runs, plan)
         tables = analyzer.calculate()
-        manifest = save_comparison(tables, plan, args.output_dir)
+        output_dir = args.output_dir
+        if output_dir is None:
+            output_dir = step_directory_for_specification(
+                STEP_7_DIRECTORY_NAME,
+                specification_path=args.specification,
+            )
+        manifest = save_comparison(tables, plan, output_dir)
     except (
         ValueError,
         OSError,
@@ -77,7 +92,7 @@ def main() -> None:
     print(f"Compared families: {', '.join(manifest['enabled_families'])}")
     print(
         "Saved "
-        f"{(args.output_dir / 'architecture_comparison.csv').resolve()}"
+        f"{(output_dir / 'architecture_comparison.csv').resolve()}"
     )
 
 

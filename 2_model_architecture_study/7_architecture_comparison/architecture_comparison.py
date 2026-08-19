@@ -14,7 +14,7 @@ import json
 import os
 from pathlib import Path
 from time import sleep
-from typing import Any
+from typing import Any, Mapping
 from uuid import uuid4
 
 import numpy as np
@@ -205,6 +205,49 @@ def _write_csv(table: pd.DataFrame, path: Path, *, compressed: bool = False) -> 
         compression=compression,
     )
     _replace_with_retry(temporary_path, path)
+
+
+def _flattened_settings(value: Any, prefix: str = "") -> list[tuple[str, str]]:
+    """Flatten the resolved settings to one ``(dotted key, value)`` row each.
+
+    Nested tables become dotted paths and list entries become bracketed
+    indices, so ``[architectures.tcn.search.channels]`` with ``values =
+    [32, 64, 128]`` produces ``architectures.tcn.search.channels.values[0]``
+    through ``[2]``. Indexing rather than joining keeps the table lossless: a
+    value that itself contains a separator cannot be confused for two values,
+    and a list of lists stays readable.
+    """
+
+    if isinstance(value, dict):
+        rows: list[tuple[str, str]] = []
+        for key in sorted(value, key=str):
+            child = f"{prefix}.{key}" if prefix else str(key)
+            rows.extend(_flattened_settings(value[key], child))
+        return rows
+    if isinstance(value, (list, tuple)):
+        rows = []
+        for index, item in enumerate(value):
+            rows.extend(_flattened_settings(item, f"{prefix}[{index}]"))
+        return rows
+    if value is None:
+        return [(prefix, "")]
+    if isinstance(value, bool):
+        return [(prefix, "true" if value else "false")]
+    return [(prefix, str(value))]
+
+
+def settings_table(settings: Mapping[str, Any]) -> pd.DataFrame:
+    """Build the flat settings snapshot saved beside every run's results.
+
+    The comparison tables record what the architectures did; this records the
+    configuration that produced them. Keeping it as a CSV in the run folder
+    means a finished run explains itself without needing the settings file to
+    be read at whatever revision it happens to be at later, which is exactly
+    the case a numbered run folder is meant to survive.
+    """
+
+    rows = _flattened_settings(settings)
+    return pd.DataFrame(rows, columns=["setting", "value"])
 
 
 def _write_json(payload: dict[str, Any], path: Path) -> None:
@@ -881,7 +924,16 @@ def save_comparison(
         / "bootstrap_architecture_metrics.csv.gz",
         "paired_metric_differences": output_dir / "paired_metric_differences.csv",
         "efficiency_summary": output_dir / "efficiency_summary.csv",
+        "architecture_study_settings": output_dir
+        / "architecture_study_settings.csv",
     }
+    # Written first, and from the same validated settings the gate used, so a
+    # run folder records its own configuration even if the comparison itself
+    # were to fail afterwards.
+    _write_csv(
+        settings_table(plan.settings),
+        table_paths["architecture_study_settings"],
+    )
     _write_csv(tables.architecture_comparison, table_paths["architecture_comparison"])
     _write_csv(tables.seed_metrics, table_paths["seed_metrics"])
     _write_csv(tables.grouped_metrics, table_paths["grouped_metrics"])
@@ -908,6 +960,7 @@ def save_comparison(
     manifest = {
         "comparison_version": 1,
         "settings_version": int(plan.settings["settings_version"]),
+        "run_number": int(plan.settings["run_number"]),
         "status": "complete",
         "step_6_prerequisite": "complete",
         "enabled_families": list(plan.enabled_families),

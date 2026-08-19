@@ -31,7 +31,6 @@ import pandas as pd
 
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
-DEFAULT_OUTPUT_DIR = STEP_DIR / "artifacts"
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
     / "1_architecture_study_settings"
@@ -61,6 +60,10 @@ from model_registry import (  # noqa: E402
 )
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from run_layout import (  # noqa: E402
+    STEP_5_DIRECTORY_NAME,
+    step_directory_for_specification,
+)
 from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
     calculate_regression_metrics,
@@ -508,9 +511,17 @@ class InnerModelSelectionRunner:
     def __init__(
         self,
         specification_path: Path = DEFAULT_SPECIFICATION_PATH,
-        output_dir: Path = DEFAULT_OUTPUT_DIR,
+        output_dir: Path | None = None,
     ) -> None:
         self.specification_path = specification_path.resolve()
+        # The run folder is resolved from the same specification this runner
+        # validates against, so the study cannot write into one run while
+        # reading settings that belong to another.
+        if output_dir is None:
+            output_dir = step_directory_for_specification(
+                STEP_5_DIRECTORY_NAME,
+                specification_path=self.specification_path,
+            )
         self.output_dir = output_dir.resolve()
         # A direct Step 5 invocation receives the same fail-fast dependency
         # check as the top-level Phase 2 entry point.
