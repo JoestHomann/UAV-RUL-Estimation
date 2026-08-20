@@ -50,8 +50,8 @@ xgboost = true
 mlp = true
 tcn = true
 lstm = true
-transformer = false
-rbf_svr = false
+transformer = true
+rbf_svr = true
 # Saving every architecture's results and never declaring a winner are fixed
 # pipeline behaviors with nothing to configure.
 

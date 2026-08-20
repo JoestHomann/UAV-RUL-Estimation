@@ -962,10 +962,10 @@
         "mean_baseline": true,
         "mlp": true,
         "random_forest": true,
-        "rbf_svr": false,
+        "rbf_svr": true,
         "regularized_linear": true,
         "tcn": true,
-        "transformer": false,
+        "transformer": true,
         "xgboost": true
       },
       "optional_architectures": [
