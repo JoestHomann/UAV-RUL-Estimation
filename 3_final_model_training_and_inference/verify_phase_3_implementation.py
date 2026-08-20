@@ -29,6 +29,7 @@ for dependency_dir in (
         sys.path.insert(0, str(dependency_dir))
 
 import run_test_inference as inference_module  # noqa: E402
+import run_phase_3 as runner_module  # noqa: E402
 import phase_3_common as common_module  # noqa: E402
 from build_submission import (  # noqa: E402
     SubmissionVerificationError,
@@ -85,9 +86,18 @@ class _SyntheticModel:
 
 def _verify_layout() -> None:
     _require(run_root(3).name == "run_3", "Phase 3 run folder is misnamed")
-    for step in range(1, 7):
+    for step in range(1, 8):
         resolved = step_directory(step, run_number=3)
         _require(resolved.parent == run_root(3), f"Step {step} is outside its run")
+    _require(
+        set(runner_module.STEPS) == set(range(1, 8)),
+        "Phase 3 runner does not contain all seven steps",
+    )
+    _require(
+        runner_module.STEPS[7].script
+        == PHASE_DIR / "7_post_run_reporting" / "build_phase_3_report.py",
+        "Phase 3 Step 7 does not invoke post-run reporting",
+    )
     for rejected in (0, -1, True):
         try:
             run_root(rejected)

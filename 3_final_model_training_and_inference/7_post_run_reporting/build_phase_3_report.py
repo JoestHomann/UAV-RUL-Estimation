@@ -26,9 +26,10 @@ if str(PHASE_DIR) not in sys.path:
 from phase_3_common import (  # noqa: E402
     Phase3Error,
     complete_manifest,
+    final_run_manifest_path,
+    manifest_path,
     read_json,
     require_current_settings,
-    run_root,
     selected_configuration_path,
     step_directory,
     test_predictions_path,
@@ -38,8 +39,6 @@ from phase_3_run_layout import SETTINGS_PATH, tensorboard_log_root  # noqa: E402
 
 
 REPORT_VERSION = 1
-REPORT_DIRECTORY_NAME = "7_post_run_reporting"
-
 CANDIDATE_COLUMNS = {
     "candidate_number",
     "feature_set",
@@ -587,6 +586,16 @@ def build_report(run_number: int) -> dict[str, Any]:
             raise Phase3ReportingError(
                 f"Phase 3 Step {prerequisite} must be complete before reporting"
             )
+    final_manifest_path = final_run_manifest_path(run_number)
+    final_manifest = read_json(final_manifest_path, "final Phase 3 run manifest")
+    if (
+        final_manifest.get("status") != "complete"
+        or final_manifest.get("phase_3_run_number") != run_number
+        or final_manifest.get("settings_version") != settings_version
+    ):
+        raise Phase3ReportingError(
+            "Final Phase 3 run manifest is not compatible with this report"
+        )
 
     search_artifacts = step_directory(2, run_number=run_number) / "artifacts"
     candidates = _read_csv(
@@ -618,7 +627,7 @@ def build_report(run_number: int) -> dict[str, Any]:
     if candidate_numbers != fold_candidate_numbers:
         raise Phase3ReportingError("Candidate and fold result identifiers disagree")
 
-    report_dir = run_root(run_number) / REPORT_DIRECTORY_NAME
+    report_dir = step_directory(7, run_number=run_number)
     figure_dir = report_dir / "figures"
     figures = {
         "optimization_history": _optimization_history(
@@ -734,6 +743,16 @@ def build_report(run_number: int) -> dict[str, Any]:
         "selection_changed": False,
     }
     write_json(manifest, report_dir / "report_manifest.json")
+
+    final_manifest.setdefault("step_manifests", {})["7"] = str(
+        manifest_path(7, run_number)
+        .relative_to(final_manifest_path.parent)
+        .as_posix()
+    )
+    final_manifest.setdefault("artifacts", {})["report"] = (
+        "7_post_run_reporting/report_summary.json"
+    )
+    write_json(final_manifest, final_manifest_path)
     return manifest
 
 
@@ -750,7 +769,7 @@ def main() -> None:
     print("Phase 3 report complete")
     print(f"Model family: {manifest['model_family']}")
     print(f"Figures: {len(manifest['figures'])}")
-    print(f"Report: {run_root(run_number) / REPORT_DIRECTORY_NAME}")
+    print(f"Report: {step_directory(7, run_number=run_number)}")
 
 
 if __name__ == "__main__":

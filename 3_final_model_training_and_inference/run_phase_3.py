@@ -1,4 +1,4 @@
-"""Run, inspect, and resume the complete six-step Phase 3 pipeline."""
+"""Run, inspect, and resume the complete seven-step Phase 3 pipeline."""
 
 from __future__ import annotations
 
@@ -77,6 +77,11 @@ STEPS = {
         "Submission verification",
         PHASE_DIR / "6_submission_verification" / "build_submission.py",
     ),
+    7: StepDefinition(
+        7,
+        "Post-run reporting",
+        PHASE_DIR / "7_post_run_reporting" / "build_phase_3_report.py",
+    ),
 }
 
 
@@ -125,7 +130,7 @@ def _run_step(
     force: bool,
 ) -> None:
     command = [sys.executable, str(step.script), "--settings", str(settings_path)]
-    if force and step.number >= 2:
+    if force and 2 <= step.number <= 6:
         command.append("--force")
     print("", flush=True)
     print("=" * 78, flush=True)
@@ -158,6 +163,8 @@ def run_pipeline(
     print("Final configuration search runs sequentially (one fit at a time)", flush=True)
     if force:
         print("Force mode will replace completed work in requested Steps 2-6", flush=True)
+        if through_step >= 7:
+            print("Step 7 reporting will be regenerated from the resulting artifacts", flush=True)
     for number in range(from_step, through_step + 1):
         _run_step(STEPS[number], settings_path=settings_path, force=force)
     print("\nRequested Phase 3 range completed successfully", flush=True)
@@ -167,8 +174,8 @@ def run_pipeline(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--status", action="store_true")
-    parser.add_argument("--from-step", type=int, choices=range(1, 7), default=1)
-    parser.add_argument("--through-step", type=int, choices=range(1, 7), default=6)
+    parser.add_argument("--from-step", type=int, choices=range(1, 8), default=1)
+    parser.add_argument("--through-step", type=int, choices=range(1, 8), default=7)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--settings", type=Path, default=SETTINGS_PATH)
     args = parser.parse_args()

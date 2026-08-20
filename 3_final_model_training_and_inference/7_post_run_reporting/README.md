@@ -1,15 +1,19 @@
 # Phase 3 post-run reporting
 
-This optional reporting stage reads the shared artifacts of a completed Phase
-3 run and creates the same core figures regardless of which model family won.
+Phase 3 Step 7 reads the shared artifacts of a completed run and creates the
+same core figures regardless of which model family won. The default Phase 3
+pipeline invokes this step automatically after submission verification.
 It does not load locked data, test targets, or change the selected
 configuration, fitted model, predictions, or submission.
 
-Run it from the repository root:
+Regenerate only the report from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe 3_final_model_training_and_inference\7_post_run_reporting\build_phase_3_report.py
+.\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --from-step 7
 ```
+
+The underlying `build_phase_3_report.py` command remains available for direct
+development and verification use.
 
 Outputs are written below
 `runs/run_<n>/7_post_run_reporting/`. The report includes search progression,

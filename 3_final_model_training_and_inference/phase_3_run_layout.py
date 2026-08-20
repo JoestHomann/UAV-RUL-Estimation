@@ -22,6 +22,7 @@ STEP_DIRECTORY_NAMES = {
     4: "4_final_model_training",
     5: "5_test_inference",
     6: "6_submission_verification",
+    7: "7_post_run_reporting",
 }
 
 

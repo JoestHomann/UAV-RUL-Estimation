@@ -324,13 +324,13 @@ The stage writes `submission.csv`, `submission_manifest.json`, and a final Phase
 available, is recorded separately and never written back into the training
 contract.
 
-## Optional Post-Run Reporting
+## Step 7: Post-Run Reporting
 
-After Step 6 completes, `build_phase_3_report.py` creates a model-agnostic
-report from the common candidate, fold, timing, TensorBoard, and prediction
-artifacts. The same implementation applies to every registered model family;
-it does not branch into XGBoost-, neural-, or baseline-specific reporting
-contracts.
+After Step 6 completes, the Phase 3 runner automatically invokes
+`build_phase_3_report.py` to create a model-agnostic report from the common
+candidate, fold, timing, TensorBoard, and prediction artifacts. The same
+implementation applies to every registered model family; it does not branch
+into XGBoost-, neural-, or baseline-specific reporting contracts.
 
 The report contains:
 
@@ -345,8 +345,12 @@ The report contains:
 A model without an iterative loss curve still receives every applicable plot;
 the unavailable curve is recorded as skipped. Reporting never loads locked
 data or test targets, calculates test metrics, refits a candidate, changes the
-selection, or modifies the final model and submission. The report is therefore
-optional and does not add another decision gate to the six-step workflow.
+selection, or modifies the final model and submission. Step 7 is part of the
+default execution path but does not add another scientific decision gate. A
+reporting failure does not invalidate the verified model or submission and may
+be resumed independently with `run_phase_3.py --from-step 7`.
+After successful reporting, the final run manifest records the Step 7 manifest
+and report-summary path.
 
 ## Directory Layout
 
@@ -357,14 +361,14 @@ settings, manifests, checkpoints, logs, and generated artifacts.
 
 | Step folder | Python script | Main artifact | Script task |
 | --- | --- | --- | --- |
-| Phase root | `run_phase_3.py`, `launch_tensorboard.py`, `verify_phase_3_implementation.py` | `final_run_manifest.json` | Run and resume the six steps, launch run-local monitoring, and verify the implementation without loading locked or test data. |
+| Phase root | `run_phase_3.py`, `launch_tensorboard.py`, `verify_phase_3_implementation.py` | `final_run_manifest.json` | Run and resume all seven steps, launch run-local monitoring, and verify the implementation without loading locked or test data. |
 | `1_winning_architecture_selection/` | `verify_phase_3_settings.py`, `build_selected_architecture.py` | `artifacts/selected_architecture.json` | Validate the Phase 3 TOML and chosen family against the referenced completed Phase 2 run, then write the immutable selection artifact. |
 | `2_final_configuration_search/` | `run_final_configuration_search.py` | `artifacts/selected_configuration.json` | Search only the selected family on the five development folds and save the configuration chosen by mean fold RMSE. |
 | `3_final_training_contract/` | `build_final_training_contract.py` | `artifacts/final_training_contract.json` | Combine the selected architecture and configuration into the validated contract that freezes every final-training decision. |
 | `4_final_model_training/` | `run_final_model_training.py` | `artifacts/final_model.joblib` | Fit the contracted model and preprocessing on all 100 training UAVs, serialize it through the selected adapter, and verify model reload. |
 | `5_test_inference/` | `run_test_inference.py` | `artifacts/test_predictions.csv` | Load test features for the first time and produce one traceable prediction per test UAV with the frozen model. |
 | `6_submission_verification/` | `build_submission.py` | `artifacts/submission.csv` | Create the two-column Kaggle submission and verify its identifiers, values, order, and reproducibility. |
-| `7_post_run_reporting/` | `build_phase_3_report.py`, `verify_phase_3_reporting.py` | `figures/*.png` | Optionally create and verify model-agnostic search, stability, efficiency, training, and target-free prediction figures after Step 6. |
+| `7_post_run_reporting/` | `build_phase_3_report.py`, `verify_phase_3_reporting.py` | `figures/*.png` | Automatically create and verify model-agnostic search, stability, efficiency, training, and target-free prediction figures after Step 6. |
 
 ## Resume and Failure Rules
 
@@ -380,6 +384,8 @@ settings, manifests, checkpoints, logs, and generated artifacts.
 - Test inference may be regenerated from the saved final model.
 - Submission generation is inexpensive and may be repeated from an identical
   saved model and prediction table.
+- Reporting is regenerated automatically when Step 7 is included and can be
+  rerun independently without refitting or repeating test inference.
 
 ## Verification Strategy
 
@@ -416,16 +422,16 @@ Phase 3 is complete when:
   passes;
 - exactly one nonnegative finite prediction exists for every test UAV;
 - `submission.csv` passes every schema and identifier check;
+- the model-agnostic Step 7 report and applicable figures are generated;
 - the final manifest records the selected settings, configuration, model,
-  prediction table, and submission paths;
+  prediction table, submission, and report paths;
 - no locked result, test prediction, or Kaggle score has been used for another
   tuning decision.
 
 ## Current Implementation Status
 
-The six-step Phase 3 workflow is implemented. The default tracked TOML selects
-XGBoost from completed Phase 2 Run 3 and targets Phase 3 Run 1. Step 1 has been
-validated and generated locally; the expensive 25-candidate Step 2 search is
-not started automatically by implementation verification. Running
-`run_phase_3.py` starts or resumes the active workflow, while `--status` is
-read-only.
+The seven-step Phase 3 workflow is implemented. The tracked TOML selects
+XGBoost from completed Phase 2 Run 3 and declares the active Phase 3 run
+number. Implementation verification does not start the expensive candidate
+search. Running `run_phase_3.py` starts or resumes the active workflow and
+generates the report after Step 6, while `--status` is read-only.

@@ -215,7 +215,8 @@ More details are available in the
 
 Phase 3 records the manually selected Phase 2 winner, tunes only that family on
 the five development folds, freezes the training contract, fits all 100
-training UAVs, and then unlocks test inference and submission verification.
+training UAVs, unlocks test inference and submission verification, and
+automatically creates model-agnostic post-run figures.
 
 The only human-edited Phase 3 configuration is the TOML below. Configure it
 before starting a run and leave it unchanged when resuming:
@@ -235,13 +236,13 @@ Inspect progress or run the complete phase:
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --status
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
 
-After completion, generate the model-agnostic Phase 3 figures:
-
-    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\7_post_run_reporting\build_phase_3_report.py
-
 Resume an interrupted final search without discarding completed candidates:
 
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --from-step 2
+
+Regenerate only the post-run figures from a completed run:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --from-step 7
 
 The test dataset is first opened by Step 5. Steps 1-4 use only the completed
 Phase 2 artifacts plus training prefixes and development scenarios. More

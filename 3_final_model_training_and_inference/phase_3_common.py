@@ -34,6 +34,7 @@ STEP_MANIFEST_NAMES = {
     4: "final_training_manifest.json",
     5: "inference_manifest.json",
     6: "submission_manifest.json",
+    7: "report_manifest.json",
 }
 
 
@@ -265,6 +266,6 @@ def final_run_manifest_path(run_number: int) -> Path:
 def invalidate_downstream_manifests(after_step: int, run_number: int) -> None:
     """Remove completion claims derived from work that is being replaced."""
 
-    for step_number in range(after_step + 1, 7):
+    for step_number in range(after_step + 1, 8):
         manifest_path(step_number, run_number).unlink(missing_ok=True)
     final_run_manifest_path(run_number).unlink(missing_ok=True)
