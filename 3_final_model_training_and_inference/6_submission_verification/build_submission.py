@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from io import StringIO
 from pathlib import Path
 import sys
 from typing import Any
@@ -38,6 +39,12 @@ from phase_3_run_layout import SETTINGS_PATH  # noqa: E402
 
 class SubmissionVerificationError(Phase3Error):
     """Explain a prediction mismatch or invalid Kaggle upload table."""
+
+
+def _csv_round_trip(table: pd.DataFrame) -> pd.DataFrame:
+    """Apply the same decimal serialization boundary as persisted CSV output."""
+
+    return pd.read_csv(StringIO(table.to_csv(index=False)))
 
 
 def _validate_submission(
@@ -91,11 +98,13 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
         raise SubmissionVerificationError(
             "Stored prediction identities differ from regenerated inference"
         )
+    canonical_regenerated = _csv_round_trip(regenerated)
     stored_values = stored["RUL"].to_numpy(dtype=float)
-    regenerated_values = regenerated["RUL"].to_numpy(dtype=float)
+    regenerated_values = canonical_regenerated["RUL"].to_numpy(dtype=float)
     if not np.array_equal(stored_values, regenerated_values):
         raise SubmissionVerificationError(
-            "Stored RUL values differ from regenerated frozen-model predictions"
+            "Stored RUL values differ from regenerated predictions after the "
+            "canonical CSV round trip"
         )
 
     submission = stored.loc[:, ["uav_id", "RUL"]].copy()
@@ -118,6 +127,7 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "finite_nonnegative_values_verified": True,
         "deterministic_order_verified": True,
         "regenerated_prediction_equivalence": True,
+        "prediction_comparison_representation": "canonical_csv_round_trip",
         "test_metrics_calculated": False,
         "artifacts": {"submission": "artifacts/submission.csv"},
     }

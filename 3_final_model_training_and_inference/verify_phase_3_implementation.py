@@ -32,6 +32,7 @@ import run_test_inference as inference_module  # noqa: E402
 import phase_3_common as common_module  # noqa: E402
 from build_submission import (  # noqa: E402
     SubmissionVerificationError,
+    _csv_round_trip,
     _validate_submission,
 )
 from phase_3_common import (  # noqa: E402
@@ -268,6 +269,15 @@ def _verify_inference_and_submission() -> None:
             reread["RUL"].to_numpy(dtype=float),
         ),
         "CSV round-trip changed prediction values",
+    )
+    awkward_values = pd.DataFrame(
+        {"uav_id": [1, 2], "RUL": [124.05750274658203, 185.94729614257812]}
+    )
+    _require(
+        _csv_round_trip(awkward_values).equals(
+            pd.read_csv(StringIO(awkward_values.to_csv(index=False)))
+        ),
+        "Canonical CSV comparison does not match persisted parsing",
     )
     duplicate = submission.copy()
     duplicate.loc[1, "uav_id"] = duplicate.loc[0, "uav_id"]

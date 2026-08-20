@@ -316,7 +316,8 @@ table. The submission must:
 - contain finite numeric RUL values at or above zero;
 - contain no index column or extra metadata;
 - use a deterministic row order;
-- reproduce identically when regenerated from the saved final model.
+- reproduce identically when regenerated from the saved final model and passed
+  through the same canonical CSV serialization boundary.
 
 The stage writes `submission.csv`, `submission_manifest.json`, and a final Phase
 3 run manifest listing the completed outputs. A Kaggle score, if later
