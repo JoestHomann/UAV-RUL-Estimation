@@ -6,16 +6,47 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, build_info
 
 from base import (
     ModelAdapter,
+    ModelAdapterError,
     TrainingSummary,
     root_mean_squared_error,
     sample_weight_values,
     tabular_values,
     target_values,
 )
+
+
+def _xgboost_cuda_available() -> bool:
+    """Return whether both XGBoost and the active machine can use CUDA."""
+
+    if not bool(build_info().get("USE_CUDA", False)):
+        return False
+    try:
+        import torch
+    except ImportError:
+        return False
+    return bool(torch.cuda.is_available())
+
+
+def resolve_xgboost_device(requested_device: str = "auto") -> str:
+    """Resolve an explicit or portable automatic XGBoost device choice."""
+
+    if requested_device not in {"auto", "cpu", "cuda"}:
+        raise ModelAdapterError(
+            "XGBoost device must be one of 'auto', 'cpu', or 'cuda'"
+        )
+    cuda_available = _xgboost_cuda_available()
+    if requested_device == "cuda" and not cuda_available:
+        raise ModelAdapterError(
+            "XGBoost CUDA was requested, but the installed build or active "
+            "machine does not provide CUDA"
+        )
+    if requested_device == "auto":
+        return "cuda" if cuda_available else "cpu"
+    return requested_device
 
 
 class XGBoostAdapter(ModelAdapter):
@@ -34,6 +65,7 @@ class XGBoostAdapter(ModelAdapter):
         early_stopping_patience: int | None = None,
         training_iterations: int | None = None,
         training_monitor: Any | None = None,
+        device: str = "auto",
     ) -> None:
         """Store inner-stopping or fixed outer-retraining settings."""
 
@@ -45,6 +77,8 @@ class XGBoostAdapter(ModelAdapter):
         )
         self.early_stopping_patience = early_stopping_patience
         self.training_iterations = training_iterations
+        self.requested_device = device
+        self.device = resolve_xgboost_device(device)
 
     def fit(self, training_data: Any, validation_data: Any | None) -> TrainingSummary:
         """Fit boosted trees with validation used only during inner selection."""
@@ -80,7 +114,7 @@ class XGBoostAdapter(ModelAdapter):
             # worker prevents nested CPU oversubscription.
             n_jobs=1,
             tree_method="hist",
-            device="cuda",
+            device=self.device,
             early_stopping_rounds=(
                 int(self.early_stopping_patience) if use_early_stopping else None
             ),

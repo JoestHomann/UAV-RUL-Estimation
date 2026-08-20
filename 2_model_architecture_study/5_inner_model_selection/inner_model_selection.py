@@ -449,13 +449,25 @@ class StudyArtifactWriter:
         return selected_record
 
     def fail(self, message: str) -> None:
-        """Make an interrupted or failed study impossible to treat as complete."""
+        """Make a failed study impossible to treat as complete."""
 
         completed = 0
         if self.candidate_path.is_file():
             completed = len(pd.read_csv(self.candidate_path))
         self._write_status(
             "failed",
+            completed_candidates=completed,
+            error=message,
+        )
+
+    def interrupt(self, message: str) -> None:
+        """Record an orderly interruption without discarding checkpoints."""
+
+        completed = 0
+        if self.candidate_path.is_file():
+            completed = len(pd.read_csv(self.candidate_path))
+        self._write_status(
+            "interrupted",
             completed_candidates=completed,
             error=message,
         )
@@ -714,12 +726,16 @@ class InnerModelSelectionRunner:
                         show_progress_bar=False,
                     )
                     attempts += 1
+                selected = writer.finish(study)
+            except (KeyboardInterrupt, SystemExit) as error:
+                message = str(error) or type(error).__name__
+                writer.interrupt(message)
+                self.consolidate_artifacts()
+                raise
             except Exception as error:
                 writer.fail(str(error))
                 self.consolidate_artifacts()
                 raise
-
-            selected = writer.finish(study)
         self.consolidate_artifacts()
         return selected
 

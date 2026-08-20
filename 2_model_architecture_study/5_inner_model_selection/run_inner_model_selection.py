@@ -36,6 +36,7 @@ from inner_model_selection import (  # noqa: E402
     InnerModelSelectionError,
     InnerModelSelectionRunner,
 )
+from models.tabular.xgboost import resolve_xgboost_device  # noqa: E402
 
 
 def _exit_without_interpreter_shutdown(status: int) -> None:
@@ -143,6 +144,8 @@ def main() -> None:
             f" ({torch.cuda.get_device_name(0)})" if neural_device == "cuda" else ""
         )
         print(f"Neural training device: {neural_device}{device_detail}")
+        if "xgboost" in families:
+            print(f"XGBoost training device: {resolve_xgboost_device()}")
         print("Starting leakage-safe inner model selection")
         print(f"Families: {', '.join(families)}")
         print(f"Outer folds: {outer_folds}")

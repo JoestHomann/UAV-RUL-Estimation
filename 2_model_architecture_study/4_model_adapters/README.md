@@ -19,8 +19,10 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "RegularizedLinearAdapter" implements Ridge and Elastic Net after robust
   scaling fitted only on the supplied training rows.
 - "RandomForestAdapter" fits sample-weighted trees to unscaled tabular values.
-- "XGBoostAdapter" fits sample-weighted boosted trees to unscaled values and
-  supports inner-fold early stopping or a fixed outer-retraining tree count.
+- "XGBoostAdapter" fits sample-weighted boosted trees to unscaled values,
+  automatically uses CUDA only when both the installed XGBoost build and the
+  active machine support it, and supports inner-fold early stopping or a fixed
+  outer-retraining tree count.
 - "MLPAdapter" applies training-fold robust scaling before a PyTorch MLP.
 - "TCNAdapter" applies causal dilated convolutions to Step 3 sequence windows.
 - "LSTMAdapter" uses packed valid sequence lengths in one temporal direction.

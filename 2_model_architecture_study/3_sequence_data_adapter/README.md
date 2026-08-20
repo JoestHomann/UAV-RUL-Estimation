@@ -83,5 +83,6 @@ Run from the repository root:
 - "get_locked_outer_evaluation_split(outer_fold, lookback)"
 
 The direct loading methods return raw windows for inspection. The two split
-methods return safely scaled training and validation datasets together with the
-training-fold scaler that produced them.
+methods return telemetry-scaled training and validation datasets together with
+the training-fold channel scaler that produced them. Age side features remain
+raw until the sequence model fits and persists its own training-row scaler.

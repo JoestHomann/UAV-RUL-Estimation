@@ -92,8 +92,9 @@ or attempted family/outer-fold study:
 - "...__candidates.csv" contains one row per complete candidate;
 - "...__inner_folds.csv" contains its four fold-level results;
 - "...__selected.json" contains the within-family selected configuration;
-- "...__status.json" says whether the individual study is running, failed, or
-  complete.
+- "...__status.json" says whether the individual study is running,
+  interrupted, failed, or complete. Interrupted studies retain their candidate
+  checkpoints but remain explicitly ineligible for locked evaluation.
 
 The consolidated Step 5 files are:
 

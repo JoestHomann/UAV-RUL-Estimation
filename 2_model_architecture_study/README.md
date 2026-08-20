@@ -122,12 +122,11 @@ resumes and only fills in whatever is still missing.
 
 ### GPU acceleration
 
-Neural training (MLP, TCN, LSTM) automatically uses an available NVIDIA GPU;
-no flag is required. Each Step 5/6 run prints "Neural training device: cuda"
-or "Neural training device: cpu" once at startup so the active device is
-visible in the log. XGBoost and Random Forest remain CPU-only
-("n_jobs=1"), matching their existing single-threaded, deterministic
-configuration. CUDA determinism is enforced the same way CPU determinism
+Neural training (MLP, TCN, LSTM) and XGBoost automatically use an available
+NVIDIA GPU; no flag is required. Each relevant Step 5/6 run prints its neural
+and XGBoost device choices at startup so the active devices are visible in the
+log. XGBoost still uses one host worker ("n_jobs=1"), and Random Forest remains
+CPU-only. Neural CUDA determinism is enforced the same way CPU determinism
 already was ("torch.use_deterministic_algorithms(True)"); on a CUDA build
 that lacks a deterministic kernel for some operation, PyTorch raises a
 "RuntimeError" naming that operation rather than silently producing
