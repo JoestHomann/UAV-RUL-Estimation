@@ -398,6 +398,30 @@ class TabularDataAdapter:
         )
         return TabularSplit(training=training, validation=validation)
 
+    def get_final_search_split(
+        self,
+        outer_fold: int,
+        feature_set: str,
+    ) -> TabularSplit:
+        """Build one all-training development fold for Phase 3 selection.
+
+        The held-out outer-fold UAVs contribute their five development
+        scenarios. Locked scenarios and test endpoints are never loaded.
+        """
+
+        training_ids, validation_ids = self._fold_uav_ids(outer_fold=outer_fold)
+        training = self._select_uavs(
+            self.load_training(feature_set),
+            training_ids,
+            purpose="final-search training",
+        )
+        validation = self._select_uavs(
+            self.load_development(feature_set),
+            validation_ids,
+            purpose="final-search development validation",
+        )
+        return TabularSplit(training=training, validation=validation)
+
     def get_locked_outer_evaluation_split(
         self,
         outer_fold: int,

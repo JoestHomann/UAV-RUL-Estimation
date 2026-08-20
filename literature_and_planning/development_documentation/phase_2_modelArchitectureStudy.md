@@ -11,7 +11,7 @@ Phase 2 answers the following questions:
 - Which model family generalizes best to unseen UAVs at test-like history cutoffs?
 - Is any gain from a more complex model large and stable enough to justify its additional complexity?
 
-Phase 2 supports the manual selection of a model architecture and its complete input pipeline. Final training on all 100 training UAVs and prediction of the separate test set belong to Phase 3.
+Phase 2 produces the evidence needed to select a model architecture and its complete input pipeline. The manual winning-architecture decision, final within-family search, training on all 100 training UAVs, and prediction of the separate test set belong to Phase 3.
 
 ## Phase entry point
 
@@ -427,11 +427,11 @@ This procedure estimates how each architecture and its within-family tuning proc
 
 Hyperparameter search uses seed `13`. After a configuration is selected, each stochastic model is retrained with seeds `13`, `37`, and `73`. Individual-seed results and their mean and standard deviation are retained. Seed variation is reported; the best seed is never selected.
 
-### Architecture comparison and manual decision
+### Architecture comparison and Phase 3 handoff
 
 The comparison step saves all enabled architecture results and creates plots covering the primary and secondary metrics, uncertainty, outer-fold variation, scenario variation, age-band behaviour, lifetime groups, seed stability, and computational cost. It does not calculate an overall rank or write an automatically selected winner.
 
-The manual architecture decision should favour a model that:
+The Phase 3 architecture decision should favour a model that:
 
 - Clearly outperform the mean and cycle-only baselines.
 - Achieve the best or statistically indistinguishable primary performance on locked outer validation.
@@ -439,11 +439,11 @@ The manual architecture decision should favour a model that:
 - Remain stable across UAV folds, locked scenarios, and random seeds.
 - Generalize without using test data or UAV identity leakage.
 
-Model differences are compared on the same `(uav_id, scenario)` predictions. Complete UAV groups, not individual prefix rows, are resampled for paired bootstrap comparisons. The plots and tables provide evidence for the decision, but the final trade-off between predictive performance, stability, and complexity is made by the researcher.
+Model differences are compared on the same `(uav_id, scenario)` predictions. Complete UAV groups, not individual prefix rows, are resampled for paired bootstrap comparisons. The plots and tables provide evidence for the decision, but Phase 2 does not make it. The final trade-off between predictive performance, stability, and complexity is recorded manually in Phase 3 Step 1.
 
 Locked results may be opened only after the candidate families, feature/lookback alternatives, search spaces, training budgets, seeds, preprocessing rules, and tuning metric have been finalized in the current contract version. The locked results are used for the architecture comparison, not another tuning cycle.
 
-After the researcher selects an architecture from the combined comparison, one final within-family configuration search is run across the fixed five UAV folds and development scenarios using all 100 training UAVs. It reuses the recorded search space and primary metric and does not reopen the locked scenarios. The resulting architecture and configuration are recorded for Phase 3, where the model is fitted on all training UAVs.
+Phase 2 ends after the complete Step 7 comparison is saved. Phase 3 begins with the manual architecture decision, then runs one final within-family configuration search across the fixed five UAV folds and development scenarios using all 100 training UAVs. That search reuses the recorded search space and primary metric and does not reopen the locked scenarios.
 
 ## Models deferred from the initial comparison
 
@@ -470,8 +470,7 @@ flowchart LR
     S4 --> S5["5. Inner model selection"]
     S5 --> S6["6. Locked outer evaluation"]
     S6 --> S7["7. Architecture comparison"]
-    S7 --> S8["8. Manually selected architecture"]
-    S8 --> P3["Phase 3<br/>final training and test prediction"]
+    S7 --> P3["Phase 3 Step 1<br/>winning architecture selection"]
     S5 -.->|live development metrics| TB["TensorBoard monitoring"]
     S6 -.->|progress and timing only| TB
     S7 -.->|final locked comparison| TB
@@ -487,7 +486,6 @@ flowchart LR
 | `6_locked_outer_evaluation/` | `artifacts/locked_predictions.csv.gz` | Held-out predictions for every family, UAV, scenario, fold, and seed |
 | `7_architecture_comparison/` | `artifacts/architecture_comparison.csv` | Metrics, paired uncertainty, stability, and efficiency comparison |
 | `tensorboard_monitoring/` | `logs/` | Live development curves, locked-run progress, and post-gate final comparison views |
-| `8_selected_architecture/` | `artifacts/selected_architecture.json` | Manually chosen Phase 2 architecture and its final tuned configuration passed to Phase 3 |
 
 ## Phase 2 completion criteria
 
@@ -499,7 +497,7 @@ Phase 2 is complete when:
 - All required prediction tables pass the Phase 1 leakage and schema checks.
 - Inner-selection results and locked outer predictions are preserved separately.
 - Metrics, paired uncertainty, seed stability, age-band behaviour, and computational cost are reported.
-- The manually selected architecture is documented together with the evidence supporting the decision.
+- The complete comparison artifacts required by Phase 3 Step 1 are preserved.
 - No test-set result has influenced model or hyperparameter selection.
 
 ## Initial decision

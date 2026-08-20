@@ -1,15 +1,17 @@
 # UAV Remaining Useful Life Estimation
 
 This repository develops a remaining-useful-life model for UAV telemetry. The
-workflow is divided into three phases that must be executed in order:
+workflow is divided into four phases that must be executed in order:
 
 1. Phase 0 investigates telemetry quality and predictive evidence.
 2. Phase 1 creates leakage-safe training and validation datasets.
 3. Phase 2 tunes and compares model architectures on fixed UAV-grouped splits.
+4. Phase 3 selects the winner, performs final tuning and training, and creates
+   test-set predictions for submission.
 
 Phase 2 produces comparison tables and figures but does not automatically rank
-architectures or select a winner. Final architecture selection remains a manual
-research decision.
+architectures or select a winner. Phase 3 begins with that manual research
+decision before any final tuning or test inference.
 
 ## Repository structure
 
@@ -19,6 +21,7 @@ research decision.
 | [0_data_analysis](0_data_analysis/) | Phase 0 | Broad and core telemetry analysis |
 | [1_dataset_construction](1_dataset_construction/) | Phase 1 | Leakage-safe folds, prefixes, features, and validation artifacts |
 | [2_model_architecture_study](2_model_architecture_study/) | Phase 2 | Model tuning, locked evaluation, and architecture comparison |
+| [3_final_model_training_and_inference](3_final_model_training_and_inference/) | Phase 3 | Winner selection, final tuning and training, test inference, and submission verification |
 | [literature_and_planning](literature_and_planning/) | Documentation | Research notes and phase documentation |
 
 ## Requirements
@@ -27,6 +30,7 @@ research decision.
 - A supported Python installation with the "py" launcher
 - Enough disk space for generated datasets, fitted models, and prediction files
 - Substantial execution time for Phase 2 model tuning
+- Additional execution time for the Phase 3 final configuration search
 
 All commands below assume that PowerShell is open in the repository root. In
 PowerShell, a local executable must start with ".\". Therefore, use
@@ -207,6 +211,39 @@ by Git but remain visible locally.
 More details are available in the
 [Phase 2 README](2_model_architecture_study/README.md).
 
+## Phase 3: Final model training and inference
+
+Phase 3 records the manually selected Phase 2 winner, tunes only that family on
+the five development folds, freezes the training contract, fits all 100
+training UAVs, and then unlocks test inference and submission verification.
+
+The only human-edited Phase 3 configuration is the TOML below. Configure it
+before starting a run and leave it unchanged when resuming:
+
+    3_final_model_training_and_inference\1_winning_architecture_selection\phase_3_settings.toml
+
+Validate the settings and referenced Phase 2 run:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\1_winning_architecture_selection\verify_phase_3_settings.py
+
+Run the training/development-only implementation checks:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\verify_phase_3_implementation.py
+
+Inspect progress or run the complete phase:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --status
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
+
+Resume an interrupted final search without discarding completed candidates:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --from-step 2
+
+The test dataset is first opened by Step 5. Steps 1-4 use only the completed
+Phase 2 artifacts plus training prefixes and development scenarios. More
+details are available in the
+[Phase 3 README](3_final_model_training_and_inference/README.md).
+
 ## Recommended full run order
 
 For a clean execution, run these commands in order:
@@ -214,14 +251,15 @@ For a clean execution, run these commands in order:
     .\.venv\Scripts\python.exe 0_data_analysis\core_data_analysis\run_all.py
     .\.venv\Scripts\python.exe 1_dataset_construction\run_all.py
     .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
 
 Broad Phase 0 descriptive plots are optional additions to the core analysis and
 may be generated before Phase 1.
 
 ## Current project boundary
 
-The implemented repository currently ends with the Phase 2 architecture
-comparison. After reviewing its plots and tables, the researcher manually
-chooses an architecture. Final within-family configuration search, training on
-all 100 training UAVs, and separate test-set prediction belong to the next
-phase and are not yet part of this run manual.
+The repository now implements the full workflow through verified Kaggle
+submission generation. The detailed
+[Phase 3 protocol](literature_and_planning/development_documentation/phase_3_finalModelTrainingAndInference.md)
+defines the final development-only search, frozen all-UAV training contract,
+first test access, and submission checks.

@@ -1,6 +1,6 @@
 # Model architecture study
 
-Phase 2 compares several RUL architectures through the same UAV-grouped validation procedure. Hyperparameters are tuned within each architecture, but the pipeline does not choose an architecture winner. It saves comparable results and plots so the final architecture can be selected manually.
+Phase 2 compares several RUL architectures through the same UAV-grouped validation procedure. Hyperparameters are tuned within each architecture, but the pipeline does not choose an architecture winner. It saves comparable results and plots for the manual winning-architecture decision in Phase 3 Step 1.
 
 ## Single entry point
 
@@ -159,7 +159,8 @@ locked split while Step 5 remains partial.
 The [architecture comparison](7_architecture_comparison/README.md) calculates
 the fixed metrics, paired whole-UAV bootstrap intervals, reliability views,
 seed stability, efficiency summaries, and comparison figures. It preserves the
-settings order and never ranks architectures or writes a winner.
+settings order and never ranks architectures or writes a winner. The completed
+comparison is the final Phase 2 output and the input to Phase 3 Step 1.
 
 The [TensorBoard monitoring layer](tensorboard_monitoring/README.md) records
 only what is worth watching while a run is still going: a "train/loss" and

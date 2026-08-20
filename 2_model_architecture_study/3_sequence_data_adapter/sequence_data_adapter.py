@@ -701,6 +701,36 @@ class SequenceDataAdapter:
             channel_scaler=scaler,
         )
 
+    def get_final_search_split(
+        self,
+        outer_fold: int,
+        lookback: int,
+    ) -> SequenceSplit:
+        """Return one telemetry-scaled Phase 3 development fold.
+
+        The scaler sees complete histories from the 80 training UAVs only.
+        Validation windows come from the five development scenarios for the
+        held-out outer-fold UAVs; locked and test endpoints are not loaded.
+        """
+
+        training_ids, validation_ids = self._fold_uav_ids(outer_fold=outer_fold)
+        raw_training = self._build_dataset(
+            "training_endpoints",
+            lookback,
+            training_ids,
+        )
+        raw_validation = self._build_dataset(
+            "development_endpoints",
+            lookback,
+            validation_ids,
+        )
+        scaler = self.fit_channel_scaler(training_ids)
+        return SequenceSplit(
+            training=scaler.transform(raw_training),
+            validation=scaler.transform(raw_validation),
+            channel_scaler=scaler,
+        )
+
     def get_locked_outer_evaluation_split(
         self,
         outer_fold: int,

@@ -1,0 +1,12 @@
+# Increment both values when settings change after Step 2 has produced output.
+settings_version = 1
+run_number = 1
+
+# Completed Phase 2 source run and manually selected winning family.
+phase_2_run_number = 3
+selected_model_family = "xgboost"
+
+[final_search]
+candidate_budget = 25
+search_seed = 13
+model_seed = 13

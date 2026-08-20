@@ -238,3 +238,12 @@ __marimo__/
 
 # TensorBoard event files, written live during Steps 5 and 6.
 2_model_architecture_study/tensorboard_monitoring/logs/
+
+# ---------------------------------------------------------------------------
+# Phase 3 final model training and inference
+# ---------------------------------------------------------------------------
+
+# Phase 3 run folders contain resumable Optuna databases, fitted models,
+# TensorBoard events, test predictions, and submissions. They are generated
+# from the tracked TOML and implementation and can become large.
+3_final_model_training_and_inference/runs/
