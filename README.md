@@ -235,6 +235,10 @@ Inspect progress or run the complete phase:
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --status
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
 
+After completion, generate the model-agnostic Phase 3 figures:
+
+    .\.venv\Scripts\python.exe 3_final_model_training_and_inference\7_post_run_reporting\build_phase_3_report.py
+
 Resume an interrupted final search without discarding completed candidates:
 
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py --from-step 2

@@ -324,6 +324,30 @@ The stage writes `submission.csv`, `submission_manifest.json`, and a final Phase
 available, is recorded separately and never written back into the training
 contract.
 
+## Optional Post-Run Reporting
+
+After Step 6 completes, `build_phase_3_report.py` creates a model-agnostic
+report from the common candidate, fold, timing, TensorBoard, and prediction
+artifacts. The same implementation applies to every registered model family;
+it does not branch into XGBoost-, neural-, or baseline-specific reporting
+contracts.
+
+The report contains:
+
+- final-search progression and the running best RMSE;
+- top-candidate fold robustness and an all-candidate fold heatmap;
+- the selected configuration's RMSE, MAE, R2, and bias across folds;
+- feature-set, lookback, or fixed-input candidate comparisons;
+- candidate performance against training cost;
+- the final all-UAV training curve when a shared `train/loss` scalar exists;
+- descriptive test-prediction distribution and cutoff views.
+
+A model without an iterative loss curve still receives every applicable plot;
+the unavailable curve is recorded as skipped. Reporting never loads locked
+data or test targets, calculates test metrics, refits a candidate, changes the
+selection, or modifies the final model and submission. The report is therefore
+optional and does not add another decision gate to the six-step workflow.
+
 ## Directory Layout
 
 The artifact paths below are relative to
@@ -340,6 +364,7 @@ settings, manifests, checkpoints, logs, and generated artifacts.
 | `4_final_model_training/` | `run_final_model_training.py` | `artifacts/final_model.joblib` | Fit the contracted model and preprocessing on all 100 training UAVs, serialize it through the selected adapter, and verify model reload. |
 | `5_test_inference/` | `run_test_inference.py` | `artifacts/test_predictions.csv` | Load test features for the first time and produce one traceable prediction per test UAV with the frozen model. |
 | `6_submission_verification/` | `build_submission.py` | `artifacts/submission.csv` | Create the two-column Kaggle submission and verify its identifiers, values, order, and reproducibility. |
+| `7_post_run_reporting/` | `build_phase_3_report.py`, `verify_phase_3_reporting.py` | `figures/*.png` | Optionally create and verify model-agnostic search, stability, efficiency, training, and target-free prediction figures after Step 6. |
 
 ## Resume and Failure Rules
 

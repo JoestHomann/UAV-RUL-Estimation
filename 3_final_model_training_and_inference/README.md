@@ -64,3 +64,15 @@ Run numbers are phase-local. The default settings read Phase 2 Run 3 from
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the
 columns `uav_id,RUL`, sorted by `uav_id`.
+
+After Step 6 completes, generate the optional model-agnostic report:
+
+```powershell
+.\.venv\Scripts\python.exe 3_final_model_training_and_inference\7_post_run_reporting\build_phase_3_report.py
+```
+
+The reporter uses the same shared artifacts for every selectable family. It
+creates search, fold-stability, input-alternative, efficiency, final-training,
+and target-free test-prediction figures without changing the selected model or
+submission. See the
+[reporting README](7_post_run_reporting/README.md) for its verification command.
