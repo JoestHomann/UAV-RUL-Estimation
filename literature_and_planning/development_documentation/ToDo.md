@@ -7,4 +7,5 @@
 - Check notes from phase 0 again, and experiment with different dataset /feature sets (certain channels or features turned off or defined differently)
 - Research if there are other models we could try out
 - Implement regularization for tcn maybe? Or even other models?
+- Median Polish for flight cycle vs each telemetry channels?
 - Why is the banana curved, not straight? LG Joest
