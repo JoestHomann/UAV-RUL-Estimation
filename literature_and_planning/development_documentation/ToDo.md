@@ -8,4 +8,9 @@
 - Research if there are other models we could try out
 - Implement regularization for tcn maybe? Or even other models?
 - Median Polish for flight cycle vs each telemetry channels?
+- ICA?
+- Bagging maybe applicable?
+- Different feature scaling instead of robust scaling?
+- GANs for increasing the dataset size?
+- RNN architecture? Better Transformer architecture? For architecture study
 - Why is the banana curved, not straight? LG Joest
