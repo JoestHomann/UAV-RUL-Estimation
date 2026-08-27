@@ -49,18 +49,22 @@ The public leaderboard uses approximately **30% of the test data**. Final standi
 The CSV must contain exactly two columns and no index column:
 
 ```csv
-uav_id,RUL
-UAV_0001,91.4
-UAV_0002,37.2
-UAV_0003,108.8
+id,RUL
+UAV_0101,91.4
+UAV_0102,37.2
+UAV_0103,108.8
 ```
 
 Requirements:
 
 - Include exactly one row for every UAV in the test set.
-- Use the UAV identifier in `uav_id`.
+- Use each test `uav_id` value unchanged in Kaggle's required `id` column.
 - Put the predicted remaining flight cycles in `RUL`.
 - Do not include a pandas/index column.
+
+The live submission validator explicitly reported `ID column id not found in
+submission` for a file headed `uav_id,RUL` on 27 August 2026. That validator
+message supersedes the earlier competition-page wording recorded below.
 
 ## Competition-specific rules
 
@@ -122,7 +126,7 @@ These counts and scores are a point-in-time snapshot and will change as the comp
 3. Establish simple baselines, including lifecycle/cycle-based and tree-based regression models.
 4. Engineer per-UAV temporal features such as last value, rolling summaries, slopes, deltas, extrema, and cycle-normalized statistics.
 5. Evaluate with out-of-fold R² using UAV-level splits.
-6. Fit the final model, select the final cycle per test UAV, and emit exactly one `uav_id,RUL` row per UAV.
+6. Fit the final model, select the final cycle per test UAV, and emit exactly one `id,RUL` row per UAV, mapping each internal `uav_id` to `id`.
 7. Verify column names, row count, UAV uniqueness, and absence of an index column before submitting.
 
 ---

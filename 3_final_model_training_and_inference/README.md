@@ -65,7 +65,8 @@ Run numbers are phase-local. The default settings read Phase 2 Run 3 from
 
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the
-columns `uav_id,RUL`, sorted by `uav_id`.
+columns `id,RUL`, sorted by `id`; each Kaggle `id` is copied from the internal
+`uav_id` prediction identifier.
 
 Regenerate only the model-agnostic report and figures when needed:
 

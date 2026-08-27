@@ -225,6 +225,11 @@ def _synthetic_contract() -> dict[str, Any]:
                 "model_seed",
                 "RUL",
             ],
+            "submission_columns": ["id", "RUL"],
+            "submission_identifier_mapping": {
+                "prediction_column": "uav_id",
+                "submission_column": "id",
+            },
         },
     }
 
@@ -263,12 +268,14 @@ def _verify_inference_and_submission() -> None:
         table["uav_id"].tolist() == ["uav_01", "uav_02", "uav_03"],
         "Predictions are not deterministically sorted",
     )
-    submission = table.loc[:, ["uav_id", "RUL"]]
+    submission = table.loc[:, ["uav_id", "RUL"]].rename(
+        columns={"uav_id": "id"}
+    )
     expected_ids = table["uav_id"].astype(str).tolist()
     _validate_submission(submission, expected_ids)
 
     numeric_submission = pd.DataFrame(
-        {"uav_id": [1, 2, 10], "RUL": [1.0, 2.0, 3.0]}
+        {"id": [1, 2, 10], "RUL": [1.0, 2.0, 3.0]}
     )
     _validate_submission(numeric_submission, ["1", "2", "10"])
 
@@ -290,7 +297,7 @@ def _verify_inference_and_submission() -> None:
         "Canonical CSV comparison does not match persisted parsing",
     )
     duplicate = submission.copy()
-    duplicate.loc[1, "uav_id"] = duplicate.loc[0, "uav_id"]
+    duplicate.loc[1, "id"] = duplicate.loc[0, "id"]
     try:
         _validate_submission(duplicate, expected_ids)
     except SubmissionVerificationError:

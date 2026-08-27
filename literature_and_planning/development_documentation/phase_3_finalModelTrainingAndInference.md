@@ -6,7 +6,8 @@ Phase 3 selects the winning model architecture from the completed Phase 2
 comparison, performs one final within-family configuration search, trains the
 frozen model on all 100 training UAVs, and predicts the remaining useful life
 (RUL) of every UAV in the test dataset. The final output is a verified
-`uav_id,RUL` file that can be uploaded to Kaggle.
+`id,RUL` file that can be uploaded to Kaggle. The external `id` values are the
+internal test `uav_id` values under Kaggle's required column name.
 
 Phase 3 answers the following questions:
 
@@ -309,7 +310,8 @@ are inspected.
 Step 6 creates the Kaggle upload file from the validated internal prediction
 table. The submission must:
 
-- contain exactly the columns `uav_id` and `RUL`;
+- contain exactly the columns `id` and `RUL`;
+- copy each internal `uav_id` value unchanged into the external `id` column;
 - contain exactly one row for every unique test UAV;
 - contain no training UAV and no unknown UAV identifier;
 - preserve the exact test UAV identifier set;

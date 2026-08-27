@@ -51,19 +51,17 @@ def _validate_submission(
     table: pd.DataFrame,
     expected_uav_ids: list[str],
 ) -> None:
-    if list(table.columns) != ["uav_id", "RUL"]:
-        raise SubmissionVerificationError(
-            "Submission must contain exactly uav_id and RUL"
-        )
-    observed_ids = table["uav_id"].astype(str).tolist()
+    if list(table.columns) != ["id", "RUL"]:
+        raise SubmissionVerificationError("Submission must contain exactly id and RUL")
+    observed_ids = table["id"].astype(str).tolist()
     sorted_ids = (
-        table.sort_values("uav_id", kind="stable")["uav_id"].astype(str).tolist()
+        table.sort_values("id", kind="stable")["id"].astype(str).tolist()
     )
     if observed_ids != sorted_ids:
-        raise SubmissionVerificationError("Submission UAV IDs are not sorted")
+        raise SubmissionVerificationError("Submission IDs are not sorted")
     if observed_ids != expected_uav_ids:
         raise SubmissionVerificationError("Submission UAV identifiers changed")
-    if table["uav_id"].duplicated().any():
+    if table["id"].duplicated().any():
         raise SubmissionVerificationError("Submission contains duplicate UAV IDs")
     values = pd.to_numeric(table["RUL"], errors="coerce").to_numpy(dtype=float)
     if not np.isfinite(values).all() or np.any(values < 0):
@@ -84,6 +82,21 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
 
     contract = read_json(training_contract_path(run_number), "final training contract")
     expected_columns = contract["test_contract"]["prediction_columns"]
+    if contract["test_contract"].get("submission_columns") != ["id", "RUL"]:
+        raise SubmissionVerificationError(
+            "Frozen contract does not declare the Kaggle id,RUL schema"
+        )
+    expected_mapping = {
+        "prediction_column": "uav_id",
+        "submission_column": "id",
+    }
+    if (
+        contract["test_contract"].get("submission_identifier_mapping")
+        != expected_mapping
+    ):
+        raise SubmissionVerificationError(
+            "Frozen contract does not map internal uav_id values to Kaggle id"
+        )
     try:
         stored = pd.read_csv(test_predictions_path(run_number))
     except (OSError, pd.errors.ParserError) as error:
@@ -107,11 +120,13 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
             "canonical CSV round trip"
         )
 
-    submission = stored.loc[:, ["uav_id", "RUL"]].copy()
-    submission = submission.sort_values("uav_id", kind="stable").reset_index(drop=True)
+    submission = stored.loc[:, ["uav_id", "RUL"]].rename(
+        columns={"uav_id": "id"}
+    )
+    submission = submission.sort_values("id", kind="stable").reset_index(drop=True)
     expected_ids = regenerated["uav_id"].astype(str).tolist()
     _validate_submission(submission, expected_ids)
-    write_csv(submission, ["uav_id", "RUL"], submission_path(run_number))
+    write_csv(submission, ["id", "RUL"], submission_path(run_number))
 
     reread = pd.read_csv(submission_path(run_number))
     _validate_submission(reread, expected_ids)
@@ -122,7 +137,8 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "phase_3_run_number": run_number,
         "status": "complete",
         "rows": len(reread),
-        "columns": ["uav_id", "RUL"],
+        "columns": ["id", "RUL"],
+        "identifier_mapping": expected_mapping,
         "identifier_set_verified": True,
         "finite_nonnegative_values_verified": True,
         "deterministic_order_verified": True,
