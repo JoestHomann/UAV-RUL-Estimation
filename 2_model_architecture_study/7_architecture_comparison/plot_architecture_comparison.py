@@ -47,6 +47,7 @@ def _display_name(family: str) -> str:
         "lstm": "LSTM",
         "transformer": "Transformer",
         "rbf_svr": "RBF-SVR",
+        "trajectory_dtw_knn": "Trajectory DTW-kNN",
     }
     return special.get(family, family.replace("_", " ").title())
 

@@ -15,7 +15,7 @@ change a feature set or lookback, rank architectures, or choose a winner.
 "evaluation_gate.py" runs before either data adapter is constructed. It requires:
 
 - Step 5 "selection_manifest.json" to have status "complete";
-- all 70 enabled family/outer-fold studies to be complete;
+- all 75 enabled family/outer-fold studies to be complete;
 - exactly one selected configuration for each enabled family and outer fold;
 - matching Step 1 and Step 5 settings versions;
 - valid feature sets, lookbacks, hyperparameters, and retraining durations;
@@ -30,7 +30,7 @@ option to bypass this gate.
 For one selected family, outer fold, and seed, the runner:
 
 1. loads the selected Step 5 configuration;
-2. obtains the matching locked-outer split from Step 2 or Step 3;
+2. obtains the matching locked-outer split from Step 2, Step 3, or Step 3b;
 3. verifies 80 training UAVs, 1,600 training prefixes, 20 held-out UAVs, 20
    locked scenarios, 400 validation endpoints, disjoint UAV groups, and equal
    total training weight per UAV;
@@ -70,8 +70,8 @@ seed is never selected.
 Mean and cycle-only baselines, regularized linear models, and optional RBF-SVR
 are deterministic and run once with seed 13.
 
-With the current fourteen enabled families, the complete stage contains 170
-family/fold/seed runs and 68,000 locked prediction rows.
+With the current fifteen enabled families, the complete stage contains 175
+family/fold/seed runs and 70,000 locked prediction rows.
 
 ## Files
 

@@ -49,9 +49,9 @@ The initial model status is:
 
 - **Included and enabled:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, and LSTM.
 - **Conditional and enabled:** small Transformer encoder.
-- **Optional and enabled:** RBF-SVR.
+- **Optional and enabled:** RBF-SVR and trajectory DTW-kNN.
 
-Models outside the fourteen declared families remain deferred. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
+Models outside the fifteen declared families remain deferred. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
 
 ## Tabular data adapter
 
@@ -77,7 +77,7 @@ Step 3b adds the reusable [trajectory data adapter](../../2_model_architecture_s
 
 ## Model adapters
 
-Step 4 implements the common estimator boundary in [4_model_adapters](../../2_model_architecture_study/4_model_adapters/README.md). The model registry connects every family in the experiment contract to one concrete adapter class. All fourteen declared families are enabled for Run 4.
+Step 4 implements the common estimator boundary in [4_model_adapters](../../2_model_architecture_study/4_model_adapters/README.md). The model registry connects every family in the experiment contract to one concrete adapter class. All fifteen declared families are enabled for Run 4.
 
 The implementation separates shared experiment behavior from architecture-specific model code:
 
@@ -85,12 +85,13 @@ The implementation separates shared experiment behavior from architecture-specif
 - [models/baselines](../../2_model_architecture_study/4_model_adapters/models/baselines/) contains separate weighted mean and cycle-only baseline modules.
 - [models/tabular](../../2_model_architecture_study/4_model_adapters/models/tabular/) contains separate Ridge and Elastic Net estimator modules plus the shared regularized-family adapter, and one module each for Random Forest, Extra Trees, XGBoost, CatBoost, and optional RBF-SVR.
 - [models/neural](../../2_model_architecture_study/4_model_adapters/models/neural/) contains one module each for MLP, causal TCN, multi-scale CNN, sensor-graph TCN, packed unidirectional LSTM, and masked Transformer. The category retains one shared weighted PyTorch training loop and one shared sequence-input adapter so architecture modules do not duplicate training or validation behavior.
+- [models/trajectory](../../2_model_architecture_study/4_model_adapters/models/trajectory/) contains the deterministic constrained-DTW reference-trajectory retrieval adapter.
 - [model_registry.py](../../2_model_architecture_study/4_model_adapters/model_registry.py) validates resolved hyperparameter names, enforces enabled/disabled contract status, and creates the requested adapter without selecting or ranking architectures.
 - [build_model_registry.py](../../2_model_architecture_study/4_model_adapters/build_model_registry.py) writes "artifacts/model_registry.json" with the contract version, adapter mapping, representation requirements, enabled status, supported configuration fields, and installed library versions. It records no hashes or timestamps.
 
-Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling using only the supplied training rows; Random Forest, Extra Trees, XGBoost, and CatBoost use unscaled tabular features. Sequence models consume Step 3's fold-scaled telemetry and fit a separate robust scaler for the two age side features from their supplied training rows. Every family uses the sample weights already carried by its Step 2 or Step 3 dataset.
+Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling using only the supplied training rows; Random Forest, Extra Trees, XGBoost, and CatBoost use unscaled tabular features. Sequence models consume Step 3's fold-scaled telemetry and fit a separate robust scaler for the two age side features from their supplied training rows. Trajectory DTW-kNN consumes the fold-scaled queries and complete references from Step 3b. Every family uses the sample weights already carried by its Step 2 or Step 3 dataset, with the one-reference-per-UAV trajectory library preserving equal UAV influence.
 
-XGBoost, CatBoost, and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. The later runner must derive that fixed duration from the median inner-fold best duration, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
+XGBoost, CatBoost, and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. Trajectory DTW-kNN is a deterministic non-iterative retrieval model and therefore has no stopping duration. The later runner must derive fixed durations only for the iterative families, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
 
 ## Inner model selection
 
@@ -100,7 +101,7 @@ Step 5 implements automatic selection within each enabled architecture family in
 
 [inner_model_selection.py](../../2_model_architecture_study/5_inner_model_selection/inner_model_selection.py) evaluates every candidate across the four actual inner-fold labels from the copied fold tables. Each split is checked for disjoint UAV groups, training weights, RUL targets, and exactly five development scenarios. Fold-specific preprocessing and model fitting are repeated independently. The objective is the mean of the four inner-validation RMSE values.
 
-Each family/fold study writes candidate, fold-level, selected-configuration, and status checkpoints below the active numbered run folder. The consolidated "candidate_results.csv", "inner_fold_results.csv", and "selected_configurations.csv" expose all completed work. "selection_manifest.json" remains "partial" until all 70 enabled family/fold studies are complete and explicitly records that neither locked nor test data was loaded.
+Each family/fold study writes candidate, fold-level, selected-configuration, and status checkpoints below the active numbered run folder. The consolidated "candidate_results.csv", "inner_fold_results.csv", and "selected_configurations.csv" expose all completed work. "selection_manifest.json" remains "partial" until all 75 enabled family/fold studies are complete and explicitly records that neither locked nor test data was loaded.
 
 For XGBoost, CatBoost, and neural candidates, Step 5 records the best duration in every inner fold. The median is rounded to the nearest integer with half values rounded upward and stored as "outer_retraining_iterations". Step 6 must retrain with this fixed duration instead of using locked targets for early stopping.
 
@@ -108,13 +109,13 @@ The inexpensive mean and cycle-only studies may be generated first for all five 
 
 ## Locked outer evaluation
 
-Step 6 implements held-out evaluation in [6_locked_outer_evaluation](../../2_model_architecture_study/6_locked_outer_evaluation/README.md). [evaluation_gate.py](../../2_model_architecture_study/6_locked_outer_evaluation/evaluation_gate.py) runs before either data adapter is constructed. It requires a complete Step 5 manifest, all 70 family/fold selections, a matching settings version, valid configuration fields, and confirmation that Step 5 used neither locked nor test data. There is no bypass option.
+Step 6 implements held-out evaluation in [6_locked_outer_evaluation](../../2_model_architecture_study/6_locked_outer_evaluation/README.md). [evaluation_gate.py](../../2_model_architecture_study/6_locked_outer_evaluation/evaluation_gate.py) runs before either data adapter is constructed. It requires a complete Step 5 manifest, all 75 family/fold selections, a matching settings version, valid configuration fields, and confirmation that Step 5 used neither locked nor test data. There is no bypass option.
 
 [locked_outer_evaluation.py](../../2_model_architecture_study/6_locked_outer_evaluation/locked_outer_evaluation.py) retrains each selected configuration on the 80 outer-training UAVs and then predicts the 20 held-out UAVs across 20 locked scenarios. It verifies 1,600 training prefixes, 400 validation endpoints, disjoint UAV groups, correct fold membership, unique scenario/UAV keys, and total training weight 1 per UAV.
 
 Locked validation data is never passed to the model's fitting method. XGBoost, CatBoost, and neural adapters receive the fixed "outer_retraining_iterations" selected from the median inner-fold stopping duration. Predictions are generated only after fitting finishes, so locked targets cannot influence preprocessing, parameters, early stopping, or training duration.
 
-Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, LSTM, and Transformer are marked stochastic and run with seeds 13, 37, and 73. Deterministic families run once with seed 13. The Run 4 settings therefore require 170 family/fold/seed runs and produce 68,000 prediction rows.
+Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, LSTM, and Transformer are marked stochastic and run with seeds 13, 37, and 73. Deterministic families, including trajectory DTW-kNN, run once with seed 13. The Run 4 settings therefore require 175 family/fold/seed runs and produce 70,000 prediction rows.
 
 Every run writes its fitted model, 400-row prediction table, training and inference facts, and status checkpoint. The consolidated "locked_predictions.csv.gz", "model_runs.csv", and "locked_evaluation_manifest.json" include only complete runs. Step 6 records all architecture results but calculates no ranking and chooses no winner.
 
@@ -225,7 +226,7 @@ The tabular path uses one Phase 1 feature row per UAV prefix. It supports the fo
 - **`screened`:** temporal features for the degradation candidates and level/baseline summaries for context channels.
 - **`all_nonconstant`:** all 606 engineered features from the 22 nonconstant channels.
 
-Ridge, Elastic Net, MLP, and RBF-SVR receive robustly scaled features. Random Forest, Extra Trees, XGBoost, and CatBoost receive the original unscaled feature values because their split decisions do not depend on feature units. During inner validation, preprocessing must be refitted using only the 60 inner-training UAVs; the outer-fold scalers created in Phase 1 cannot be reused for inner model selection.
+Ridge, Elastic Net, MLP, and RBF-SVR receive robustly scaled features. Random Forest, Extra Trees, XGBoost, and CatBoost receive the original unscaled feature values because their split decisions do not depend on feature units. Trajectory DTW-kNN receives variable-length trajectories scaled on the current inner-training UAVs and uses only complete references from those same UAVs. During inner validation, preprocessing must be refitted using only the 60 inner-training UAVs; the outer-fold scalers created in Phase 1 cannot be reused for inner model selection.
 
 ### Raw sequence representation
 
@@ -329,6 +330,7 @@ TCN                       -> Convolutional learning from raw sequences
 Multi-scale CNN           -> Parallel temporal scales from raw sequences
 Sensor-graph TCN          -> Sensor relations plus temporal convolution
 LSTM                      -> Recurrent learning from raw sequences
+Trajectory DTW-kNN       -> Retrieval of similar run-to-failure histories
 ```
 
 This set is broad enough to compare simple versus complex, linear versus nonlinear, bagging versus boosting, and engineered versus learned temporal representations without testing many nearly identical variants.
@@ -338,6 +340,7 @@ flowchart LR
     H["Available UAV history"] --> B["No-telemetry references"]
     H --> T["Engineered tabular representation"]
     H --> S["Raw sequence representation"]
+    H --> R["Trajectory representation"]
 
     B --> B1["Mean baseline"]
     B --> B2["Cycle-only baseline"]
@@ -355,6 +358,8 @@ flowchart LR
     S --> S4["LSTM"]
     S --> S5["Small Transformer<br/>conditional extension"]
 
+    R --> R1["Trajectory DTW-kNN"]
+
     B1 --> Y["RUL prediction"]
     B2 --> Y
     T1 --> Y
@@ -368,6 +373,7 @@ flowchart LR
     S3 --> Y
     S4 --> Y
     S5 --> Y
+    R1 --> Y
 ```
 
 ### Required experiment matrix
@@ -387,6 +393,7 @@ flowchart LR
 | Sensor-graph TCN | Same sequence inputs; fold-fitted training-only sensor graph |
 | LSTM | Raw 22-channel sequence; lookback 50 or 100 |
 | Transformer | Same sequence inputs and lookbacks, only if the conditional extension is run |
+| Trajectory DTW-kNN | Variable-length 22-channel trajectories and complete training-UAV references; fixed constrained-DTW retrieval settings |
 
 The feature set or lookback is part of the configuration selected inside the inner folds. It must not be selected from locked-scenario results.
 
@@ -408,6 +415,7 @@ Search spaces must be fixed before locked evaluation. The following initial boun
 | Sensor-graph TCN | Graph width: `8`, `16`, or `32`; graph layers: `1` or `2`; neighbours: `3`, `5`, or `8`; temporal blocks: `2-4`; temporal channels: `32` or `64`; kernel: `3` or `5`; lookback: `50` or `100` |
 | LSTM | Unidirectional layers: `1-3`; hidden units: `32`, `64`, or `128`; dropout: `0.1-0.5`; learning rate: `1e-4` to `1e-2`; lookback: `50` or `100` |
 | Transformer | Encoder layers: `1-3`; model width: `32`, `64`, or `128`; compatible attention heads: `2`, `4`, or `8`; feed-forward ratio: `2` or `4`; sinusoidal position encoding; dropout: `0.1-0.5`; lookback: `50` or `100` |
+| Trajectory DTW-kNN | `neighbors`: `5`; `reference_pool_size`: `20`; `max_points`: `48`; `warping_window`: `8`; `distance_power`: `1.0` |
 
 Each family receives at most 25 distinct candidate configurations per outer fold, generated from a fixed search seed. A smaller exact grid is allowed when it exhausts the complete predefined space. Feature-set and lookback choices count as parts of these configurations rather than receiving a separate tuning budget. Manual extra tuning after viewing locked results is prohibited.
 
@@ -502,7 +510,7 @@ flowchart LR
     S3 --> S3B["3b. Trajectory data adapter"]
     S2 --> S4["4. Model adapters"]
     S3 --> S4
-    S3B -.->|future trajectory family| S4
+    S3B -->|trajectory representation| S4
     S4 --> S5["5. Inner model selection"]
     S5 --> S6["6. Locked outer evaluation"]
     S6 --> S7["7. Architecture comparison"]
@@ -556,4 +564,4 @@ LSTM
 
 A small Transformer and RBF-SVR are also enabled in Run 4 under their original conditional and optional status labels. GRU, hybrid networks, learned autoencoder representations, advanced operator-learning models, and ensembles are added only if this comparison leaves a specific unanswered question.
 
-This design creates one modular architecture-study pipeline while preserving the important distinction between engineered tabular inputs and raw temporal sequences.
+This design creates one modular architecture-study pipeline while preserving the important distinction between engineered tabular inputs, fixed-window temporal sequences, and variable-length trajectory retrieval.

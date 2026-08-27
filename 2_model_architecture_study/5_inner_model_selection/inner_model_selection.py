@@ -44,6 +44,7 @@ DEPENDENCY_DIRS = [
     PHASE_DIR,
     PHASE_DIR / "2_tabular_data_adapter",
     PHASE_DIR / "3_sequence_data_adapter",
+    PHASE_DIR / "3_trajectory_data_adapter",
     PHASE_DIR / "4_model_adapters",
 ]
 for dependency_dir in DEPENDENCY_DIRS:
@@ -60,6 +61,7 @@ from model_registry import (  # noqa: E402
 )
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from run_layout import (  # noqa: E402
     STEP_5_DIRECTORY_NAME,
     run_number_from_settings,
@@ -239,8 +241,10 @@ class InnerSplitRepository:
         self.expected_development_scenarios = expected_development_scenarios
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
+        self._trajectory_adapter: TrajectoryDataAdapter | None = None
         self._tabular_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
         self._sequence_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+        self._trajectory_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 
     def get(
         self,
@@ -284,6 +288,17 @@ class InnerSplitRepository:
                     candidate.lookback,
                 ),
             )
+        elif representation == "trajectory":
+            key = (outer_fold, inner_fold)
+            split = self._from_cache(
+                self._trajectory_cache,
+                key,
+                maximum_entries=4,
+                loader=lambda: self._trajectory().get_inner_selection_split(
+                    outer_fold,
+                    inner_fold,
+                ),
+            )
         else:
             raise InnerModelSelectionError(
                 f"Family {family!r} has unsupported representation {representation!r}"
@@ -301,6 +316,8 @@ class InnerSplitRepository:
 
         if representation == "sequence":
             return self._sequence().inner_fold_labels(outer_fold)
+        if representation == "trajectory":
+            return self._trajectory().inner_fold_labels(outer_fold)
         return self._tabular().inner_fold_labels(outer_fold)
 
     @staticmethod
@@ -335,6 +352,13 @@ class InnerSplitRepository:
         if self._sequence_adapter is None:
             self._sequence_adapter = SequenceDataAdapter()
         return self._sequence_adapter
+
+    def _trajectory(self) -> TrajectoryDataAdapter:
+        """Construct the trajectory adapter only for trajectory families."""
+
+        if self._trajectory_adapter is None:
+            self._trajectory_adapter = TrajectoryDataAdapter()
+        return self._trajectory_adapter
 
     def _validate_split(
         self,

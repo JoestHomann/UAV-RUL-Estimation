@@ -41,6 +41,7 @@ FAMILIES = (
     "lstm",
     "transformer",
     "rbf_svr",
+    "trajectory_dtw_knn",
 )
 
 

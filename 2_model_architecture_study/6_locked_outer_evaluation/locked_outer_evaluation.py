@@ -28,6 +28,7 @@ DEPENDENCY_DIRS = [
     PHASE_DIR,
     PHASE_DIR / "2_tabular_data_adapter",
     PHASE_DIR / "3_sequence_data_adapter",
+    PHASE_DIR / "3_trajectory_data_adapter",
     PHASE_DIR / "4_model_adapters",
 ]
 for dependency_dir in DEPENDENCY_DIRS:
@@ -38,6 +39,7 @@ from base import ModelAdapter, target_values  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from run_layout import (  # noqa: E402
     STEP_6_DIRECTORY_NAME,
     run_number_from_settings,
@@ -323,6 +325,7 @@ class LockedOuterEvaluationRunner:
         )
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
+        self._trajectory_adapter: TrajectoryDataAdapter | None = None
 
     def validate_request(
         self,
@@ -552,6 +555,10 @@ class LockedOuterEvaluationRunner:
                 selected.outer_fold,
                 selected.lookback,
             )
+        if representation == "trajectory":
+            return self._trajectory().get_locked_outer_evaluation_split(
+                selected.outer_fold,
+            )
         raise LockedOuterEvaluationError(
             f"Unsupported representation {representation!r}"
         )
@@ -569,6 +576,13 @@ class LockedOuterEvaluationRunner:
         if self._sequence_adapter is None:
             self._sequence_adapter = SequenceDataAdapter()
         return self._sequence_adapter
+
+    def _trajectory(self) -> TrajectoryDataAdapter:
+        """Create the trajectory adapter only for trajectory families."""
+
+        if self._trajectory_adapter is None:
+            self._trajectory_adapter = TrajectoryDataAdapter()
+        return self._trajectory_adapter
 
     def _validate_locked_split(
         self,

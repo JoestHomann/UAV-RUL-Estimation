@@ -20,7 +20,7 @@ from numpy.typing import NDArray
 import pandas as pd
 
 
-Representation = Literal["none", "tabular", "sequence"]
+Representation = Literal["none", "tabular", "sequence", "trajectory"]
 
 
 class ModelAdapterError(ValueError):

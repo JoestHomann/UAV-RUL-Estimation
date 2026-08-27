@@ -11,6 +11,11 @@ from sequence_data_adapter import (
     SequenceDataset,
 )
 from tabular_data_adapter import TabularDataAdapter, TabularDataset
+from trajectory_data_adapter import (
+    TrajectoryChannelScaler,
+    TrajectoryDataAdapter,
+    TrajectoryDataset,
+)
 
 from phase_3_common import Phase3Error
 
@@ -22,7 +27,7 @@ def _tabular_feature_set(contract: dict[str, Any]) -> str:
 
 def load_final_training_data(
     contract: dict[str, Any],
-) -> tuple[Any, RobustChannelScaler | None]:
+) -> tuple[Any, RobustChannelScaler | TrajectoryChannelScaler | None]:
     """Load all training prefixes and fit only permitted preprocessing."""
 
     representation = contract["representation"]
@@ -40,12 +45,19 @@ def load_final_training_data(
             raise Phase3Error("Final sequence channel order changed")
         scaler = adapter.fit_channel_scaler(contract["training"]["uav_ids"])
         return scaler.transform(dataset), scaler
+    if representation == "trajectory":
+        adapter = TrajectoryDataAdapter()
+        dataset = adapter.load_training()
+        if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
+            raise Phase3Error("Final trajectory channel order changed")
+        scaler = adapter.fit_channel_scaler(contract["training"]["uav_ids"])
+        return scaler.transform(dataset), scaler
     raise Phase3Error(f"Unsupported representation {representation!r}")
 
 
 def load_final_test_data(
     contract: dict[str, Any],
-    preprocessor: RobustChannelScaler | None,
+    preprocessor: RobustChannelScaler | TrajectoryChannelScaler | None,
 ) -> Any:
     """Load test endpoints only after the frozen contract gate passes."""
 
@@ -63,6 +75,14 @@ def load_final_test_data(
         dataset = SequenceDataAdapter().load_test(lookback)
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final test channel order differs from the contract")
+        return preprocessor.transform(dataset)
+    if representation == "trajectory":
+        if not isinstance(preprocessor, TrajectoryChannelScaler):
+            raise Phase3Error("Trajectory inference requires its fitted channel scaler")
+        adapter = TrajectoryDataAdapter()
+        dataset = adapter.load_test()
+        if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
+            raise Phase3Error("Final test trajectory channel order differs from the contract")
         return preprocessor.transform(dataset)
     raise Phase3Error(f"Unsupported representation {representation!r}")
 
@@ -103,6 +123,26 @@ def first_rows(dataset: Any, count: int) -> Any:
             dataset,
             sequences=dataset.sequences[:size].copy(),
             padding_mask=dataset.padding_mask[:size].copy(),
+            side_features=dataset.side_features[:size].copy(),
+            metadata=dataset.metadata.iloc[:size].reset_index(drop=True),
+            target=target,
+            sample_weights=weights,
+        )
+    if isinstance(dataset, TrajectoryDataset):
+        target = (
+            dataset.target.iloc[:size].reset_index(drop=True)
+            if dataset.target is not None
+            else None
+        )
+        weights = (
+            dataset.sample_weights.iloc[:size].reset_index(drop=True)
+            if dataset.sample_weights is not None
+            else None
+        )
+        return replace(
+            dataset,
+            trajectories=dataset.trajectories[:size],
+            cycles=dataset.cycles[:size],
             side_features=dataset.side_features[:size].copy(),
             metadata=dataset.metadata.iloc[:size].reset_index(drop=True),
             target=target,

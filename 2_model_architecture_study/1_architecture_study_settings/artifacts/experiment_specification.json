@@ -673,6 +673,38 @@
           "tcn"
         ]
       },
+      "trajectory_dtw_knn": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [],
+        "representation": "trajectory",
+        "search": {
+          "distance_power": {
+            "kind": "fixed",
+            "value": 1.0
+          },
+          "max_points": {
+            "kind": "fixed",
+            "value": 48
+          },
+          "neighbors": {
+            "kind": "fixed",
+            "value": 5
+          },
+          "reference_pool_size": {
+            "kind": "fixed",
+            "value": 20
+          },
+          "warping_window": {
+            "kind": "fixed",
+            "value": 8
+          }
+        },
+        "status": "optional",
+        "variants": [
+          "dtw_knn"
+        ]
+      },
       "transformer": {
         "early_stopping_patience": null,
         "feature_sets": [],
@@ -1185,7 +1217,7 @@
       ]
     },
     "run_number": 4,
-    "settings_version": 9,
+    "settings_version": 10,
     "study": {
       "architectures_to_run": [
         "mean_baseline",
@@ -1217,11 +1249,13 @@
         "regularized_linear": true,
         "sensor_graph_tcn": true,
         "tcn": true,
+        "trajectory_dtw_knn": true,
         "transformer": true,
         "xgboost": true
       },
       "optional_architectures": [
-        "rbf_svr"
+        "rbf_svr",
+        "trajectory_dtw_knn"
       ]
     },
     "tuning": {

@@ -239,6 +239,12 @@ def _parse_selected_row(
         raise LockedEvaluationGateError(
             f"Sequence family {family!r} has inconsistent representation fields"
         )
+    if representation == "trajectory" and (
+        feature_set is not None or lookback is not None
+    ):
+        raise LockedEvaluationGateError(
+            f"Trajectory family {family!r} has inconsistent representation fields"
+        )
     if _optional_text(row["feature_set"]) != feature_set:
         raise LockedEvaluationGateError(
             f"Feature-set columns disagree for {family!r}, fold {outer_fold}"

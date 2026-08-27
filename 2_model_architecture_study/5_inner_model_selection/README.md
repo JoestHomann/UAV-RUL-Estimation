@@ -52,7 +52,8 @@ defaults because the Step 4 adapter requires one complete resolved dictionary.
 The runner can request only these public methods:
 
 - Step 2 "get_inner_selection_split" for tabular candidates;
-- Step 3 "get_inner_selection_split" for sequence candidates.
+- Step 3 "get_inner_selection_split" for sequence candidates;
+- Step 3b "get_inner_selection_split" for trajectory candidates.
 
 There is no call to either locked-outer split method. Every returned split is
 checked for disjoint training and validation UAVs, an available RUL target,
@@ -105,7 +106,7 @@ The consolidated Step 5 files are:
 - "selection_manifest.json" with completion counts, protocol settings, and an
   explicit statement that architecture selection is not automatic.
 
-The manifest remains "partial" until all eight enabled families have completed
+The manifest remains "partial" until all fifteen enabled families have completed
 all five outer folds. Later steps must require a "complete" manifest.
 
 ## TensorBoard monitoring

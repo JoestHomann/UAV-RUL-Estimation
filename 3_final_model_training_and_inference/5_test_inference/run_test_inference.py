@@ -20,6 +20,7 @@ for dependency_dir in (
     PHASE_DIR,
     PHASE_2_DIR / "2_tabular_data_adapter",
     PHASE_2_DIR / "3_sequence_data_adapter",
+    PHASE_2_DIR / "3_trajectory_data_adapter",
     PHASE_2_DIR / "4_model_adapters",
 ):
     if str(dependency_dir) not in sys.path:

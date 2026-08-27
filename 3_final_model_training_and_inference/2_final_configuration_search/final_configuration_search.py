@@ -29,6 +29,7 @@ DEPENDENCY_DIRS = [
     PHASE_2_DIR,
     PHASE_2_DIR / "2_tabular_data_adapter",
     PHASE_2_DIR / "3_sequence_data_adapter",
+    PHASE_2_DIR / "3_trajectory_data_adapter",
     PHASE_2_DIR / "4_model_adapters",
     PHASE_2_DIR / "5_inner_model_selection",
 ]
@@ -41,6 +42,7 @@ from candidate_space import CandidateSpace, ResolvedCandidate  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from tensorboard_monitoring import (  # noqa: E402
     TrainingRunContext,
     calculate_regression_metrics,
@@ -143,8 +145,10 @@ class FinalSearchSplitRepository:
         self.expected_scenarios = expected_scenarios
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
+        self._trajectory_adapter: TrajectoryDataAdapter | None = None
         self._tabular_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
         self._sequence_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+        self._trajectory_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 
     def _tabular(self) -> TabularDataAdapter:
         if self._tabular_adapter is None:
@@ -155,6 +159,11 @@ class FinalSearchSplitRepository:
         if self._sequence_adapter is None:
             self._sequence_adapter = SequenceDataAdapter()
         return self._sequence_adapter
+
+    def _trajectory(self) -> TrajectoryDataAdapter:
+        if self._trajectory_adapter is None:
+            self._trajectory_adapter = TrajectoryDataAdapter()
+        return self._trajectory_adapter
 
     @staticmethod
     def _cached(
@@ -175,6 +184,8 @@ class FinalSearchSplitRepository:
     def outer_fold_labels(self, representation: str) -> tuple[int, ...]:
         if representation == "sequence":
             return self._sequence().outer_fold_labels()
+        if representation == "trajectory":
+            return self._trajectory().outer_fold_labels()
         return self._tabular().outer_fold_labels()
 
     def get(
@@ -213,6 +224,14 @@ class FinalSearchSplitRepository:
                     outer_fold,
                     candidate.lookback,
                 ),
+            )
+        elif representation == "trajectory":
+            key = (outer_fold,)
+            split = self._cached(
+                self._trajectory_cache,
+                key,
+                5,
+                lambda: self._trajectory().get_final_search_split(outer_fold),
             )
         else:
             raise FinalConfigurationSearchError(

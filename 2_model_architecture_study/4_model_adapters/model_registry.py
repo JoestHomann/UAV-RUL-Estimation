@@ -28,6 +28,7 @@ from models.tabular.random_forest import RandomForestAdapter
 from models.tabular.rbf_svr import RBFSVRAdapter
 from models.tabular.regularized_linear import RegularizedLinearAdapter
 from models.tabular.xgboost import XGBoostAdapter
+from models.trajectory.trajectory_dtw_knn import TrajectoryDTWKNNAdapter
 
 
 STEP_DIR = Path(__file__).resolve().parent
@@ -54,6 +55,7 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "lstm": LSTMAdapter,
     "transformer": TransformerAdapter,
     "rbf_svr": RBFSVRAdapter,
+    "trajectory_dtw_knn": TrajectoryDTWKNNAdapter,
 }
 
 
@@ -147,6 +149,13 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "weight_decay",
     },
     "rbf_svr": {"c", "gamma", "epsilon"},
+    "trajectory_dtw_knn": {
+        "neighbors",
+        "reference_pool_size",
+        "max_points",
+        "warping_window",
+        "distance_power",
+    },
 }
 
 

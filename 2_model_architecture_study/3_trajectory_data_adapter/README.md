@@ -31,7 +31,8 @@ The builder writes `artifacts/trajectory_dataset_manifest.json` and
 inner split, checks endpoint cutoffs, checks UAV disjointness, and confirms
 that both references and scaling use training UAVs only.
 
-The two new Run 4 architectures still consume fixed sequence windows. This
-trajectory interface is deliberately model-independent and ready for a later
-similarity-, retrieval-, or full-lifecycle model without changing the split
-contract again.
+The optional Run 4 "trajectory_dtw_knn" family consumes this interface. It
+retrieves similar training-UAV histories with constrained DTW while preserving
+the same split contract as the tabular and fixed-window sequence families.
+The interface remains reusable for later similarity, retrieval, or
+full-lifecycle models without changing the split contract again.

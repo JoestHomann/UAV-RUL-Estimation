@@ -69,7 +69,11 @@ class CandidateSpace:
             len(architecture["lookbacks"]),
             1,
         )
-        has_choices = bool(architecture["search"]) or alternatives > 1
+        has_tunable_search = any(
+            definition.get("kind") != "fixed"
+            for definition in architecture["search"].values()
+        )
+        has_choices = has_tunable_search or alternatives > 1
         return maximum_budget if has_choices else 1
 
     def resolve(self, family: str, trial: Trial) -> ResolvedCandidate:

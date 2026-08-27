@@ -146,12 +146,12 @@ The [sequence data adapter](3_sequence_data_adapter/README.md) creates causal pa
 
 The [trajectory data adapter](3_trajectory_data_adapter/README.md) reuses the
 verified Step 3 inputs to expose variable-length causal queries and complete
-run-to-failure reference trajectories from active training UAVs only. It is a
-reusable prerequisite for later trajectory-matching architectures; the two new
-Run 4 models continue to use the fixed-window sequence representation.
+run-to-failure reference trajectories from active training UAVs only. The
+optional Run 4 trajectory DTW-kNN family consumes this interface; the other
+Run 4 sequence models continue to use fixed-window inputs.
 
 The [model adapters](4_model_adapters/README.md) implement the baselines,
-classical tabular estimators, and neural sequence estimators behind one common
+classical tabular estimators, trajectory retrieval, and neural sequence estimators behind one common
 fit, prediction, and persistence interface. Their generated registry records
 which settings families are implemented and enabled.
 

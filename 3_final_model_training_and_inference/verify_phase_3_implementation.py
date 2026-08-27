@@ -23,6 +23,7 @@ for dependency_dir in (
     PHASE_DIR / "6_submission_verification",
     PHASE_2_DIR / "2_tabular_data_adapter",
     PHASE_2_DIR / "3_sequence_data_adapter",
+    PHASE_2_DIR / "3_trajectory_data_adapter",
     PHASE_2_DIR / "4_model_adapters",
 ):
     if str(dependency_dir) not in sys.path:
@@ -50,6 +51,7 @@ from phase_3_run_layout import (  # noqa: E402
 )
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from verify_phase_3_settings import load_and_verify_settings  # noqa: E402
 
 
@@ -189,6 +191,23 @@ def _verify_development_folds() -> None:
     _require(
         np.array_equal(raw_sequences.side_features, scaled_sequences.side_features),
         "Telemetry preprocessing unexpectedly scaled sequence side features",
+    )
+
+    trajectory_adapter = TrajectoryDataAdapter()
+    trajectory = trajectory_adapter.get_final_search_split(folds[0])
+    _require(trajectory.training.scaled, "Trajectory training data is not scaled")
+    _require(trajectory.validation.scaled, "Trajectory validation data is not scaled")
+    _require(
+        trajectory.training.reference_library is not None,
+        "Trajectory training data has no reference library",
+    )
+    _require(
+        trajectory.training.reference_library.scaled,
+        "Trajectory references are not scaled",
+    )
+    _require(
+        len(first_rows(trajectory.training, 7)) == 7,
+        "Trajectory row slicing failed",
     )
 
 

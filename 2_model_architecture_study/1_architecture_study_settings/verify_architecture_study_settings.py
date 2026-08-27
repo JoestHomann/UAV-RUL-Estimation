@@ -132,6 +132,13 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "weight_decay",
     },
     "rbf_svr": {"c", "gamma", "epsilon"},
+    "trajectory_dtw_knn": {
+        "neighbors",
+        "reference_pool_size",
+        "max_points",
+        "warping_window",
+        "distance_power",
+    },
 }
 
 EXPECTED_VARIANTS: dict[str, set[str]] = {
@@ -149,6 +156,7 @@ EXPECTED_VARIANTS: dict[str, set[str]] = {
     "lstm": {"lstm"},
     "transformer": {"transformer_encoder"},
     "rbf_svr": {"rbf_svr"},
+    "trajectory_dtw_knn": {"dtw_knn"},
 }
 
 # Step 1 is a boundary between dataset construction and model experiments.
@@ -487,7 +495,7 @@ class ArchitectureSpecification(StrictModel):
     """
 
     status: Literal["included", "conditional", "optional"]
-    representation: Literal["none", "tabular", "sequence"]
+    representation: Literal["none", "tabular", "sequence", "trajectory"]
     feature_sets: list[str] = Field(default_factory=list)
     lookbacks: list[PositiveInt] = Field(default_factory=list)
     variants: list[str]
@@ -511,6 +519,13 @@ class ArchitectureSpecification(StrictModel):
         if self.representation == "sequence":
             if not self.lookbacks or self.feature_sets:
                 raise ValueError("sequence models need lookbacks and no feature_sets")
+        if self.representation == "trajectory" and (
+            self.feature_sets or self.lookbacks
+        ):
+            raise ValueError(
+                "trajectory models use the trajectory adapter and no feature_sets "
+                "or lookbacks"
+            )
         return self
 
 

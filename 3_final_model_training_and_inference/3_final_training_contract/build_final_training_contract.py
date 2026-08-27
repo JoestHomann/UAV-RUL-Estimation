@@ -18,6 +18,7 @@ for dependency_dir in (
     PHASE_DIR,
     PHASE_2_DIR / "2_tabular_data_adapter",
     PHASE_2_DIR / "3_sequence_data_adapter",
+    PHASE_2_DIR / "3_trajectory_data_adapter",
     PHASE_2_DIR / "4_model_adapters",
 ):
     if str(dependency_dir) not in sys.path:
@@ -26,6 +27,7 @@ for dependency_dir in (
 from model_registry import EXPECTED_HYPERPARAMETERS  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from phase_3_common import (  # noqa: E402
     PHASE_2_SPECIFICATION_PATH,
     Phase3Error,
@@ -87,6 +89,17 @@ def _training_view(
             "feature_set": None,
             "feature_names": [],
             "lookback": lookback,
+            "channel_names": list(dataset.channel_names),
+            "side_feature_names": list(dataset.side_feature_names),
+        }
+        return dataset, schema
+    if representation == "trajectory":
+        dataset = TrajectoryDataAdapter().load_training()
+        schema = {
+            "representation": representation,
+            "feature_set": None,
+            "feature_names": [],
+            "lookback": None,
             "channel_names": list(dataset.channel_names),
             "side_feature_names": list(dataset.side_feature_names),
         }
@@ -205,11 +218,13 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "preprocessing": {
             "algorithm": (
                 "robust_channel_scaler"
-                if representation == "sequence"
+                if representation in {"sequence", "trajectory"}
                 else "selected_model_adapter"
             ),
             "telemetry_algorithm": (
-                "robust_channel_scaler" if representation == "sequence" else None
+                "robust_channel_scaler"
+                if representation in {"sequence", "trajectory"}
+                else None
             ),
             "side_feature_algorithm": (
                 "model_adapter_robust_scaler"
@@ -217,7 +232,7 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
                 else None
             ),
             "fit_scope": "all_training_uavs",
-            "separate_artifact": representation == "sequence",
+            "separate_artifact": representation in {"sequence", "trajectory"},
         },
         "training": {
             "row_count": expected_rows,
@@ -235,7 +250,7 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
             "model_filename": "final_model.joblib",
             "preprocessor_filename": (
                 "final_preprocessor.joblib"
-                if representation == "sequence"
+                if representation in {"sequence", "trajectory"}
                 else None
             ),
         },

@@ -29,6 +29,10 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
   numerical inputs, with inner-fold early stopping and fixed outer-retraining
   tree counts. CPU execution is intentional because CatBoost GPU training is
   not deterministic enough for this study.
+- "TrajectoryDTWKNNAdapter" retrieves similar training-UAV trajectories with
+  constrained multivariate DTW and returns a distance-weighted average of their
+  cycle-wise remaining lives. It is deterministic and uses no fixed-window
+  feature set or lookback.
 - "MLPAdapter" applies training-fold robust scaling before a PyTorch MLP.
 - "TCNAdapter" applies causal dilated convolutions to Step 3 sequence windows.
 - "MultiScaleCNNAdapter" combines three causal convolution branches with
@@ -40,7 +44,7 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "TransformerAdapter" implements the conditional masked Transformer.
 - "RBFSVRAdapter" implements the optional robust-scaled RBF-SVR.
 
-All fourteen declared families are enabled for Run 4. Their included,
+All fifteen declared families are enabled for Run 4. Their included,
 conditional, and optional status labels preserve the study rationale; the
 separate `study.enabled` table controls what actually runs.
 
@@ -89,6 +93,9 @@ Preprocessing stays with the model artifact that depends on it:
 - Extra Trees and CatBoost use unchanged numeric feature values. CatBoost does
   not receive categorical columns because this dataset's engineered inputs are
   numerical.
+- Trajectory DTW-kNN receives the fold-scaled variable-length trajectories and
+  the complete reference library built from active training UAVs only. It does
+  not use tabular feature sets or fixed lookbacks.
 - TCN, multi-scale CNN, sensor-graph TCN, LSTM, and Transformer require the
   fold-scaled telemetry returned by Step 3. They additionally robust-scale the
   two age side features using only the training rows supplied to "fit". The
@@ -136,6 +143,7 @@ Every architecture has one implementation module below "models":
 | Tabular | "models/tabular/xgboost.py" | "XGBoostAdapter" |
 | Tabular | "models/tabular/catboost.py" | "CatBoostAdapter" |
 | Tabular | "models/tabular/rbf_svr.py" | "RBFSVRAdapter" |
+| Trajectory | "models/trajectory/trajectory_dtw_knn.py" | "TrajectoryDTWKNNAdapter" |
 | Neural | "models/neural/mlp.py" | "MLPAdapter" |
 | Neural | "models/neural/tcn.py" | "TCNAdapter" |
 | Neural | "models/neural/multiscale_cnn.py" | "MultiScaleCNNAdapter" |
@@ -165,7 +173,7 @@ Run from the repository root:
 
     py 2_model_architecture_study\4_model_adapters\build_model_registry.py
 
-The command creates "artifacts/model_registry.json". It records all fourteen model
+The command creates "artifacts/model_registry.json". It records all fifteen model
 families, their enabled status, representation, adapter class, permitted
 configuration fields, common behavior, settings version, and installed model
 library versions. It contains no timestamp or hash and makes no performance or

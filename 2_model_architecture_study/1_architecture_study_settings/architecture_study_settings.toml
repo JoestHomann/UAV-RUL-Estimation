@@ -8,7 +8,7 @@
 # address, normally http://localhost:6006
 
 # Revision number of this configuration, incremented by hand on any change.
-settings_version = 9    # Options: any positive integer
+settings_version = 10    # Options: any positive integer
 
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
@@ -40,7 +40,7 @@ architectures_to_run = [    # Options: any declared architecture name
 # and LSTM prove out, since 100 UAVs make attention an overfitting risk.
 conditional_architectures = ["transformer"]    # Options: any declared name
 # Neither required nor gated, added only if a question stays open or time allows.
-optional_architectures = ["rbf_svr"]    # Options: any declared name
+optional_architectures = ["rbf_svr", "trajectory_dtw_knn"]    # Options: any declared name
 
 [study.enabled]
 # The single on/off switch per architecture; false drops it from the run and
@@ -60,6 +60,7 @@ sensor_graph_tcn = true
 lstm = true
 transformer = true
 rbf_svr = true
+trajectory_dtw_knn = true
 # Saving every architecture's results and never declaring a winner are fixed
 # pipeline behaviors with nothing to configure.
 
@@ -164,7 +165,7 @@ gradient_clip_global_norm = 1.0    # Options: any positive float
 # Each [architectures.*] table declares:
 #   status          Options: "included", "conditional", "optional" (must match
 #                   the [study] list the name appears in)
-#   representation  Options: "none", "tabular", "sequence" (decides whether
+#   representation  Options: "none", "tabular", "sequence", "trajectory" (decides whether
 #                   "feature_sets" or "lookbacks" applies)
 #   feature_sets    Options: any subset of [representations].tabular_feature_sets
 #   lookbacks       Options: any subset of [representations].sequence_lookbacks
@@ -667,6 +668,34 @@ high = 1.0
 kind = "log_uniform"
 low = 1e-3
 high = 10.0
+
+# Similarity-based trajectory retrieval using constrained multivariate DTW.
+# All values are fixed for the first architecture-study implementation so this
+# deterministic reference model contributes one candidate per outer fold.
+[architectures.trajectory_dtw_knn]
+status = "optional"
+representation = "trajectory"
+variants = ["dtw_knn"]
+
+[architectures.trajectory_dtw_knn.search.neighbors]
+kind = "fixed"
+value = 5
+
+[architectures.trajectory_dtw_knn.search.reference_pool_size]
+kind = "fixed"
+value = 20
+
+[architectures.trajectory_dtw_knn.search.max_points]
+kind = "fixed"
+value = 48
+
+[architectures.trajectory_dtw_knn.search.warping_window]
+kind = "fixed"
+value = 8
+
+[architectures.trajectory_dtw_knn.search.distance_power]
+kind = "fixed"
+value = 1.0
 
 # Phase 1 inputs =============================================================
 # Phase 2 consumes the folds, prefix samples, features, preprocessing and
