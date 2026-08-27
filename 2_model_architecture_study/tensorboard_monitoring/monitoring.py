@@ -489,7 +489,7 @@ class TensorBoardFitMonitor:
             return False
         interval = (
             XGBOOST_LOG_INTERVAL
-            if self.context.model_family == "xgboost"
+            if self.context.model_family in {"xgboost", "catboost"}
             else NEURAL_LOG_INTERVAL
         )
         if not force and step % interval != 0:

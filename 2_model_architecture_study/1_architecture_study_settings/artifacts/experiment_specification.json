@@ -120,6 +120,67 @@
   },
   "settings": {
     "architectures": {
+      "catboost": {
+        "early_stopping_patience": 35,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "bagging_temperature": {
+            "high": 1.0,
+            "kind": "uniform",
+            "low": 0.0
+          },
+          "boosting_type": {
+            "kind": "categorical",
+            "values": [
+              "Plain",
+              "Ordered"
+            ]
+          },
+          "depth": {
+            "kind": "categorical",
+            "values": [
+              4,
+              6,
+              8,
+              10
+            ]
+          },
+          "l2_leaf_reg": {
+            "high": 100.0,
+            "kind": "log_uniform",
+            "low": 0.01
+          },
+          "learning_rate": {
+            "high": 0.2,
+            "kind": "log_uniform",
+            "low": 0.01
+          },
+          "maximum_trees": {
+            "kind": "fixed",
+            "value": 1500
+          },
+          "random_strength": {
+            "high": 10.0,
+            "kind": "log_uniform",
+            "low": 0.001
+          },
+          "rsm": {
+            "high": 1.0,
+            "kind": "uniform",
+            "low": 0.5
+          }
+        },
+        "status": "included",
+        "variants": [
+          "catboost"
+        ]
+      },
       "cycle_only_baseline": {
         "early_stopping_patience": null,
         "feature_sets": [
@@ -131,6 +192,54 @@
         "status": "included",
         "variants": [
           "weighted_linear"
+        ]
+      },
+      "extra_trees": {
+        "early_stopping_patience": null,
+        "feature_sets": [
+          "last_values",
+          "screened",
+          "all_nonconstant"
+        ],
+        "lookbacks": [],
+        "representation": "tabular",
+        "search": {
+          "max_depth": {
+            "kind": "categorical",
+            "values": [
+              "none",
+              5,
+              10,
+              20
+            ]
+          },
+          "max_features": {
+            "kind": "categorical",
+            "values": [
+              0.15,
+              0.2,
+              0.33,
+              0.67,
+              1.0
+            ]
+          },
+          "min_samples_leaf": {
+            "kind": "categorical",
+            "values": [
+              1,
+              2,
+              5,
+              10
+            ]
+          },
+          "n_estimators": {
+            "kind": "fixed",
+            "value": 500
+          }
+        },
+        "status": "included",
+        "variants": [
+          "extra_trees"
         ]
       },
       "lstm": {
@@ -248,6 +357,64 @@
         "status": "included",
         "variants": [
           "mlp"
+        ]
+      },
+      "multiscale_cnn": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [
+          50,
+          100
+        ],
+        "representation": "sequence",
+        "search": {
+          "branch_channels": {
+            "kind": "categorical",
+            "values": [
+              16,
+              32,
+              64
+            ]
+          },
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.1
+          },
+          "kernel_sizes": {
+            "kind": "categorical_integer_sequences",
+            "values": [
+              [
+                3,
+                5,
+                9
+              ],
+              [
+                3,
+                7,
+                15
+              ],
+              [
+                5,
+                11,
+                21
+              ]
+            ]
+          },
+          "learning_rate": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "included",
+        "variants": [
+          "multiscale_cnn"
         ]
       },
       "random_forest": {
@@ -372,6 +539,81 @@
         "variants": [
           "ridge",
           "elastic_net"
+        ]
+      },
+      "sensor_graph_tcn": {
+        "early_stopping_patience": null,
+        "feature_sets": [],
+        "lookbacks": [
+          50,
+          100
+        ],
+        "representation": "sequence",
+        "search": {
+          "dropout": {
+            "high": 0.5,
+            "kind": "uniform",
+            "low": 0.1
+          },
+          "graph_hidden": {
+            "kind": "categorical",
+            "values": [
+              8,
+              16,
+              32
+            ]
+          },
+          "graph_layers": {
+            "kind": "categorical",
+            "values": [
+              1,
+              2
+            ]
+          },
+          "graph_neighbors": {
+            "kind": "categorical",
+            "values": [
+              3,
+              5,
+              8
+            ]
+          },
+          "kernel_size": {
+            "kind": "categorical",
+            "values": [
+              3,
+              5
+            ]
+          },
+          "learning_rate": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 0.0001
+          },
+          "temporal_blocks": {
+            "kind": "categorical",
+            "values": [
+              2,
+              3,
+              4
+            ]
+          },
+          "temporal_channels": {
+            "kind": "categorical",
+            "values": [
+              32,
+              64
+            ]
+          },
+          "weight_decay": {
+            "high": 0.01,
+            "kind": "log_uniform",
+            "low": 1e-06
+          }
+        },
+        "status": "included",
+        "variants": [
+          "sensor_graph_tcn"
         ]
       },
       "tcn": {
@@ -896,7 +1138,9 @@
       ],
       "unscaled_tree_architectures": [
         "random_forest",
-        "xgboost"
+        "extra_trees",
+        "xgboost",
+        "catboost"
       ]
     },
     "representations": {
@@ -940,30 +1184,38 @@
         "all_nonconstant"
       ]
     },
-    "run_number": 3,
-    "settings_version": 7,
+    "run_number": 4,
+    "settings_version": 9,
     "study": {
       "architectures_to_run": [
         "mean_baseline",
         "cycle_only_baseline",
         "regularized_linear",
         "random_forest",
+        "extra_trees",
         "xgboost",
+        "catboost",
         "mlp",
         "tcn",
+        "multiscale_cnn",
+        "sensor_graph_tcn",
         "lstm"
       ],
       "conditional_architectures": [
         "transformer"
       ],
       "enabled": {
+        "catboost": true,
         "cycle_only_baseline": true,
+        "extra_trees": true,
         "lstm": true,
         "mean_baseline": true,
         "mlp": true,
+        "multiscale_cnn": true,
         "random_forest": true,
         "rbf_svr": true,
         "regularized_linear": true,
+        "sensor_graph_tcn": true,
         "tcn": true,
         "transformer": true,
         "xgboost": true

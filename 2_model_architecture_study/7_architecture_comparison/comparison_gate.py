@@ -51,9 +51,13 @@ def default_locked_manifest_path() -> Path:
 # avoiding the expensive model-library imports in this metadata-only gate.
 STOCHASTIC_FAMILIES = {
     "random_forest",
+    "extra_trees",
     "xgboost",
+    "catboost",
     "mlp",
     "tcn",
+    "multiscale_cnn",
+    "sensor_graph_tcn",
     "lstm",
     "transformer",
 }

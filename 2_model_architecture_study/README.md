@@ -101,38 +101,41 @@ no configuration.
 ### Staged runs
 
 The full grid is large: the classical families (mean baseline, cycle-only
-baseline, regularized linear, random forest, XGBoost) are inexpensive, while
-the three neural families (MLP, TCN, LSTM) are the slowest part of both Step
-5 and Step 6. Rather than waiting for everything at once, it is reasonable to
-run the cheap families first and review results within hours:
+baseline, regularized linear, random forest, Extra Trees, and XGBoost) are
+inexpensive, while
+the neural families (MLP, TCN, multi-scale CNN, sensor-graph TCN, LSTM, and
+Transformer) plus CatBoost are the slowest part of both Step 5 and Step 6.
+Rather than waiting for everything at once, it is reasonable to run the cheap
+Step 5 families first and review results within hours:
 
-    py 2_model_architecture_study\run_phase_2.py --from-step 5 --through-step 6 --family mean_baseline --family cycle_only_baseline --family regularized_linear --family random_forest --family xgboost
+    py 2_model_architecture_study\5_inner_model_selection\run_inner_model_selection.py --family mean_baseline --family cycle_only_baseline --family regularized_linear --family random_forest --family extra_trees --family xgboost
 
-then start the neural families separately, for example overnight or in the
-background:
+then start CatBoost and the neural families separately, for example overnight
+or in the background:
 
-    py 2_model_architecture_study\run_phase_2.py --from-step 5 --through-step 6 --family mlp --family tcn --family lstm
+    py 2_model_architecture_study\5_inner_model_selection\run_inner_model_selection.py --family catboost
+    py 2_model_architecture_study\5_inner_model_selection\run_inner_model_selection.py --family multiscale_cnn
+    py 2_model_architecture_study\5_inner_model_selection\run_inner_model_selection.py --family sensor_graph_tcn
 
 `--family` is accepted by the Step 5 and Step 6 runners directly (repeat the
-flag for each family); "run_phase_2.py" itself does not filter by family, so
-pass "--family" through "--from-step"/"--through-step" only when calling the
-Step 5/6 scripts directly, or invoke them one stage at a time as shown above.
-Since Step 5 and Step 6 already checkpoint per study, "--from-step 5" safely
-resumes and only fills in whatever is still missing.
+flag for each family); "run_phase_2.py" itself does not filter by family. Run
+all Step 5 families before Step 6, because the locked-evaluation gate requires
+the complete Step 5 manifest. Since both stages checkpoint per study,
+"--from-step 5" safely resumes and only fills in whatever is still missing.
 
 ### GPU acceleration
 
-Neural training (MLP, TCN, LSTM) and XGBoost automatically use an available
+Neural training and XGBoost automatically use an available
 NVIDIA GPU; no flag is required. Each relevant Step 5/6 run prints its neural
 and XGBoost device choices at startup so the active devices are visible in the
-log. XGBoost still uses one host worker ("n_jobs=1"), and Random Forest remains
-CPU-only. Neural CUDA determinism is enforced the same way CPU determinism
+log. XGBoost still uses one host worker ("n_jobs=1"); Random Forest, Extra
+Trees, and CatBoost remain CPU-only. Neural CUDA determinism is enforced the same way CPU determinism
 already was ("torch.use_deterministic_algorithms(True)"); on a CUDA build
 that lacks a deterministic kernel for some operation, PyTorch raises a
 "RuntimeError" naming that operation rather than silently producing
 non-reproducible results. This has not been exercised on real GPU hardware
 as part of this change; before relying on a long GPU run, first do a small
-"--family mlp --outer-fold 0" (or "tcn"/"lstm") dry run and confirm it
+"--family multiscale_cnn --outer-fold 0" dry run and confirm it
 completes without that error.
 
 The workflow begins in [`1_architecture_study_settings/`](1_architecture_study_settings/), which turns the human-readable TOML settings into a validated, deterministic JSON specification.
@@ -140,6 +143,12 @@ The workflow begins in [`1_architecture_study_settings/`](1_architecture_study_s
 The next implemented step is the [tabular data adapter](2_tabular_data_adapter/README.md). It creates verified local copies of the Phase 1 tabular inputs and exposes shared feature-loading and UAV-fold selection methods for every tabular architecture.
 
 The [sequence data adapter](3_sequence_data_adapter/README.md) creates causal padded telemetry windows and applies robust channel scaling fitted only on the active training UAVs.
+
+The [trajectory data adapter](3_trajectory_data_adapter/README.md) reuses the
+verified Step 3 inputs to expose variable-length causal queries and complete
+run-to-failure reference trajectories from active training UAVs only. It is a
+reusable prerequisite for later trajectory-matching architectures; the two new
+Run 4 models continue to use the fixed-window sequence representation.
 
 The [model adapters](4_model_adapters/README.md) implement the baselines,
 classical tabular estimators, and neural sequence estimators behind one common

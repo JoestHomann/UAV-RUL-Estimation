@@ -63,7 +63,16 @@ from phase_3_run_layout import tensorboard_log_root  # noqa: E402
 
 
 SEARCH_VERSION = 1
-EARLY_STOPPED_FAMILIES = {"xgboost", "mlp", "tcn", "lstm", "transformer"}
+EARLY_STOPPED_FAMILIES = {
+    "xgboost",
+    "catboost",
+    "mlp",
+    "tcn",
+    "multiscale_cnn",
+    "sensor_graph_tcn",
+    "lstm",
+    "transformer",
+}
 
 CANDIDATE_COLUMNS = [
     "settings_version",

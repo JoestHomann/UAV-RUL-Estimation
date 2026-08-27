@@ -164,6 +164,8 @@ def main() -> None:
         print(f"Neural training device: {neural_device}{device_detail}")
         if "xgboost" in families:
             print(f"XGBoost training device: {resolve_xgboost_device()}")
+        if "catboost" in families:
+            print("CatBoost training device: cpu (fixed for reproducibility)")
         print("Step 5 gate passed; starting locked outer evaluation")
         print(f"Families: {', '.join(families)}")
         print(f"Outer folds: {outer_folds}")

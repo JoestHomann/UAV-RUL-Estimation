@@ -15,7 +15,7 @@ change a feature set or lookback, rank architectures, or choose a winner.
 "evaluation_gate.py" runs before either data adapter is constructed. It requires:
 
 - Step 5 "selection_manifest.json" to have status "complete";
-- all 40 enabled family/outer-fold studies to be complete;
+- all 70 enabled family/outer-fold studies to be complete;
 - exactly one selected configuration for each enabled family and outer fold;
 - matching Step 1 and Step 5 settings versions;
 - valid feature sets, lookbacks, hyperparameters, and retraining durations;
@@ -45,8 +45,8 @@ training or early stopping.
 
 ## Fixed training duration
 
-XGBoost and neural models receive "outer_retraining_iterations" from Step 5.
-That value is the rounded median of the four inner-fold best durations. Step 6
+XGBoost, CatBoost, and neural models receive "outer_retraining_iterations"
+from Step 5. That value is the rounded median of the four inner-fold best durations. Step 6
 checks that the completed tree or epoch count equals this fixed value.
 
 No early stopping is performed against locked targets.
@@ -62,15 +62,16 @@ passes.
 
 ## Retraining seeds
 
-Random Forest, XGBoost, MLP, TCN, LSTM, and any enabled Transformer are marked
-as stochastic by their Step 4 adapters. They are retrained with seeds 13, 37,
-and 73. The best seed is never selected.
+Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN,
+sensor-graph TCN, LSTM, and any enabled Transformer are marked stochastic by
+their Step 4 adapters. They are retrained with seeds 13, 37, and 73. The best
+seed is never selected.
 
 Mean and cycle-only baselines, regularized linear models, and optional RBF-SVR
 are deterministic and run once with seed 13.
 
-With the current eight enabled families, the complete stage contains 90
-family/fold/seed runs and 36,000 locked prediction rows.
+With the current fourteen enabled families, the complete stage contains 170
+family/fold/seed runs and 68,000 locked prediction rows.
 
 ## Files
 

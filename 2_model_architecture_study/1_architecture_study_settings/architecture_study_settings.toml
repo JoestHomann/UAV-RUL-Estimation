@@ -8,11 +8,11 @@
 # address, normally http://localhost:6006
 
 # Revision number of this configuration, incremented by hand on any change.
-settings_version = 7    # Options: any positive integer
+settings_version = 9    # Options: any positive integer
 
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
-run_number = 3    # Options: any positive integer
+run_number = 4    # Options: any positive integer
 
 [execution]
 # Step 5/6 studies run at once, each a subprocess; the one performance-only
@@ -27,9 +27,13 @@ architectures_to_run = [    # Options: any declared architecture name
     "cycle_only_baseline",
     "regularized_linear",
     "random_forest",
+    "extra_trees",
     "xgboost",
+    "catboost",
     "mlp",
     "tcn",
+    "multiscale_cnn",
+    "sensor_graph_tcn",
     "lstm",
 ]
 # Held back on a prerequisite, not on results: promote the transformer once TCN
@@ -46,9 +50,13 @@ mean_baseline = true
 cycle_only_baseline = true
 regularized_linear = true
 random_forest = true
+extra_trees = true
 xgboost = true
+catboost = true
 mlp = true
 tcn = true
+multiscale_cnn = true
+sensor_graph_tcn = true
 lstm = true
 transformer = true
 rbf_svr = true
@@ -62,7 +70,8 @@ candidate_budget_per_architecture = 25    # Options: any positive integer
 # Seed making candidate generation repeatable.
 search_seed = 13    # Options: any integer
 # Seeds quantifying run-to-run variation, one retraining run each for the
-# stochastic families (random_forest, xgboost, mlp, tcn, lstm).
+# stochastic families (random_forest, extra_trees, xgboost, catboost, mlp,
+# tcn, multiscale_cnn, sensor_graph_tcn, lstm, transformer).
 retraining_seeds = [13, 37, 73]    # Options: any list of distinct integers
 # Early-stopped models retrain for the median best iteration found in the inner
 # folds, so training duration never looks at outer validation targets.
@@ -135,13 +144,13 @@ sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]    # Options: an
 # Architectures receiving robust median/IQR scaled tabular inputs.
 scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]    # Options: any architecture names
 # Architectures receiving unscaled values, since split ordering needs no scaling.
-unscaled_tree_architectures = ["random_forest", "xgboost"]    # Options: any architecture names
+unscaled_tree_architectures = ["random_forest", "extra_trees", "xgboost", "catboost"]    # Options: any architecture names
 # Every fitted statistic comes only from the current fold's training UAVs;
 # validation UAVs are transformed but never influence a median or IQR.
 
 [neural_training]
-# Shared by MLP, TCN, LSTM and the disabled Transformer so their comparison
-# never uses different optimization policies.
+# Shared by every PyTorch family so their comparison never uses different
+# optimization policies.
 # Training examples per gradient step.
 batch_size = 64    # Options: any positive integer
 # Hard ceiling on epochs regardless of early stopping.
@@ -241,6 +250,30 @@ values = [1, 2, 5, 10]
 kind = "categorical"
 values = [0.15, 0.2, 0.33, 0.67, 1.0]
 
+# Extremely randomized trees isolate the effect of random split thresholds
+# while retaining the Random Forest capacity controls and tabular inputs.
+[architectures.extra_trees]
+status = "included"
+representation = "tabular"
+feature_sets = ["last_values", "screened", "all_nonconstant"]
+variants = ["extra_trees"]
+
+[architectures.extra_trees.search.n_estimators]
+kind = "fixed"
+value = 500
+
+[architectures.extra_trees.search.max_depth]
+kind = "categorical"
+values = ["none", 5, 10, 20]
+
+[architectures.extra_trees.search.min_samples_leaf]
+kind = "categorical"
+values = [1, 2, 5, 10]
+
+[architectures.extra_trees.search.max_features]
+kind = "categorical"
+values = [0.15, 0.2, 0.33, 0.67, 1.0]
+
 # Gradient-boosted trees, the second nonlinear tabular reference.
 [architectures.xgboost]
 status = "included"
@@ -297,6 +330,52 @@ high = 10.0
 kind = "log_uniform"
 low = 1e-3
 high = 100.0
+
+# CatBoost provides a second regularized boosting mechanism over the same
+# numerical engineered features. CPU execution is fixed for reproducibility.
+[architectures.catboost]
+status = "included"
+representation = "tabular"
+feature_sets = ["last_values", "screened", "all_nonconstant"]
+variants = ["catboost"]
+early_stopping_patience = 35
+
+[architectures.catboost.search.maximum_trees]
+kind = "fixed"
+value = 1500
+
+[architectures.catboost.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.2
+
+[architectures.catboost.search.depth]
+kind = "categorical"
+values = [4, 6, 8, 10]
+
+[architectures.catboost.search.l2_leaf_reg]
+kind = "log_uniform"
+low = 1e-2
+high = 100.0
+
+[architectures.catboost.search.random_strength]
+kind = "log_uniform"
+low = 1e-3
+high = 10.0
+
+[architectures.catboost.search.bagging_temperature]
+kind = "uniform"
+low = 0.0
+high = 1.0
+
+[architectures.catboost.search.rsm]
+kind = "uniform"
+low = 0.5
+high = 1.0
+
+[architectures.catboost.search.boosting_type]
+kind = "categorical"
+values = ["Plain", "Ordered"]
 
 # Feed-forward network on the same engineered rows the tree models use.
 [architectures.mlp]
@@ -371,6 +450,100 @@ high = 1e-2
 
 # L2 weight decay applied by the optimizer.
 [architectures.tcn.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Parallel causal convolutions summarize degradation patterns at several
+# temporal scales without changing the existing sequence representation.
+[architectures.multiscale_cnn]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["multiscale_cnn"]
+
+# Width produced by each parallel temporal branch.
+[architectures.multiscale_cnn.search.branch_channels]
+kind = "categorical"
+values = [16, 32, 64]
+
+# The three kernel widths used together by one candidate. All choices are odd
+# so causal padding has an unambiguous temporal center and preserved length.
+[architectures.multiscale_cnn.search.kernel_sizes]
+kind = "categorical_integer_sequences"
+values = [[3, 5, 9], [3, 7, 15], [5, 11, 21]]
+
+# Dropout inside the branches and regression head.
+[architectures.multiscale_cnn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.multiscale_cnn.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.multiscale_cnn.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# A fold-fitted sensor-correlation graph mixes telemetry channels before a
+# causal temporal convolutional stack models degradation over time.
+[architectures.sensor_graph_tcn]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["sensor_graph_tcn"]
+
+# Hidden feature width retained for each sensor node.
+[architectures.sensor_graph_tcn.search.graph_hidden]
+kind = "categorical"
+values = [8, 16, 32]
+
+# Consecutive graph message-passing layers at each time step.
+[architectures.sensor_graph_tcn.search.graph_layers]
+kind = "categorical"
+values = [1, 2]
+
+# Strongest absolute-correlation neighbours retained per sensor before the
+# graph is symmetrized and normalized.
+[architectures.sensor_graph_tcn.search.graph_neighbors]
+kind = "categorical"
+values = [3, 5, 8]
+
+# Dilated residual blocks used after graph feature extraction.
+[architectures.sensor_graph_tcn.search.temporal_blocks]
+kind = "categorical"
+values = [2, 3, 4]
+
+# Width of every temporal residual block.
+[architectures.sensor_graph_tcn.search.temporal_channels]
+kind = "categorical"
+values = [32, 64]
+
+# Width of each causal temporal convolution.
+[architectures.sensor_graph_tcn.search.kernel_size]
+kind = "categorical"
+values = [3, 5]
+
+# Dropout in graph and temporal layers.
+[architectures.sensor_graph_tcn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.sensor_graph_tcn.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.sensor_graph_tcn.search.weight_decay]
 kind = "log_uniform"
 low = 1e-6
 high = 1e-2

@@ -60,6 +60,12 @@ SEQUENCE_REPORT_PATH = (
     / "artifacts"
     / "copy_verification.json"
 )
+TRAJECTORY_REPORT_PATH = (
+    PHASE_DIR
+    / "3_trajectory_data_adapter"
+    / "artifacts"
+    / "trajectory_verification.json"
+)
 MODEL_REGISTRY_PATH = (
     PHASE_DIR / "4_model_adapters" / "artifacts" / "model_registry.json"
 )
@@ -157,6 +163,14 @@ STEPS = {
         / "run_architecture_comparison.py",
     ),
 }
+
+TRAJECTORY_STEP = StepDefinition(
+    3,
+    "Trajectory data adapter",
+    PHASE_DIR
+    / "3_trajectory_data_adapter"
+    / "build_trajectory_data_adapter.py",
+)
 
 
 def _read_json(path: Path, description: str) -> dict[str, Any]:
@@ -386,6 +400,13 @@ def _run_pairs_in_parallel(
                         pending_future.cancel()
     if first_error is not None:
         raise first_error
+
+
+def _run_step_3() -> None:
+    """Build fixed windows first, then the shared variable-length interface."""
+
+    _run_script(STEPS[3])
+    _run_script(TRAJECTORY_STEP)
 
 
 def _settings_version_matches(
@@ -656,6 +677,13 @@ def print_status() -> None:
         + _simple_status(SEQUENCE_REPORT_PATH, "Step 3 copy report")
     )
     print(
+        "3b. Trajectory data adapter: "
+        + _simple_status(
+            TRAJECTORY_REPORT_PATH,
+            "Step 3 trajectory verification report",
+        )
+    )
+    print(
         "4. Model adapters: "
         + ("available" if MODEL_REGISTRY_PATH.is_file() else "not generated")
     )
@@ -765,7 +793,9 @@ def run_pipeline(
         )
 
     for step_number in requested_steps:
-        if step_number <= 4:
+        if step_number == 3:
+            _run_step_3()
+        elif step_number <= 4:
             _run_script(STEPS[step_number])
         elif step_number == 5:
             _run_step_5(force=force, max_workers=max_workers)

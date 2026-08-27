@@ -1,0 +1,55 @@
+{
+  "adapter_version": 1,
+  "channel_count": 22,
+  "channels": [
+    "telemetry_01",
+    "telemetry_02",
+    "telemetry_04",
+    "telemetry_05",
+    "telemetry_06",
+    "telemetry_07",
+    "telemetry_09",
+    "telemetry_10",
+    "telemetry_11",
+    "telemetry_12",
+    "telemetry_13",
+    "telemetry_15",
+    "telemetry_16",
+    "telemetry_18",
+    "telemetry_19",
+    "telemetry_21",
+    "telemetry_22",
+    "telemetry_23",
+    "telemetry_24",
+    "telemetry_25",
+    "telemetry_26",
+    "telemetry_28"
+  ],
+  "experiment_specification": "2_model_architecture_study/1_architecture_study_settings/artifacts/experiment_specification.json",
+  "query_interface": {
+    "history": "all observed cycles through endpoint cutoff",
+    "post_cutoff_rows_allowed": false,
+    "variable_length": true
+  },
+  "reference_interface": {
+    "fit_scope": "active_training_uavs_only",
+    "history": "complete run-to-failure training-UAV trajectories",
+    "remaining_life": "terminal cycle minus current cycle"
+  },
+  "scaling": {
+    "center": "median",
+    "fallback": "standard deviation, then 1.0",
+    "fit_scope": "training_uavs_only",
+    "method": "training_fold_channel_median_iqr",
+    "padding_after_transform": 0.0,
+    "relative_variation_tolerance": 1e-12,
+    "scale": "IQR divided by 1.349",
+    "side_features_scaled": false
+  },
+  "settings_version": 9,
+  "side_features": [
+    "flight_cycle",
+    "log1p_flight_cycle"
+  ],
+  "source_sequence_manifest": "2_model_architecture_study/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
+}

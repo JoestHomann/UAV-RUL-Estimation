@@ -1,0 +1,18 @@
+{
+  "checks": {
+    "causal_cutoffs": true,
+    "finite_values": true,
+    "fold_disjoint_uavs": true,
+    "training_only_channel_scaling": true,
+    "training_only_references": true,
+    "unlabelled_test_interface": true
+  },
+  "inner_fold_checked": 0,
+  "outer_fold_checked": 0,
+  "reference_trajectories_checked": 60,
+  "settings_version": 9,
+  "status": "passed",
+  "test_queries_checked": 100,
+  "training_queries_checked": 1200,
+  "validation_queries_checked": 100
+}

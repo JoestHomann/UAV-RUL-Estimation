@@ -17,9 +17,13 @@ from models.baselines.cycle_only_baseline import CycleOnlyBaselineAdapter
 from models.baselines.mean_baseline import MeanBaselineAdapter
 from models.neural.lstm import LSTMAdapter
 from models.neural.mlp import MLPAdapter
+from models.neural.multiscale_cnn import MultiScaleCNNAdapter
 from models.neural.neural_base import NeuralTrainingConfig
+from models.neural.sensor_graph_tcn import SensorGraphTCNAdapter
 from models.neural.tcn import TCNAdapter
 from models.neural.transformer import TransformerAdapter
+from models.tabular.catboost import CatBoostAdapter
+from models.tabular.extra_trees import ExtraTreesAdapter
 from models.tabular.random_forest import RandomForestAdapter
 from models.tabular.rbf_svr import RBFSVRAdapter
 from models.tabular.regularized_linear import RegularizedLinearAdapter
@@ -40,9 +44,13 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "cycle_only_baseline": CycleOnlyBaselineAdapter,
     "regularized_linear": RegularizedLinearAdapter,
     "random_forest": RandomForestAdapter,
+    "extra_trees": ExtraTreesAdapter,
     "xgboost": XGBoostAdapter,
+    "catboost": CatBoostAdapter,
     "mlp": MLPAdapter,
     "tcn": TCNAdapter,
+    "multiscale_cnn": MultiScaleCNNAdapter,
+    "sensor_graph_tcn": SensorGraphTCNAdapter,
     "lstm": LSTMAdapter,
     "transformer": TransformerAdapter,
     "rbf_svr": RBFSVRAdapter,
@@ -66,6 +74,12 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "min_samples_leaf",
         "max_features",
     },
+    "extra_trees": {
+        "n_estimators",
+        "max_depth",
+        "min_samples_leaf",
+        "max_features",
+    },
     "xgboost": {
         "maximum_trees",
         "learning_rate",
@@ -76,12 +90,40 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "reg_alpha",
         "reg_lambda",
     },
+    "catboost": {
+        "maximum_trees",
+        "learning_rate",
+        "depth",
+        "l2_leaf_reg",
+        "random_strength",
+        "bagging_temperature",
+        "rsm",
+        "boosting_type",
+    },
     "mlp": {"hidden_layers", "dropout", "learning_rate", "weight_decay"},
     "tcn": {
         "residual_blocks",
         "channels",
         "kernel_size",
         "dilation_base",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "multiscale_cnn": {
+        "branch_channels",
+        "kernel_sizes",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "sensor_graph_tcn": {
+        "graph_hidden",
+        "graph_layers",
+        "graph_neighbors",
+        "temporal_blocks",
+        "temporal_channels",
+        "kernel_size",
         "dropout",
         "learning_rate",
         "weight_decay",
@@ -139,9 +181,9 @@ def load_experiment_specification(
 class ModelAdapterFactory:
     """Create one configured adapter without embedding model-specific branches.
 
-    The factory reads shared neural settings, prediction clipping, and XGBoost
-    stopping patience from the resolved settings. The caller supplies the
-    candidate's resolved hyperparameters and seed.
+    The factory reads shared neural settings, prediction clipping, and the
+    boosted-tree stopping patience from the resolved settings. The caller
+    supplies the candidate's resolved hyperparameters and seed.
     """
 
     def __init__(
@@ -198,13 +240,20 @@ class ModelAdapterFactory:
             "training_monitor": training_monitor,
         }
         adapter_class = ADAPTER_CLASSES[family]
-        if family == "xgboost":
+        if family in {"xgboost", "catboost"}:
             return adapter_class(
                 **common_arguments,
                 early_stopping_patience=architecture["early_stopping_patience"],
                 training_iterations=training_iterations,
             )
-        if family in {"mlp", "tcn", "lstm", "transformer"}:
+        if family in {
+            "mlp",
+            "tcn",
+            "multiscale_cnn",
+            "sensor_graph_tcn",
+            "lstm",
+            "transformer",
+        }:
             shared = self.settings["neural_training"]
             training_config = NeuralTrainingConfig(
                 batch_size=shared["batch_size"],
@@ -258,6 +307,7 @@ def build_registry_payload(
         "automatic_architecture_ranking": False,
         "common_methods": ["fit", "predict", "save", "load"],
         "libraries": {
+            "catboost": version("catboost"),
             "joblib": version("joblib"),
             "scikit-learn": version("scikit-learn"),
             "tensorboard": version("tensorboard"),

@@ -19,20 +19,30 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "RegularizedLinearAdapter" implements Ridge and Elastic Net after robust
   scaling fitted only on the supplied training rows.
 - "RandomForestAdapter" fits sample-weighted trees to unscaled tabular values.
+- "ExtraTreesAdapter" fits sample-weighted trees with randomized split
+  thresholds to the same unscaled tabular values.
 - "XGBoostAdapter" fits sample-weighted boosted trees to unscaled values,
   automatically uses CUDA only when both the installed XGBoost build and the
   active machine support it, and supports inner-fold early stopping or a fixed
   outer-retraining tree count.
+- "CatBoostAdapter" fits sample-weighted CPU CatBoost trees over the same
+  numerical inputs, with inner-fold early stopping and fixed outer-retraining
+  tree counts. CPU execution is intentional because CatBoost GPU training is
+  not deterministic enough for this study.
 - "MLPAdapter" applies training-fold robust scaling before a PyTorch MLP.
 - "TCNAdapter" applies causal dilated convolutions to Step 3 sequence windows.
+- "MultiScaleCNNAdapter" combines three causal convolution branches with
+  different receptive fields and masked mean/maximum pooling.
+- "SensorGraphTCNAdapter" fits a top-k absolute-correlation graph from the
+  active training fold, performs sensor message passing, and then applies a
+  causal residual TCN.
 - "LSTMAdapter" uses packed valid sequence lengths in one temporal direction.
-- "TransformerAdapter" implements the settings' disabled conditional masked
-  Transformer so it can be enabled without changing the adapter layer.
-- "RBFSVRAdapter" implements the disabled optional robust-scaled RBF-SVR.
+- "TransformerAdapter" implements the conditional masked Transformer.
+- "RBFSVRAdapter" implements the optional robust-scaled RBF-SVR.
 
-The eight required families are enabled by the current settings. Transformer
-and RBF-SVR are implemented but remain disabled and cannot be constructed by
-the factory unless the caller explicitly allows disabled families.
+All fourteen declared families are enabled for Run 4. Their included,
+conditional, and optional status labels preserve the study rationale; the
+separate `study.enabled` table controls what actually runs.
 
 ## Shared interface
 
@@ -58,13 +68,16 @@ The factory can also attach the neutral training monitor. Adapter modules
 never import TensorBoard. The shared neural loop reports "train/loss" and,
 where a development fold exists, "val/rmse" each epoch; the XGBoost adapter
 reports the same two tags on sampled boosting rounds through its official
-callback interface. Atomic-fit estimators expose no optimization iterations and
-therefore publish no curve; everything about their fits is recorded in the Step
-5 and Step 6 artifacts, which is where every family's finished numbers live.
+callback interface, and CatBoost publishes its structured training history
+through the same monitor boundary after fitting. Atomic-fit estimators expose
+no optimization iterations and therefore publish no curve; everything about
+their fits is recorded in the Step 5 and Step 6 artifacts, which is where every
+family's finished numbers live.
 
 Every adapter also declares whether its family is stochastic. Random Forest,
-XGBoost, and the neural adapters use the three retraining seeds from the
-settings; deterministic baselines and linear or kernel models need one run.
+Extra Trees, XGBoost, CatBoost, and the neural adapters use the three
+retraining seeds from the settings; deterministic baselines and linear or
+kernel models need one run.
 
 ## Preprocessing ownership
 
@@ -73,9 +86,13 @@ Preprocessing stays with the model artifact that depends on it:
 - Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling from the
   active training rows only.
 - Random Forest and XGBoost use unchanged numeric feature values.
-- TCN, LSTM, and Transformer require the fold-scaled telemetry returned by
-  Step 3. They additionally robust-scale the two age side features using only
-  the training rows supplied to "fit".
+- Extra Trees and CatBoost use unchanged numeric feature values. CatBoost does
+  not receive categorical columns because this dataset's engineered inputs are
+  numerical.
+- TCN, multi-scale CNN, sensor-graph TCN, LSTM, and Transformer require the
+  fold-scaled telemetry returned by Step 3. They additionally robust-scale the
+  two age side features using only the training rows supplied to "fit". The
+  sensor graph is also fitted from training-fold telemetry only.
 
 Keeping fitted scalers inside their model adapters ensures that later
 predictions use exactly the transformation learned during training.
@@ -87,13 +104,14 @@ weighted mean squared error, AdamW, deterministic seeds, gradient clipping,
 batch size, maximum epoch count, and early-stopping patience from the settings.
 They run on CPU with one data-loading worker for a simple repeatable baseline.
 
-XGBoost and neural models support two distinct training modes:
+XGBoost, CatBoost, and neural models support two distinct training modes:
 
 - inner-fold candidate fitting uses validation-based early stopping;
 - outer-fold retraining receives a fixed tree or epoch count from the later
   runner, which will use the median best duration found in the inner folds.
 
-Random Forest and XGBoost each use one internal worker. Candidate-level
+Random Forest, Extra Trees, XGBoost, and CatBoost each use one internal worker
+or CPU thread. Candidate-level
 parallelism belongs to the later runner, avoiding nested parallel execution.
 
 ## Files
@@ -114,10 +132,14 @@ Every architecture has one implementation module below "models":
 | Tabular variant | "models/tabular/ridge.py" | Ridge construction |
 | Tabular variant | "models/tabular/elastic_net.py" | Elastic Net construction |
 | Tabular | "models/tabular/random_forest.py" | "RandomForestAdapter" |
+| Tabular | "models/tabular/extra_trees.py" | "ExtraTreesAdapter" |
 | Tabular | "models/tabular/xgboost.py" | "XGBoostAdapter" |
+| Tabular | "models/tabular/catboost.py" | "CatBoostAdapter" |
 | Tabular | "models/tabular/rbf_svr.py" | "RBFSVRAdapter" |
 | Neural | "models/neural/mlp.py" | "MLPAdapter" |
 | Neural | "models/neural/tcn.py" | "TCNAdapter" |
+| Neural | "models/neural/multiscale_cnn.py" | "MultiScaleCNNAdapter" |
+| Neural | "models/neural/sensor_graph_tcn.py" | "SensorGraphTCNAdapter" |
 | Neural | "models/neural/lstm.py" | "LSTMAdapter" |
 | Neural | "models/neural/transformer.py" | "TransformerAdapter" |
 
@@ -126,7 +148,7 @@ The neural modules reuse only two support files:
 - "models/neural/neural_base.py" owns the common weighted PyTorch training,
   early-stopping, deterministic-seeding, and inference loop.
 - "models/neural/sequence_base.py" owns validation and preparation shared by
-  TCN, LSTM, and Transformer sequence inputs.
+  all five sequence-family inputs.
 
 This structure keeps architecture-specific layers and hyperparameter handling
 inside the model's own file while preventing copied training logic from
@@ -143,7 +165,7 @@ Run from the repository root:
 
     py 2_model_architecture_study\4_model_adapters\build_model_registry.py
 
-The command creates "artifacts/model_registry.json". It records all ten model
+The command creates "artifacts/model_registry.json". It records all fourteen model
 families, their enabled status, representation, adapter class, permitted
 configuration fields, common behavior, settings version, and installed model
 library versions. It contains no timestamp or hash and makes no performance or

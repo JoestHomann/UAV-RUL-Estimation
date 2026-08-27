@@ -69,7 +69,16 @@ def default_selected_configurations_path() -> Path:
     )
 
 
-EARLY_STOPPED_FAMILIES = {"xgboost", "mlp", "tcn", "lstm", "transformer"}
+EARLY_STOPPED_FAMILIES = {
+    "xgboost",
+    "catboost",
+    "mlp",
+    "tcn",
+    "multiscale_cnn",
+    "sensor_graph_tcn",
+    "lstm",
+    "transformer",
+}
 
 
 class LockedEvaluationGateError(ValueError):

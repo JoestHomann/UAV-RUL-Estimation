@@ -64,8 +64,8 @@ current inner-training UAV histories.
 
 ## Training duration
 
-XGBoost and neural candidates use their inner-validation data for early
-stopping. For the selected configuration, Step 5 records the median best tree
+XGBoost, CatBoost, and neural candidates use their inner-validation data for
+early stopping. For the selected configuration, Step 5 records the median best tree
 or epoch count across the four inner folds. If the median lies halfway between
 two integers, it is rounded upward.
 

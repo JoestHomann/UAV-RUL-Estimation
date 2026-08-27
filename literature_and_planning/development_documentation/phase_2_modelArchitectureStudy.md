@@ -36,22 +36,22 @@ These datasets, folds, cutoffs, targets, and metrics remain fixed during Phase 2
 
 ## Experiment contract
 
-Step 1 records the executable architecture-study settings before model implementation begins. The tracked [`experiment_contract.toml`](../../2_model_architecture_study/1_experiment_contract/experiment_contract.toml) is the human-readable source of truth. It contains the enabled architecture families, representations, preprocessing modes, tuning ranges, training settings, seeds, metrics, and repository-relative Phase 1 input paths.
+Step 1 records the executable architecture-study settings before model implementation begins. The tracked [`architecture_study_settings.toml`](../../2_model_architecture_study/1_architecture_study_settings/architecture_study_settings.toml) is the human-readable source of truth. It contains the enabled architecture families, representations, preprocessing modes, tuning ranges, training settings, seeds, metrics, and repository-relative Phase 1 input paths.
 
 The implementation separates building from verification:
 
-- [`verify_experiment_contract.py`](../../2_model_architecture_study/1_experiment_contract/verify_experiment_contract.py) uses a strict Pydantic schema and rejects missing, malformed, or unknown contract fields. It also checks that all required Phase 1 artifacts exist, that the Phase 1 leakage report passed, and that the expected JSON keys, CSV columns, row counts, and feature counts are present. It does not repeat the raw-data audit and never modifies files.
-- [`build_experiment_contract.py`](../../2_model_architecture_study/1_experiment_contract/build_experiment_contract.py) runs the verifier and writes `artifacts/experiment_specification.json` only after all checks pass. Identical TOML and Phase 1 inputs produce identical JSON; timestamps, absolute paths, machine names, hashes, and lock state are not added.
+- [`verify_architecture_study_settings.py`](../../2_model_architecture_study/1_architecture_study_settings/verify_architecture_study_settings.py) uses a strict Pydantic schema and rejects missing, malformed, or unknown settings fields. It also checks that all required Phase 1 artifacts exist, that the Phase 1 leakage report passed, and that the expected JSON keys, CSV columns, row counts, and feature counts are present. It does not repeat the raw-data audit and never modifies files.
+- [`build_architecture_study_settings.py`](../../2_model_architecture_study/1_architecture_study_settings/build_architecture_study_settings.py) runs the verifier and writes `artifacts/experiment_specification.json` only after all checks pass. Identical TOML and Phase 1 inputs produce identical JSON; timestamps, absolute paths, machine names, hashes, and lock state are not added.
 
-The contract uses a manually maintained positive integer `contract_version`. When an experiment setting changes, this version must be incremented and dependent Phase 2 artifacts must be regenerated. The code does not freeze the contract; avoiding changes after locked results have been inspected remains an explicit experimental rule.
+The settings use a manually maintained positive integer `settings_version`. When an experiment setting changes, this version must be incremented and dependent Phase 2 artifacts must be regenerated. The code does not freeze the settings; avoiding changes after locked results have been inspected remains an explicit experimental rule.
 
 The initial model status is:
 
-- **Required and enabled:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, XGBoost, MLP, TCN, and LSTM.
-- **Conditional and disabled:** small Transformer encoder.
-- **Optional and disabled:** RBF-SVR.
+- **Included and enabled:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, and LSTM.
+- **Conditional and enabled:** small Transformer encoder.
+- **Optional and enabled:** RBF-SVR.
 
-Deferred models remain in this document but are deliberately absent from the executable contract. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
+Models outside the fourteen declared families remain deferred. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
 
 ## Tabular data adapter
 
@@ -69,26 +69,28 @@ The adapter reads only its Step 2 copies after they have been generated. It pres
 
 Step 3 implements the raw telemetry representation in [3_sequence_data_adapter](../../2_model_architecture_study/3_sequence_data_adapter/README.md). Its builder copies the raw train/test histories, four endpoint tables, and two UAV-fold tables into its local artifact directory. The generated "sequence_dataset_manifest.json" records the ordered channels, lookbacks, mask convention, side features, scaling rule, and source provenance. A copy report confirms existence, size, preserved timestamps, and complete byte equality without storing hashes.
 
-[sequence_data_adapter.py](../../2_model_architecture_study/3_sequence_data_adapter/sequence_data_adapter.py) constructs tensors only when requested. For every endpoint it selects the trailing 50, 100, or 200 cycles ending exactly at the cutoff, left-pads shorter histories with zeros, marks padded positions as True in the Boolean mask, and returns flight cycle and log-transformed flight cycle as separate side features. It preserves endpoint order and never includes post-cutoff telemetry.
+[sequence_data_adapter.py](../../2_model_architecture_study/3_sequence_data_adapter/sequence_data_adapter.py) constructs tensors only when requested. For every endpoint it selects the trailing 50 or 100 cycles ending exactly at the cutoff, left-pads shorter histories with zeros, marks padded positions as True in the Boolean mask, and returns flight cycle and log-transformed flight cycle as separate side features. It preserves endpoint order and never includes post-cutoff telemetry.
 
 The inner-selection and locked-outer methods derive UAV membership from the copied fold assignments. They fit channel medians and IQR-based scales on complete histories from the active training UAVs only, apply the same parameters to both sides of the split, and keep padded values equal to zero. The fitted scaling is independent of lookback, excludes all validation UAVs, and leaves age side features unscaled.
 
+Step 3b adds the reusable [trajectory data adapter](../../2_model_architecture_study/3_trajectory_data_adapter/README.md). It reuses the verified sequence-step file copies rather than duplicating raw data. Each query contains every observed cycle through its endpoint cutoff, while each fold-specific reference library contains complete run-to-failure histories and cycle-wise RUL from active training UAVs only. [trajectory_data_adapter.py](../../2_model_architecture_study/3_trajectory_data_adapter/trajectory_data_adapter.py) provides the same inner, outer, locked, and final-search fold boundaries as the fixed-window adapter. [verify_trajectory_data_adapter.py](../../2_model_architecture_study/3_trajectory_data_adapter/verify_trajectory_data_adapter.py) checks causal cutoffs, disjoint UAVs, training-only references, and training-only scaling on a real fold.
+
 ## Model adapters
 
-Step 4 implements the common estimator boundary in [4_model_adapters](../../2_model_architecture_study/4_model_adapters/README.md). The model registry connects every family in the experiment contract to one concrete adapter class. The eight required families are enabled; the conditional Transformer and optional RBF-SVR are implemented but remain disabled by the contract.
+Step 4 implements the common estimator boundary in [4_model_adapters](../../2_model_architecture_study/4_model_adapters/README.md). The model registry connects every family in the experiment contract to one concrete adapter class. All fourteen declared families are enabled for Run 4.
 
 The implementation separates shared experiment behavior from architecture-specific model code:
 
 - [base.py](../../2_model_architecture_study/4_model_adapters/base.py) defines the common fitting, prediction, nonnegative clipping, training-summary, and trusted-local persistence behavior.
 - [models/baselines](../../2_model_architecture_study/4_model_adapters/models/baselines/) contains separate weighted mean and cycle-only baseline modules.
-- [models/tabular](../../2_model_architecture_study/4_model_adapters/models/tabular/) contains separate Ridge and Elastic Net estimator modules plus the shared regularized-family adapter, and one module each for Random Forest, XGBoost, and optional RBF-SVR.
-- [models/neural](../../2_model_architecture_study/4_model_adapters/models/neural/) contains one module each for MLP, causal TCN, packed unidirectional LSTM, and masked Transformer. The category retains one shared weighted PyTorch training loop and one shared sequence-input adapter so architecture modules do not duplicate training or validation behavior.
+- [models/tabular](../../2_model_architecture_study/4_model_adapters/models/tabular/) contains separate Ridge and Elastic Net estimator modules plus the shared regularized-family adapter, and one module each for Random Forest, Extra Trees, XGBoost, CatBoost, and optional RBF-SVR.
+- [models/neural](../../2_model_architecture_study/4_model_adapters/models/neural/) contains one module each for MLP, causal TCN, multi-scale CNN, sensor-graph TCN, packed unidirectional LSTM, and masked Transformer. The category retains one shared weighted PyTorch training loop and one shared sequence-input adapter so architecture modules do not duplicate training or validation behavior.
 - [model_registry.py](../../2_model_architecture_study/4_model_adapters/model_registry.py) validates resolved hyperparameter names, enforces enabled/disabled contract status, and creates the requested adapter without selecting or ranking architectures.
 - [build_model_registry.py](../../2_model_architecture_study/4_model_adapters/build_model_registry.py) writes "artifacts/model_registry.json" with the contract version, adapter mapping, representation requirements, enabled status, supported configuration fields, and installed library versions. It records no hashes or timestamps.
 
-Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling using only the supplied training rows; Random Forest and XGBoost use unscaled tabular features. Sequence models consume Step 3's fold-scaled telemetry and fit a separate robust scaler for the two age side features from their supplied training rows. Every family uses the sample weights already carried by its Step 2 or Step 3 dataset.
+Fold-sensitive preprocessing is stored with the fitted model. Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling using only the supplied training rows; Random Forest, Extra Trees, XGBoost, and CatBoost use unscaled tabular features. Sequence models consume Step 3's fold-scaled telemetry and fit a separate robust scaler for the two age side features from their supplied training rows. Every family uses the sample weights already carried by its Step 2 or Step 3 dataset.
 
-XGBoost and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. The later runner must derive that fixed duration from the median inner-fold best duration, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
+XGBoost, CatBoost, and the neural adapters support validation-based early stopping during inner-fold fitting and an explicit fixed iteration or epoch count during outer-fold retraining. The later runner must derive that fixed duration from the median inner-fold best duration, so outer-validation targets never control training length. Step 4 does not perform tuning, evaluation, plotting, architecture ranking, or winner selection.
 
 ## Inner model selection
 
@@ -98,21 +100,21 @@ Step 5 implements automatic selection within each enabled architecture family in
 
 [inner_model_selection.py](../../2_model_architecture_study/5_inner_model_selection/inner_model_selection.py) evaluates every candidate across the four actual inner-fold labels from the copied fold tables. Each split is checked for disjoint UAV groups, training weights, RUL targets, and exactly five development scenarios. Fold-specific preprocessing and model fitting are repeated independently. The objective is the mean of the four inner-validation RMSE values.
 
-Each family/fold study writes candidate, fold-level, selected-configuration, and status checkpoints below "artifacts/studies/". The consolidated "candidate_results.csv", "inner_fold_results.csv", and "selected_configurations.csv" expose all completed work. "selection_manifest.json" remains "partial" until all 40 enabled family/fold studies are complete and explicitly records that neither locked nor test data was loaded.
+Each family/fold study writes candidate, fold-level, selected-configuration, and status checkpoints below the active numbered run folder. The consolidated "candidate_results.csv", "inner_fold_results.csv", and "selected_configurations.csv" expose all completed work. "selection_manifest.json" remains "partial" until all 70 enabled family/fold studies are complete and explicitly records that neither locked nor test data was loaded.
 
-For XGBoost and neural candidates, Step 5 records the best duration in every inner fold. The median is rounded to the nearest integer with half values rounded upward and stored as "outer_retraining_iterations". Step 6 must retrain with this fixed duration instead of using locked targets for early stopping.
+For XGBoost, CatBoost, and neural candidates, Step 5 records the best duration in every inner fold. The median is rounded to the nearest integer with half values rounded upward and stored as "outer_retraining_iterations". Step 6 must retrain with this fixed duration instead of using locked targets for early stopping.
 
-The inexpensive mean and cycle-only studies have been generated for all five outer folds, producing 10 completed studies, 10 candidate rows, and 40 inner-fold rows. The manifest correctly remains partial until the six tunable families finish their 25-candidate searches. This partial execution demonstrates the artifact flow but is not the completed architecture study.
+The inexpensive mean and cycle-only studies may be generated first for all five outer folds, producing 10 completed studies, 10 candidate rows, and 40 inner-fold rows. The manifest correctly remains partial until every enabled family/fold study finishes its contract-defined search. This staged execution demonstrates the artifact flow but is not the completed architecture study.
 
 ## Locked outer evaluation
 
-Step 6 implements held-out evaluation in [6_locked_outer_evaluation](../../2_model_architecture_study/6_locked_outer_evaluation/README.md). [evaluation_gate.py](../../2_model_architecture_study/6_locked_outer_evaluation/evaluation_gate.py) runs before either data adapter is constructed. It requires a complete Step 5 manifest, all 40 family/fold selections, a matching contract version, valid configuration fields, and confirmation that Step 5 used neither locked nor test data. There is no bypass option.
+Step 6 implements held-out evaluation in [6_locked_outer_evaluation](../../2_model_architecture_study/6_locked_outer_evaluation/README.md). [evaluation_gate.py](../../2_model_architecture_study/6_locked_outer_evaluation/evaluation_gate.py) runs before either data adapter is constructed. It requires a complete Step 5 manifest, all 70 family/fold selections, a matching settings version, valid configuration fields, and confirmation that Step 5 used neither locked nor test data. There is no bypass option.
 
 [locked_outer_evaluation.py](../../2_model_architecture_study/6_locked_outer_evaluation/locked_outer_evaluation.py) retrains each selected configuration on the 80 outer-training UAVs and then predicts the 20 held-out UAVs across 20 locked scenarios. It verifies 1,600 training prefixes, 400 validation endpoints, disjoint UAV groups, correct fold membership, unique scenario/UAV keys, and total training weight 1 per UAV.
 
-Locked validation data is never passed to the model's fitting method. XGBoost and neural adapters receive the fixed "outer_retraining_iterations" selected from the median inner-fold stopping duration. Predictions are generated only after fitting finishes, so locked targets cannot influence preprocessing, parameters, early stopping, or training duration.
+Locked validation data is never passed to the model's fitting method. XGBoost, CatBoost, and neural adapters receive the fixed "outer_retraining_iterations" selected from the median inner-fold stopping duration. Predictions are generated only after fitting finishes, so locked targets cannot influence preprocessing, parameters, early stopping, or training duration.
 
-Random Forest, XGBoost, MLP, TCN, LSTM, and an enabled Transformer are marked stochastic and run with seeds 13, 37, and 73. Deterministic families run once with seed 13. The current eight-family contract therefore requires 90 family/fold/seed runs and produces 36,000 prediction rows.
+Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, LSTM, and Transformer are marked stochastic and run with seeds 13, 37, and 73. Deterministic families run once with seed 13. The Run 4 settings therefore require 170 family/fold/seed runs and produce 68,000 prediction rows.
 
 Every run writes its fitted model, 400-row prediction table, training and inference facts, and status checkpoint. The consolidated "locked_predictions.csv.gz", "model_runs.csv", and "locked_evaluation_manifest.json" include only complete runs. Step 6 records all architecture results but calculates no ranking and chooses no winner.
 
@@ -223,7 +225,7 @@ The tabular path uses one Phase 1 feature row per UAV prefix. It supports the fo
 - **`screened`:** temporal features for the degradation candidates and level/baseline summaries for context channels.
 - **`all_nonconstant`:** all 606 engineered features from the 22 nonconstant channels.
 
-Ridge, Elastic Net, and MLP receive robustly scaled features. Random Forest and XGBoost receive the original unscaled feature values because their split decisions do not depend on feature units. During inner validation, preprocessing must be refitted using only the 60 inner-training UAVs; the outer-fold scalers created in Phase 1 cannot be reused for inner model selection.
+Ridge, Elastic Net, MLP, and RBF-SVR receive robustly scaled features. Random Forest, Extra Trees, XGBoost, and CatBoost receive the original unscaled feature values because their split decisions do not depend on feature units. During inner validation, preprocessing must be refitted using only the 60 inner-training UAVs; the outer-fold scalers created in Phase 1 cannot be reused for inner model selection.
 
 ### Raw sequence representation
 
@@ -232,7 +234,7 @@ The sequence path uses the 22 nonconstant telemetry channels in flight-cycle ord
 For a prediction at cutoff `c`:
 
 - Use only cycles at or before `c`.
-- Use a trailing lookback window of 50, 100, or 200 cycles.
+- Use a trailing lookback window of 50 or 100 cycles.
 - If fewer cycles are available, left-pad the sequence and provide a binary padding mask.
 - Scale every telemetry channel using parameters fitted only on the corresponding inner- or outer-training UAVs.
 - Supply `flight_cycle` and `log(1 + flight_cycle)` as side features to the final regression head.
@@ -252,9 +254,13 @@ The following table separates the available families from the models that should
 | Cycle-only linear model | Age | Existing non-telemetry baseline | Required |
 | Ridge / Elastic Net | Engineered features | Regularized linear reference | Required |
 | Random Forest | Engineered features | Nonlinear bagging/tree reference | Required |
+| Extra Trees | Engineered features | Randomized bagging/tree reference | Required |
 | XGBoost | Engineered features | Nonlinear gradient-boosting reference | Required |
+| CatBoost | Engineered features | Alternative regularized boosting reference | Required |
 | MLP | Engineered features | Neural model without explicit sequence processing | Required |
 | TCN / 1D CNN | Raw telemetry sequence | Convolutional temporal model | Required |
+| Multi-scale CNN | Raw telemetry sequence | Parallel temporal receptive fields | Required |
+| Sensor-graph TCN | Raw telemetry sequence | Cross-sensor graph plus temporal convolution | Required |
 | LSTM | Raw telemetry sequence | Recurrent temporal model | Required |
 | Small Transformer encoder | Raw telemetry sequence | Attention-based temporal model | Conditional extension |
 | RBF-SVR | Engineered features | Kernel-based nonlinear reference | Optional extension |
@@ -290,6 +296,14 @@ The MLP uses the same engineered features as the classical tabular models but le
 
 The TCN uses causal one-dimensional convolutions over the telemetry history. Dilated convolutions allow a longer receptive field without recurrence, while residual connections support stable training. It tests whether local patterns and multi-scale recent changes can be learned directly from telemetry. Convolutional RUL models are established in prognostics literature, and generic TCNs have been shown to be strong sequence-modelling baselines. See [Li, Ding, and Sun, 2018](https://doi.org/10.1016/j.ress.2017.11.021), [Bai, Kolter, and Koltun, 2018](https://arxiv.org/abs/1803.01271), and Lecture 6 in the [MLiM Lecture Notes](../MLiM_Lecture_Notes.pdf).
 
+### Multi-scale CNN
+
+The multi-scale CNN applies three causal convolution branches with different kernel widths to the same masked sequence. Masked mean and maximum pooling retain both typical and extreme degradation responses before the age side features enter the regression head. It tests whether explicitly separating short-, medium-, and longer-range patterns improves on one dilated TCN stack without changing the data representation.
+
+### Sensor-graph TCN
+
+The sensor-graph TCN estimates absolute telemetry correlations from each active training fold, keeps the strongest neighbours per channel, and symmetrically normalizes the resulting graph. Graph layers mix sensor information at every observed cycle before causal residual convolutions model time. Validation UAVs do not influence the graph. This tests whether an explicit inductive bias for cross-sensor relationships is useful beyond treating telemetry channels only as convolution inputs.
+
 ### LSTM
 
 The LSTM processes telemetry recurrently and is designed to retain information over longer temporal dependencies than a vanilla RNN. It is the principal recurrent architecture in the study and provides a direct comparison with the convolutional TCN. LSTM models have been applied specifically to RUL estimation. See [Zheng et al., 2017](https://doi.org/10.1109/ICPHM.2017.7998311) and Lecture 7 in the [MLiM Lecture Notes](../MLiM_Lecture_Notes.pdf).
@@ -308,8 +322,12 @@ Cycle-only baseline       -> Age alone
 Regularized linear model  -> Linear use of engineered history
 Random Forest             -> Bagged nonlinear rules on engineered history
 XGBoost                   -> Boosted nonlinear rules on engineered history
+CatBoost                  -> Alternative boosted rules on engineered history
+Extra Trees               -> Randomized bagged rules on engineered history
 MLP                       -> Neural nonlinearities on engineered history
 TCN                       -> Convolutional learning from raw sequences
+Multi-scale CNN           -> Parallel temporal scales from raw sequences
+Sensor-graph TCN          -> Sensor relations plus temporal convolution
 LSTM                      -> Recurrent learning from raw sequences
 ```
 
@@ -326,12 +344,16 @@ flowchart LR
 
     T --> T1["Ridge / Elastic Net"]
     T --> T2["Random Forest"]
-    T --> T3["XGBoost"]
-    T --> T4["MLP"]
+    T --> T3["Extra Trees"]
+    T --> T4["XGBoost"]
+    T --> T5["CatBoost"]
+    T --> T6["MLP"]
 
     S --> S1["TCN"]
-    S --> S2["LSTM"]
-    S --> S3["Small Transformer<br/>conditional extension"]
+    S --> S2["Multi-scale CNN"]
+    S --> S3["Sensor-graph TCN"]
+    S --> S4["LSTM"]
+    S --> S5["Small Transformer<br/>conditional extension"]
 
     B1 --> Y["RUL prediction"]
     B2 --> Y
@@ -339,9 +361,13 @@ flowchart LR
     T2 --> Y
     T3 --> Y
     T4 --> Y
+    T5 --> Y
+    T6 --> Y
     S1 --> Y
     S2 --> Y
     S3 --> Y
+    S4 --> Y
+    S5 --> Y
 ```
 
 ### Required experiment matrix
@@ -352,10 +378,14 @@ flowchart LR
 | Cycle-only baseline | `age_only` |
 | Ridge / Elastic Net family | `age_only`, `last_values`, `screened`, `all_nonconstant` |
 | Random Forest | `last_values`, `screened`, `all_nonconstant` |
+| Extra Trees | `last_values`, `screened`, `all_nonconstant` |
 | XGBoost | `last_values`, `screened`, `all_nonconstant` |
+| CatBoost | `last_values`, `screened`, `all_nonconstant` |
 | MLP | `last_values`, `screened`, `all_nonconstant` |
-| TCN | Raw 22-channel sequence; lookback 50, 100, or 200 |
-| LSTM | Raw 22-channel sequence; lookback 50, 100, or 200 |
+| TCN | Raw 22-channel sequence; lookback 50 or 100 |
+| Multi-scale CNN | Same sequence inputs; three jointly selected causal kernels |
+| Sensor-graph TCN | Same sequence inputs; fold-fitted training-only sensor graph |
+| LSTM | Raw 22-channel sequence; lookback 50 or 100 |
 | Transformer | Same sequence inputs and lookbacks, only if the conditional extension is run |
 
 The feature set or lookback is part of the configuration selected inside the inner folds. It must not be selected from locked-scenario results.
@@ -369,15 +399,19 @@ Search spaces must be fixed before locked evaluation. The following initial boun
 | Ridge | `alpha`: log-uniform from `1e-4` to `1e4` |
 | Elastic Net | `alpha`: log-uniform from `1e-5` to `1e2`; `l1_ratio`: `0.05`, `0.2`, `0.5`, `0.8`, or `0.95` |
 | Random Forest | `n_estimators`: `500`; `max_depth`: `None`, `5`, `10`, or `20`; `min_samples_leaf`: `1`, `2`, `5`, or `10`; `max_features`: `0.33`, `0.67`, or `1.0` |
+| Extra Trees | Same tree counts, depths, leaf sizes, and feature fractions as Random Forest; split thresholds are randomized and bootstrap sampling is disabled |
 | XGBoost | At most `2,000` trees with early stopping; `learning_rate`: `0.01-0.2`; `max_depth`: `2`, `3`, `4`, `6`, or `8`; `min_child_weight`: `0.5-20`; `subsample`: `0.6-1.0`; `colsample_bytree`: `0.5-1.0`; L1/L2 penalties on logarithmic scales |
+| CatBoost | At most `1,500` CPU trees with early stopping; `learning_rate`: `0.01-0.2`; depth: `4`, `6`, `8`, or `10`; L2 leaf regularization, random strength, bagging temperature, feature fraction, and `Plain`/`Ordered` boosting type |
 | MLP | Hidden layers: `[64]`, `[128, 64]`, or `[256, 128]`; dropout: `0.0-0.5`; weight decay: `1e-6` to `1e-2`; learning rate: `1e-4` to `3e-3` |
-| TCN | Residual blocks: `2-4`; channels: `32`, `64`, or `128`; kernel: `3`, `5`, or `7`; exponentially increasing dilations; dropout: `0.1-0.5`; lookback: `50`, `100`, or `200` |
-| LSTM | Unidirectional layers: `1` or `2`; hidden units: `32`, `64`, or `128`; dropout: `0.1-0.5`; learning rate: `1e-4` to `3e-3`; lookback: `50`, `100`, or `200` |
-| Transformer | Encoder layers: `1-3`; model width: `32`, `64`, or `128`; compatible attention heads: `2`, `4`, or `8`; feed-forward ratio: `2` or `4`; sinusoidal position encoding; dropout: `0.1-0.5`; lookback: `50`, `100`, or `200` |
+| TCN | Residual blocks: `3-5`; channels: `32`, `64`, or `128`; kernel: `5` or `7`; doubling dilations; dropout: `0.1-0.5`; lookback: `50` or `100` |
+| Multi-scale CNN | Branch channels: `16`, `32`, or `64`; joint kernels: `[3,5,9]`, `[3,7,15]`, or `[5,11,21]`; dropout: `0.1-0.5`; lookback: `50` or `100` |
+| Sensor-graph TCN | Graph width: `8`, `16`, or `32`; graph layers: `1` or `2`; neighbours: `3`, `5`, or `8`; temporal blocks: `2-4`; temporal channels: `32` or `64`; kernel: `3` or `5`; lookback: `50` or `100` |
+| LSTM | Unidirectional layers: `1-3`; hidden units: `32`, `64`, or `128`; dropout: `0.1-0.5`; learning rate: `1e-4` to `1e-2`; lookback: `50` or `100` |
+| Transformer | Encoder layers: `1-3`; model width: `32`, `64`, or `128`; compatible attention heads: `2`, `4`, or `8`; feed-forward ratio: `2` or `4`; sinusoidal position encoding; dropout: `0.1-0.5`; lookback: `50` or `100` |
 
 Each family receives at most 25 distinct candidate configurations per outer fold, generated from a fixed search seed. A smaller exact grid is allowed when it exhausts the complete predefined space. Feature-set and lookback choices count as parts of these configurations rather than receiving a separate tuning budget. Manual extra tuning after viewing locked results is prohibited.
 
-Neural models use weighted mean squared error, AdamW, batch size 64, at most 300 epochs, early-stopping patience of 25 epochs, and global-norm gradient clipping at 1.0. Their learning rate and weight decay share the ranges `1e-4` to `3e-3` and `1e-6` to `1e-2`. XGBoost uses early-stopping patience of 50 rounds. The validation data used for early stopping must belong only to the relevant inner fold.
+Neural models use weighted mean squared error, AdamW, batch size 64, at most 400 epochs, early-stopping patience of 20 epochs, and global-norm gradient clipping at 1.0. Their learning rate and weight decay share the ranges `1e-4` to `1e-2` and `1e-6` to `1e-2`. XGBoost uses early-stopping patience of 35 rounds. The validation data used for early stopping must belong only to the relevant inner fold.
 
 When a tuned configuration is retrained on all 80 outer-training UAVs, the outer-validation UAVs cannot determine its training duration. The fixed epoch or boosting-round count is therefore the median best iteration observed across the four inner folds.
 
@@ -465,8 +499,10 @@ The implementation should remain traceable in the same way as Phase 1. Each step
 flowchart LR
     S1["1. Experiment contract"] --> S2["2. Tabular data adapter"]
     S1 --> S3["3. Sequence data adapter"]
+    S3 --> S3B["3b. Trajectory data adapter"]
     S2 --> S4["4. Model adapters"]
     S3 --> S4
+    S3B -.->|future trajectory family| S4
     S4 --> S5["5. Inner model selection"]
     S5 --> S6["6. Locked outer evaluation"]
     S6 --> S7["7. Architecture comparison"]
@@ -478,9 +514,10 @@ flowchart LR
 
 | Step folder | Main artifact | Purpose |
 | --- | --- | --- |
-| `1_experiment_contract/` | `artifacts/experiment_specification.json` | Validated representations, models, search spaces, seeds, metrics, and input expectations |
+| `1_architecture_study_settings/` | `artifacts/experiment_specification.json` | Validated representations, models, search spaces, seeds, metrics, and input expectations |
 | `2_tabular_data_adapter/` | `artifacts/tabular_dataset_manifest.json` | Validated access to Phase 1 engineered feature sets |
 | `3_sequence_data_adapter/` | `artifacts/sequence_dataset_manifest.json` | Causal windows, masks, channel scaling, and lookback alternatives |
+| `3_trajectory_data_adapter/` | `artifacts/trajectory_dataset_manifest.json` | Variable-length causal queries and fold-safe run-to-failure references |
 | `4_model_adapters/` | `artifacts/model_registry.json` | Common interface and registered model families |
 | `5_inner_model_selection/` | `artifacts/selected_configurations.csv` | Inner-fold tuning results and one selected configuration per family and outer fold |
 | `6_locked_outer_evaluation/` | `artifacts/locked_predictions.csv.gz` | Held-out predictions for every family, UAV, scenario, fold, and seed |
@@ -512,9 +549,11 @@ Random Forest
 XGBoost
 MLP
 TCN
+Multi-scale CNN
+Sensor-graph TCN
 LSTM
 ```
 
-A small Transformer is the first conditional extension. RBF-SVR, GRU, hybrid networks, learned autoencoder representations, advanced operator-learning models, and ensembles are added only if the core comparison leaves a specific unanswered question.
+A small Transformer and RBF-SVR are also enabled in Run 4 under their original conditional and optional status labels. GRU, hybrid networks, learned autoencoder representations, advanced operator-learning models, and ensembles are added only if this comparison leaves a specific unanswered question.
 
 This design creates one modular architecture-study pipeline while preserving the important distinction between engineered tabular inputs and raw temporal sequences.

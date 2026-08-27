@@ -2,14 +2,15 @@
 
 ## Purpose
 
-This step creates the raw telemetry input boundary for TCN, LSTM, and any later
-sequence architecture. It converts each training, development, locked, or test
+This step creates the fixed-window telemetry input boundary for TCN,
+multi-scale CNN, sensor-graph TCN, LSTM, Transformer, and later sequence
+architectures. It converts each training, development, locked, or test
 endpoint into a causal trailing window using the 22 nonconstant channels from
 the experiment contract.
 
 Sequence tensors are created on demand and are not stored as duplicate files.
-The same copied histories can therefore produce lookbacks of 50, 100, or 200
-cycles without maintaining three materialized datasets.
+The same copied histories can therefore produce lookbacks of 50 or 100 cycles
+without maintaining materialized datasets for either length.
 
 ## Inputs and copied files
 
@@ -42,7 +43,7 @@ All generated artifacts remain visible locally but are ignored by Git.
 For an endpoint at cutoff c, the adapter:
 
 1. locates the same UAV and cycle in the copied raw telemetry;
-2. selects at most the final 50, 100, or 200 cycles ending at c;
+2. selects at most the configured final 50 or 100 cycles ending at c;
 3. never includes a cycle after c;
 4. left-pads short histories with zeros;
 5. sets the Boolean padding mask to True only at padded positions;
