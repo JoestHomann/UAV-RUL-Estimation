@@ -47,19 +47,19 @@ optional_architectures = ["rbf_svr", "trajectory_dtw_knn"]    # Options: any dec
 # nothing else changes. Every name in the three [study] lists appears once here.
 # Options: true, false.
 mean_baseline = true
-cycle_only_baseline = true
-regularized_linear = true
+cycle_only_baseline = false
+regularized_linear = false
 random_forest = true
 extra_trees = true
 xgboost = true
 catboost = true
-mlp = true
+mlp = false
 tcn = true
 multiscale_cnn = true
 sensor_graph_tcn = true
-lstm = true
-transformer = true
-rbf_svr = true
+lstm = false
+transformer = false
+rbf_svr = false
 trajectory_dtw_knn = true
 # Saving every architecture's results and never declaring a winner are fixed
 # pipeline behaviors with nothing to configure.
@@ -67,7 +67,7 @@ trajectory_dtw_knn = true
 [tuning]
 # Candidate configurations Optuna tries per tunable family; the two baselines
 # have nothing to tune and always use one.
-candidate_budget_per_architecture = 25    # Options: any positive integer
+candidate_budget_per_architecture = 50    # Options: any positive integer
 # Seed making candidate generation repeatable.
 search_seed = 13    # Options: any integer
 # Seeds quantifying run-to-run variation, one retraining run each for the
