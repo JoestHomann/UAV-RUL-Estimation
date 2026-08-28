@@ -8,11 +8,11 @@
 # address, normally http://localhost:6006
 
 # Revision number of this configuration, incremented by hand on any change.
-settings_version = 10    # Options: any positive integer
+settings_version = 11    # Options: any positive integer
 
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
-run_number = 4    # Options: any positive integer
+run_number = 5    # Options: any positive integer
 
 [execution]
 # Step 5/6 studies run at once, each a subprocess; the one performance-only
@@ -102,9 +102,9 @@ bootstrap_seed = 20260814    # Options: any integer
 # "feature_sets" must be a subset of this.
 tabular_feature_sets = [    # Options: names declared by the selected Phase 1 catalog
     "age_only",
-    "last_values",
-    "screened",
-    "all_nonconstant",
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
 ]
 # Telemetry channels sequence models receive; must equal the list length below.
 sequence_channel_count = 22    # Options: any positive integer
@@ -197,7 +197,7 @@ variants = ["weighted_linear"]
 [architectures.regularized_linear]
 status = "included"
 representation = "tabular"
-feature_sets = ["age_only", "last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["ridge", "elastic_net"]
 
 # Which variant is fitted; the choice activates either the ridge penalty or
@@ -227,7 +227,7 @@ values = [0.05, 0.2, 0.5, 0.8, 0.95]
 [architectures.random_forest]
 status = "included"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["random_forest"]
 
 # Trees in the forest.
@@ -256,7 +256,7 @@ values = [0.15, 0.2, 0.33, 0.67, 1.0]
 [architectures.extra_trees]
 status = "included"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["extra_trees"]
 
 [architectures.extra_trees.search.n_estimators]
@@ -279,7 +279,7 @@ values = [0.15, 0.2, 0.33, 0.67, 1.0]
 [architectures.xgboost]
 status = "included"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["xgboost"]
 # Boosting rounds without improvement before stopping; this family stops on
 # rounds, so it ignores [neural_training].early_stopping_patience.
@@ -337,7 +337,7 @@ high = 100.0
 [architectures.catboost]
 status = "included"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["catboost"]
 early_stopping_patience = 35
 
@@ -390,7 +390,7 @@ value = "Plain"
 [architectures.mlp]
 status = "included"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["mlp"]
 
 # Hidden-layer layout; each nested list is one architecture, so [128, 64] means
@@ -656,7 +656,7 @@ high = 1e-2
 [architectures.rbf_svr]
 status = "optional"
 representation = "tabular"
-feature_sets = ["last_values", "screened", "all_nonconstant"]
+feature_sets = ["screened_drift_pruned"]
 variants = ["rbf_svr"]
 
 # Penalty on training errors, trading margin width against training fit.
@@ -733,18 +733,18 @@ expected_inner_folds_per_outer_fold = 4
 expected_development_scenarios = 5
 expected_locked_scenarios = 20
 expected_prefixes_per_training_uav = 20
-expected_generated_features = 606
+expected_generated_features = 1288
 
 [phase_1.expected_feature_sets]
 # "feature__*" column count in each named feature set. Options: positive integer.
 age_only = 2
-last_values = 24
-screened = 310
-all_nonconstant = 606
+screened_v1 = 310
+screened_drift_pruned = 298
+screened_drift_replaced = 342
 
 # The Phase 1 leakage-check report, whose passed status gates everything else.
 [phase_1.artifacts.verification_report]
-path = "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json"
+path = "1_dataset_construction/runs/FE_run_2/current20/10_automated_leakage_checks/artifacts/verification_report.json"
 format = "json"
 required_json_keys = ["status", "assertions", "feature_files", "feature_sets"]
 
@@ -848,7 +848,7 @@ required_columns = [
 
 # How the training prefix samples and their weights were generated.
 [phase_1.artifacts.training_prefix_config]
-path = "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json"
+path = "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefix_config.json"
 format = "json"
 required_json_keys = [
     "cutoff_source",
@@ -863,7 +863,7 @@ equal_total_weight_per_uav = true
 
 # Training prefix samples with the weights that equalize UAV influence.
 [phase_1.artifacts.training_prefixes]
-path = "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv"
+path = "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefixes.csv"
 format = "csv"
 rows = 2000
 total_columns = 6
@@ -878,11 +878,11 @@ required_columns = [
 
 # Engineered features for the training prefixes.
 [phase_1.artifacts.training_features]
-path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz"
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/training_features.csv.gz"
 format = "csv"
 rows = 2000
-total_columns = 612
-feature_columns = 606
+total_columns = 1294
+feature_columns = 1288
 required_columns = [
     "sample_id",
     "uav_id",
@@ -894,11 +894,11 @@ required_columns = [
 
 # Engineered features for the development scenario endpoints.
 [phase_1.artifacts.development_features]
-path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
 format = "csv"
 rows = 500
-total_columns = 614
-feature_columns = 606
+total_columns = 1296
+feature_columns = 1288
 required_columns = [
     "sample_id",
     "scenario",
@@ -912,11 +912,11 @@ required_columns = [
 
 # Engineered features for the locked scenario endpoints.
 [phase_1.artifacts.locked_features]
-path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz"
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz"
 format = "csv"
 rows = 2000
-total_columns = 614
-feature_columns = 606
+total_columns = 1296
+feature_columns = 1288
 required_columns = [
     "sample_id",
     "scenario",
@@ -930,18 +930,18 @@ required_columns = [
 
 # Engineered features for the held-out test endpoints, which Phase 2 never opens.
 [phase_1.artifacts.test_features]
-path = "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz"
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/test_features.csv.gz"
 format = "csv"
 rows = 100
-total_columns = 609
-feature_columns = 606
+total_columns = 1291
+feature_columns = 1288
 required_columns = ["sample_id", "uav_id", "cutoff"]
 
 # Which generated feature belongs to which named feature set.
 [phase_1.artifacts.feature_catalog]
-path = "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv"
+path = "1_dataset_construction/runs/FE_run_2/current20/6_feature_sets/artifacts/feature_catalog.csv"
 format = "csv"
-rows = 606
+rows = 1288
 total_columns = 9
 required_columns = [
     "feature_name",
@@ -950,14 +950,14 @@ required_columns = [
     "statistic",
     "window",
     "age_only",
-    "last_values",
-    "screened",
-    "all_nonconstant",
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
 ]
 
 # How fold-fitted preprocessing was defined in Phase 1.
 [phase_1.artifacts.preprocessing_config]
-path = "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json"
+path = "1_dataset_construction/runs/FE_run_2/current20/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json"
 format = "json"
 required_json_keys = ["feature_counts", "fit_scope", "outer_folds", "scaling"]
 

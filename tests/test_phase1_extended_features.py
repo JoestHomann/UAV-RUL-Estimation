@@ -160,6 +160,7 @@ class PhaseOneExtendedFeatureTests(unittest.TestCase):
         self.assertEqual(
             counts,
             {
+                "age_only": 2,
                 "screened_v1": 310,
                 "screened_drift_pruned": 298,
                 "screened_drift_replaced": 342,

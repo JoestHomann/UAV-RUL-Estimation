@@ -28,6 +28,7 @@ prefix_variants = ["current20", "prefix40_stratified"]
 [profiles.drift_ablation_features]
 feature_profile = "extended"
 feature_sets = [
+    "age_only",
     "screened_v1",
     "screened_drift_pruned",
     "screened_drift_replaced",

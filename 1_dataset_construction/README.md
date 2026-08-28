@@ -69,10 +69,10 @@ The `extended_features` profile additionally declares `screened_v1`, `screened_r
 counts come from the versioned catalog rather than a hard-coded implementation
 constant.
 
-The `drift_ablation_features` profile is used by `FE_run_2`. It compares the
-unchanged `screened_v1` control with a telemetry 15/16 drift-pruned set and a
-set that replaces the removed statistics with robust quantile and local-window
-features.
+The `drift_ablation_features` profile is used by `FE_run_2`. It retains
+`age_only` for downstream baseline evaluation and compares the unchanged
+`screened_v1` control with a telemetry 15/16 drift-pruned set and a set that
+replaces the removed statistics with robust quantile and local-window features.
 
 For each nonconstant channel, the feature table contains current and initial values, early-life baseline, baseline deviation, whole-prefix summaries, slopes, deltas, and 5/20/50-cycle recent summaries. `telemetry_07` and `telemetry_16` also receive state-transition and dwell-time features.
 
