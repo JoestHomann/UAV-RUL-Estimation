@@ -25,7 +25,7 @@ This settings file is intentionally not frozen by code. When its values change, 
 Tabular feature-set names are validated against the selected Phase 1 catalog
 and are not restricted to the four legacy literals. The declared
 `representations.tabular_feature_sets` and `phase_1.expected_feature_sets` keys
-must match exactly, keeping versioned Run 5 catalogs explicit.
+must match exactly, keeping versioned extended-feature catalogs explicit.
 
 For a fixed-size prefix policy, declare
 `expected_prefixes_per_training_uav`. For an eligibility-limited policy such as

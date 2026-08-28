@@ -80,27 +80,60 @@ EXTRA_TREES_PARAMETERS: dict[str, Any] = {
 }
 
 
+def parse_parameter_overrides(value: str | None, option: str) -> dict[str, Any]:
+    """Decode model overrides passed by the experiment launcher."""
+
+    if value is None:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{option} is not valid JSON: {error}") from error
+    if not isinstance(payload, dict):
+        raise ValueError(f"{option} must decode to a JSON object")
+    if "random_state" in payload:
+        raise ValueError(f"{option} must use --seed instead of random_state")
+    return payload
+
+
+def effective_model_parameters(
+    name: str,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Merge editable run settings with the documented diagnostic defaults."""
+
+    if name == "extra_trees":
+        parameters = {**EXTRA_TREES_PARAMETERS, "n_jobs": 1}
+    elif name == "xgboost":
+        parameters = {
+            **XGBOOST_PARAMETERS,
+            "objective": "reg:squarederror",
+            "tree_method": "hist",
+            "device": "cpu",
+            "n_jobs": 1,
+        }
+    else:
+        raise ValueError(f"Unknown model {name!r}")
+    parameters.update(overrides or {})
+    return parameters
+
+
 def rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(y_pred - y_true))))
 
 
-def make_model(name: str, seed: int) -> Any:
+def make_model(name: str, seed: int, parameters: dict[str, Any]) -> Any:
     if name == "extra_trees":
         return ExtraTreesRegressor(
-            **EXTRA_TREES_PARAMETERS,
+            **parameters,
             random_state=seed,
-            n_jobs=1,
         )
     if name == "xgboost":
         from xgboost import XGBRegressor
 
         return XGBRegressor(
-            **XGBOOST_PARAMETERS,
-            objective="reg:squarederror",
-            tree_method="hist",
-            device="cpu",
+            **parameters,
             random_state=seed,
-            n_jobs=1,
         )
     raise ValueError(f"Unknown model {name!r}")
 
@@ -362,6 +395,7 @@ def feature_drift(
 def plot_cutoff_metrics(metrics: pd.DataFrame, output_dir: Path, dpi: int) -> Path:
     subset = metrics.loc[metrics["group_type"] == "cutoff_band"].copy()
     labels = subset["feature_set"].drop_duplicates().tolist()
+    models = subset["model_family"].drop_duplicates().tolist()
     figure, axes = plt.subplots(
         len(labels),
         1,
@@ -370,16 +404,18 @@ def plot_cutoff_metrics(metrics: pd.DataFrame, output_dir: Path, dpi: int) -> Pa
         constrained_layout=True,
     )
     bands = ["1-50", "51-100", "101-200", ">200"]
+    width = 0.8 / len(models)
+    offsets = (np.arange(len(models)) - (len(models) - 1) / 2.0) * width
     for axis, feature_set in zip(axes[:, 0], labels, strict=True):
         frame = subset.loc[subset["feature_set"] == feature_set]
         x = np.arange(len(bands))
-        for offset, model in zip((-0.18, 0.18), MODEL_NAMES, strict=True):
+        for offset, model in zip(offsets, models, strict=True):
             values = (
                 frame.loc[frame["model_family"] == model]
                 .set_index("group_value")
                 .reindex(bands)["rmse"]
             )
-            axis.bar(x + offset, values, width=0.34, label=model)
+            axis.bar(x + offset, values, width=width * 0.9, label=model)
         axis.set_title(feature_set)
         axis.set_ylabel("RMSE")
         axis.set_xticks(x, bands)
@@ -443,6 +479,8 @@ def main() -> None:
     parser.add_argument("--train-csv", type=Path, default=DEFAULT_TRAIN)
     parser.add_argument("--feature-sets", nargs="+")
     parser.add_argument("--models", nargs="+", choices=MODEL_NAMES, default=MODEL_NAMES)
+    parser.add_argument("--xgboost-parameters-json")
+    parser.add_argument("--extra-trees-parameters-json")
     parser.add_argument("--permutation-repetitions", type=int, default=3)
     parser.add_argument("--skip-permutation", action="store_true")
     parser.add_argument("--seed", type=int, default=13)
@@ -451,6 +489,22 @@ def main() -> None:
     args = parser.parse_args()
     if args.permutation_repetitions <= 0:
         raise ValueError("--permutation-repetitions must be positive")
+    model_parameters = {
+        "xgboost": effective_model_parameters(
+            "xgboost",
+            parse_parameter_overrides(
+                args.xgboost_parameters_json,
+                "--xgboost-parameters-json",
+            ),
+        ),
+        "extra_trees": effective_model_parameters(
+            "extra_trees",
+            parse_parameter_overrides(
+                args.extra_trees_parameters_json,
+                "--extra-trees-parameters-json",
+            ),
+        ),
+    }
 
     training = pd.read_csv(args.training_features)
     development = pd.read_csv(args.development_features)
@@ -498,7 +552,11 @@ def main() -> None:
             x_validation = validation_rows[names].to_numpy(dtype=float)
             y_validation = validation_rows["RUL"].to_numpy(dtype=float)
             for model_name in args.models:
-                model = make_model(model_name, args.seed)
+                model = make_model(
+                    model_name,
+                    args.seed,
+                    model_parameters[model_name],
+                )
                 model.fit(x_train, y_train, sample_weight=weights)
                 prediction = np.maximum(0.0, model.predict(x_validation))
                 frame = validation_rows[
@@ -590,8 +648,7 @@ def main() -> None:
             0 if args.skip_permutation else args.permutation_repetitions
         ),
         "fixed_model_parameters": {
-            "xgboost": XGBOOST_PARAMETERS,
-            "extra_trees": EXTRA_TREES_PARAMETERS,
+            name: model_parameters[name] for name in args.models
         },
     }
     (args.output_dir / "diagnostic_manifest.json").write_text(

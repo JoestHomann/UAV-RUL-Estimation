@@ -10,8 +10,8 @@ feature_sets = [
 ]
 prefix_variants = ["current20"]
 
-[profiles.run5]
-feature_profile = "run5"
+[profiles.extended_features]
+feature_profile = "extended"
 feature_sets = [
     "age_only",
     "last_values",
@@ -25,6 +25,15 @@ feature_sets = [
 ]
 prefix_variants = ["current20", "prefix40_stratified"]
 
+[profiles.drift_ablation_features]
+feature_profile = "extended"
+feature_sets = [
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+prefix_variants = ["current20"]
+
 [prefix_variants.current20]
 strategy = "empirical"
 cutoffs_per_uav = 20
@@ -34,4 +43,3 @@ seed = 20260814
 strategy = "stratified_empirical"
 cutoffs_per_uav = 40
 seed = 20260814
-

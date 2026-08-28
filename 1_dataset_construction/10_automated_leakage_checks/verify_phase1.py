@@ -67,7 +67,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=STEP_10_ARTIFACT_DIR)
     parser.add_argument(
         "--feature-profile",
-        choices=("legacy", "run5"),
+        choices=("legacy", "extended"),
         default="legacy",
     )
     args = parser.parse_args()

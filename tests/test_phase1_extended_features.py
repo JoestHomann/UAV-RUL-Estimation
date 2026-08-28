@@ -55,7 +55,7 @@ def synthetic_history(uav_id: str, lifetime: int) -> pd.DataFrame:
     return pd.DataFrame(values)
 
 
-class PhaseOneRunFiveTests(unittest.TestCase):
+class PhaseOneExtendedFeatureTests(unittest.TestCase):
     def test_phase2_accepts_bounded_prefix_counts_and_rejects_wrong_exact_count(
         self,
     ) -> None:
@@ -97,20 +97,28 @@ class PhaseOneRunFiveTests(unittest.TestCase):
             "acceleration",
         )
 
-    def test_legacy_and_run5_feature_profiles_preserve_expected_counts(self) -> None:
+    def test_legacy_and_extended_profiles_preserve_expected_counts(self) -> None:
         history = synthetic_history("UAV_A", 80)
         legacy = extract_prefix_features(history, 60)
-        run5 = extract_prefix_features(history, 60, feature_profile="run5")
+        extended = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
 
         self.assertEqual(len(MODEL_CHANNELS), 22)
         self.assertEqual(len(legacy), 606)
-        self.assertEqual(len(run5), 1288)
-        self.assertTrue(set(legacy).issubset(run5))
+        self.assertEqual(len(extended), 1288)
+        self.assertTrue(set(legacy).issubset(extended))
 
-    def test_run5_catalog_declares_control_and_candidate_recipes(self) -> None:
+    def test_extended_catalog_declares_control_and_candidate_recipes(self) -> None:
         history = synthetic_history("UAV_A", 80)
-        features = extract_prefix_features(history, 60, feature_profile="run5")
-        profile = load_phase_one_profile("run5")
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+        profile = load_phase_one_profile("extended_features")
         catalog = feature_catalog(
             list(features),
             feature_profile=profile.feature_profile,
@@ -133,6 +141,59 @@ class PhaseOneRunFiveTests(unittest.TestCase):
             },
         )
         self.assertTrue(catalog["screened"].equals(catalog["screened_v1"]))
+
+    def test_drift_ablation_prunes_and_replaces_unstable_features(self) -> None:
+        history = synthetic_history("UAV_A", 80)
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+        profile = load_phase_one_profile("drift_ablation_features")
+        catalog = feature_catalog(
+            list(features),
+            feature_profile=profile.feature_profile,
+            feature_sets=profile.feature_sets,
+        ).set_index("feature_name")
+
+        counts = {name: int(catalog[name].sum()) for name in profile.feature_sets}
+        self.assertEqual(
+            counts,
+            {
+                "screened_v1": 310,
+                "screened_drift_pruned": 298,
+                "screened_drift_replaced": 342,
+            },
+        )
+        for channel in ("telemetry_15", "telemetry_16"):
+            unstable = [
+                f"feature__{channel}__history_sd",
+                f"feature__{channel}__history_min",
+                f"feature__{channel}__history_max",
+                f"feature__{channel}__mean_abs_delta",
+                f"feature__{channel}__max_abs_delta",
+                f"feature__{channel}__w50_sd",
+            ]
+            self.assertTrue(catalog.loc[unstable, "screened_v1"].all())
+            self.assertFalse(
+                catalog.loc[unstable, "screened_drift_pruned"].any()
+            )
+            self.assertFalse(
+                catalog.loc[unstable, "screened_drift_replaced"].any()
+            )
+            robust = [
+                f"feature__{channel}__history_median",
+                f"feature__{channel}__history_iqr",
+                f"feature__{channel}__history_q10",
+                f"feature__{channel}__history_q90",
+                f"feature__{channel}__median_abs_delta",
+                f"feature__{channel}__w50_median",
+                f"feature__{channel}__w50_iqr",
+                f"feature__{channel}__w50_median_abs_delta",
+            ]
+            self.assertTrue(
+                catalog.loc[robust, "screened_drift_replaced"].all()
+            )
 
     def test_stratified_policy_caps_only_when_unique_cutoffs_require_it(self) -> None:
         train = pd.concat(

@@ -10,7 +10,7 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_SETTINGS_PATH = SCRIPT_DIR / "phase_1_settings.toml"
-SUPPORTED_FEATURE_PROFILES = {"legacy", "run5"}
+SUPPORTED_FEATURE_PROFILES = {"legacy", "extended"}
 SUPPORTED_PREFIX_STRATEGIES = {"empirical", "stratified_empirical"}
 
 
@@ -114,4 +114,3 @@ def load_phase_one_profile(
         feature_sets,
         tuple(variants),
     )
-

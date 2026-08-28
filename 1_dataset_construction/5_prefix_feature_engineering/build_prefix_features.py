@@ -53,7 +53,7 @@ STATE_STATISTICS = (
     "current_run_length",
     "time_since_last_change",
 )
-FEATURE_PROFILES = ("legacy", "run5")
+FEATURE_PROFILES = ("legacy", "extended")
 
 
 def linear_slope(cycles: np.ndarray, values: np.ndarray) -> float:
@@ -171,7 +171,7 @@ def extract_prefix_features(
                     f"{FEATURE_PREFIX}{channel}__w{window}_{statistic}"
                 ] = value
 
-        if feature_profile == "run5":
+        if feature_profile == "extended":
             (
                 baseline_median,
                 baseline_iqr,

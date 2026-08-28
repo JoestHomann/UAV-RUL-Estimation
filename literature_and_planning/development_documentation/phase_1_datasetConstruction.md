@@ -327,11 +327,13 @@ Generated features               606
 
 The complete results are stored in `verification_report.json`. This script should be rerun whenever folds, cutoff generation, feature engineering, preprocessing, or baseline prediction code changes. A passed report confirms that the encoded structural and leakage assertions hold; it does not by itself prove that the selected features or model will predict RUL accurately.
 
-## Run 5 feature experiment profile
+## Extended feature experiment profile
 
-Run 5 does not copy Phase 1 into separate `phase_1_1`, `phase_1_2`, and similar
-implementations. One implementation reads `phase_1_settings.toml` and writes
-versioned artifacts under `1_dataset_construction/runs/run_5/`. Existing
+`FE_run_1` does not copy Phase 1 into separate `phase_1_1`, `phase_1_2`, and similar
+implementations. One implementation reads a Phase 1 profile TOML; the standalone
+default is `phase_1_settings.toml`, while `FE_run_1` uses the combined experiment
+TOML beside its analysis runner. It writes versioned artifacts under
+`1_dataset_construction/runs/FE_run_1/`. Existing
 canonical Phase 1 artifacts remain the immutable legacy profile used by Runs
 3 and 4.
 
@@ -343,7 +345,7 @@ policies receive separate variant directories because they change training
 rows. Feature recipes using the same prefix rows share one superset feature
 table and are declared as membership columns in one feature catalog.
 
-The Run 5 feature sets are:
+The extended feature sets are:
 
 | Feature set | Count | Purpose |
 | --- | ---: | --- |
@@ -351,7 +353,7 @@ The Run 5 feature sets are:
 | `screened_robust` | 558 | Control plus robust baseline, distribution, and recent-window features |
 | `screened_acceleration` | 400 | Control plus explicit changes between 5-, 20-, and 50-cycle trends |
 | `screened_compact` | 256 | Control representation using a reduced set of highly redundant degradation channels |
-| `all_generated_v2` | 1,288 | Every legacy and Run 5 generated feature, retained as a maximum-information reference |
+| `all_generated_v2` | 1,288 | Every legacy and extended generated feature, retained as a maximum-information reference |
 
 Robust features include baseline median, MAD and IQR; history quantiles and
 IQR; median absolute changes; and safely normalized deviations from the UAV's
@@ -369,7 +371,8 @@ Two training-prefix policies are generated:
 The profile is executed with:
 
 ```powershell
-py 1_dataset_construction\run_all.py --profile run5 --run-number 5
+py 1_dataset_construction\run_all.py `
+  --profile extended_features --run-name FE_run_1
 ```
 
 Every completed variant also writes `phase_2_interface.json`. The interface is
@@ -380,7 +383,8 @@ row count, and portable paths to all required Phase 1 artifacts. The top-level
 can receive a refreshed interface without rebuilding the feature tables:
 
 ```powershell
-py 1_dataset_construction\run_all.py --profile run5 --run-number 5 --refresh-interface
+py 1_dataset_construction\run_all.py `
+  --profile extended_features --run-name FE_run_1 --refresh-interface
 ```
 
 Step 7 discovers feature-set membership columns from the catalog instead of a

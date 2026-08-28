@@ -1,4 +1,4 @@
-"""Declare legacy and Run 5 feature-set membership without selecting a winner."""
+"""Declare legacy and extended feature-set membership without choosing a winner."""
 
 from __future__ import annotations
 
@@ -16,12 +16,14 @@ LEGACY_FEATURE_SETS = (
     "screened",
     "all_nonconstant",
 )
-RUN5_FEATURE_SETS = (
+EXTENDED_FEATURE_SETS = (
     *LEGACY_FEATURE_SETS,
     "screened_v1",
     "screened_robust",
     "screened_acceleration",
     "screened_compact",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
     "all_generated_v2",
 )
 CATALOG_METADATA_COLUMNS = (
@@ -100,6 +102,14 @@ COMPACT_DEGRADATION_CHANNELS = {
     "telemetry_23",
     "telemetry_25",
 }
+DRIFT_ABLATION_CHANNELS = {"telemetry_15", "telemetry_16"}
+DRIFT_PRUNED_GLOBAL_STATISTICS = {
+    "history_sd",
+    "history_min",
+    "history_max",
+    "mean_abs_delta",
+    "max_abs_delta",
+}
 
 
 def _parse_feature(feature_name: str) -> tuple[str, str, str]:
@@ -139,6 +149,14 @@ def _is_robust(statistic: str, window: str) -> bool:
     return not window and statistic in ROBUST_GLOBAL_STATISTICS
 
 
+def _is_drift_heavy(channel: str, statistic: str, window: str) -> bool:
+    if channel not in DRIFT_ABLATION_CHANNELS:
+        return False
+    if not window:
+        return statistic in DRIFT_PRUNED_GLOBAL_STATISTICS
+    return window == "w50" and statistic == "sd"
+
+
 def feature_catalog(
     feature_names: list[str],
     *,
@@ -147,7 +165,11 @@ def feature_catalog(
 ) -> pd.DataFrame:
     """Build a catalog whose Boolean set columns match the selected profile."""
 
-    supported = set(LEGACY_FEATURE_SETS if feature_profile == "legacy" else RUN5_FEATURE_SETS)
+    supported = set(
+        LEGACY_FEATURE_SETS
+        if feature_profile == "legacy"
+        else EXTENDED_FEATURE_SETS
+    )
     unknown = sorted(set(feature_sets) - supported)
     if unknown:
         raise ValueError(
@@ -164,6 +186,14 @@ def feature_catalog(
         screened = _is_screened(channel, statistic, window)
         acceleration = window == "contrast"
         robust = _is_robust(statistic, window)
+        drift_pruned = screened and not _is_drift_heavy(
+            channel,
+            statistic,
+            window,
+        )
+        drift_replacement = (
+            channel in DRIFT_ABLATION_CHANNELS and robust
+        )
         compact = age or (
             channel in COMPACT_DEGRADATION_CHANNELS and legacy
         ) or (
@@ -189,6 +219,8 @@ def feature_catalog(
             "screened_acceleration": screened
             or (channel in DEGRADATION_CHANNELS and acceleration),
             "screened_compact": compact,
+            "screened_drift_pruned": drift_pruned,
+            "screened_drift_replaced": drift_pruned or drift_replacement,
             "all_generated_v2": True,
         }
         record: dict[str, Any] = {

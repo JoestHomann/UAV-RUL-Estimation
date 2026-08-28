@@ -609,9 +609,9 @@ This is an initial evidence-based classification, not the final feature selectio
 - Highest-priority training UAVs: `UAV_0024`, `UAV_0055`, and `UAV_0096`. ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../../0_data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
 - Highest-priority test UAVs: `UAV_0124`, `UAV_0171`, and `UAV_0123`. ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../../0_data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
 
-## Run 5 model-guided feature diagnostics
+## FE_run_1 model-guided feature diagnostics
 
-Run 5 adds a separate model-guided analysis after candidate Phase 1 feature
+`FE_run_1` adds a separate model-guided analysis after candidate Phase 1 feature
 tables have been generated. It uses only training prefixes, UAV-grouped folds,
 and development scenarios. Locked scenarios and labelled test outcomes are not
 loaded.

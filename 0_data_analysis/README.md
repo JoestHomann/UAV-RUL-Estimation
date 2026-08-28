@@ -6,7 +6,7 @@ The data-review work is organized into two self-contained folders:
   `figures/` outputs.
 - `core_data_analysis/` contains temporal, redundancy, drift, and anomaly
   scripts and their `figures/` outputs.
-- `model_guided_feature_analysis/` is a post-Phase-1 Run 5 diagnostic that
+- `model_guided_feature_analysis/` is a post-Phase-1 feature experiment that
   compares feature recipes with fixed, cross-fitted XGBoost and ExtraTrees
   models on development scenarios only.
 

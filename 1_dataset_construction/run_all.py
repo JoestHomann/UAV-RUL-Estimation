@@ -5,12 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
 from common import DEFAULT_TEST_CSV, DEFAULT_TRAIN_CSV, SCRIPT_DIR
 from common import save_json
 from phase_1_config import DEFAULT_SETTINGS_PATH, load_phase_one_profile
+
+
+RUN_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
 def run(command: list[str]) -> None:
@@ -171,7 +175,7 @@ def run_versioned_profile(
     *,
     profile_name: str,
     settings_path: Path,
-    run_number: int,
+    run_name: str,
     requested_variants: list[str] | None,
     train_csv: Path,
     test_csv: Path,
@@ -200,7 +204,7 @@ def run_versioned_profile(
     ]
     run_shared_foundation(sys.executable, dataset_arguments)
 
-    run_root = SCRIPT_DIR / "runs" / f"run_{run_number}"
+    run_root = SCRIPT_DIR / "runs" / run_name
     manifests: list[dict[str, object]] = []
     for variant in variants:
         variant_root = run_root / variant.name
@@ -335,10 +339,12 @@ def run_versioned_profile(
             previous = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             previous = {}
-        if (
-            previous.get("run_number") == run_number
-            and previous.get("profile") == profile.name
+        previous_run_name = previous.get("run_name")
+        if previous_run_name is None and isinstance(
+            previous.get("run_number"), int
         ):
+            previous_run_name = f"run_{previous['run_number']}"
+        if previous_run_name == run_name and previous.get("profile") == profile.name:
             merged_variants.update(
                 {
                     str(item["prefix_variant"]): item
@@ -357,7 +363,7 @@ def run_versioned_profile(
     path = save_json(
         {
             "settings_version": 1,
-            "run_number": run_number,
+            "run_name": run_name,
             "profile": profile.name,
             "feature_profile": profile.feature_profile,
             "feature_sets": list(profile.feature_sets),
@@ -372,7 +378,7 @@ def refresh_versioned_interfaces(
     *,
     profile_name: str,
     settings_path: Path,
-    run_number: int,
+    run_name: str,
     requested_variants: list[str] | None,
 ) -> None:
     """Refresh Phase 2 contracts from already-verified Phase 1 artifacts."""
@@ -384,7 +390,7 @@ def refresh_versioned_interfaces(
     if unknown:
         raise ValueError(f"Profile {profile_name!r} has no prefix variants {unknown}")
 
-    run_root = SCRIPT_DIR / "runs" / f"run_{run_number}"
+    run_root = SCRIPT_DIR / "runs" / run_name
     manifest_path = run_root / "phase_1_run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = {
@@ -401,13 +407,35 @@ def refresh_versioned_interfaces(
             raise ValueError(
                 f"Run manifest has no entry for prefix variant {variant.name!r}"
             )
-        entries[variant.name]["phase_2_interface"] = str(interface_path)
+        entries[variant.name].update(
+            {
+                "strategy": variant.strategy,
+                "configured_cutoffs_per_uav": variant.cutoffs_per_uav,
+                "artifact_root": str(variant_root),
+                "verification_report": str(
+                    variant_root
+                    / "10_automated_leakage_checks"
+                    / "artifacts"
+                    / "verification_report.json"
+                ),
+                "phase_2_interface": str(interface_path),
+            }
+        )
 
     manifest["variants"] = [
         entries[item.name]
         for item in profile.prefix_variants
         if item.name in entries
     ]
+    manifest.pop("run_number", None)
+    manifest.update(
+        {
+            "run_name": run_name,
+            "profile": profile.name,
+            "feature_profile": profile.feature_profile,
+            "feature_sets": list(profile.feature_sets),
+        }
+    )
     save_json(manifest, manifest_path)
     print(f"Phase 2 interfaces refreshed: {manifest_path}")
 
@@ -419,6 +447,7 @@ def main() -> None:
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     parser.add_argument("--profile", default="legacy")
     parser.add_argument("--run-number", type=int)
+    parser.add_argument("--run-name")
     parser.add_argument("--prefix-variant", nargs="+")
     parser.add_argument(
         "--refresh-interface",
@@ -430,20 +459,32 @@ def main() -> None:
     if args.refresh_interface and args.profile == "legacy":
         parser.error("--refresh-interface is only available for versioned profiles")
     if args.profile != "legacy":
-        if args.run_number is None or args.run_number <= 0:
-            raise ValueError("A positive --run-number is required for versioned profiles")
+        if args.run_name is not None and args.run_number is not None:
+            parser.error("declare either --run-name or --run-number, not both")
+        run_name = args.run_name
+        if run_name is None and args.run_number is not None:
+            if args.run_number <= 0:
+                parser.error("--run-number must be positive")
+            run_name = f"run_{args.run_number}"
+        if run_name is None:
+            parser.error("--run-name or --run-number is required")
+        if not RUN_NAME_PATTERN.fullmatch(run_name):
+            parser.error(
+                "--run-name must start with a letter and contain only "
+                "letters, digits, underscores, or hyphens"
+            )
         if args.refresh_interface:
             refresh_versioned_interfaces(
                 profile_name=args.profile,
                 settings_path=args.settings,
-                run_number=args.run_number,
+                run_name=run_name,
                 requested_variants=args.prefix_variant,
             )
             return
         run_versioned_profile(
             profile_name=args.profile,
             settings_path=args.settings,
-            run_number=args.run_number,
+            run_name=run_name,
             requested_variants=args.prefix_variant,
             train_csv=args.train_csv,
             test_csv=args.test_csv,

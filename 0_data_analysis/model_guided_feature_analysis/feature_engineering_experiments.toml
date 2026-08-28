@@ -1,0 +1,129 @@
+settings_version = 1
+
+[paths]
+phase_1_settings = "0_data_analysis/model_guided_feature_analysis/feature_engineering_experiments.toml"
+phase_1_runner = "1_dataset_construction/run_all.py"
+diagnostics_runner = "0_data_analysis/model_guided_feature_analysis/run_feature_diagnostics.py"
+train_csv = "data/train.csv"
+anomaly_priority = "0_data_analysis/core_data_analysis/figures/anomalies/uav_anomaly_priority.csv"
+
+# Phase 1 reads these tables directly from this same file when a run rebuilds.
+[profiles.extended_features]
+feature_profile = "extended"
+feature_sets = [
+    "age_only",
+    "last_values",
+    "screened",
+    "all_nonconstant",
+    "screened_v1",
+    "screened_robust",
+    "screened_acceleration",
+    "screened_compact",
+    "all_generated_v2",
+]
+prefix_variants = ["current20", "prefix40_stratified"]
+
+[profiles.drift_ablation_features]
+feature_profile = "extended"
+feature_sets = [
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+prefix_variants = ["current20"]
+
+[prefix_variants.current20]
+strategy = "empirical"
+cutoffs_per_uav = 20
+seed = 20260814
+
+[prefix_variants.prefix40_stratified]
+strategy = "stratified_empirical"
+cutoffs_per_uav = 40
+seed = 20260814
+
+# Duplicate the complete runs.FE_run_1 section under a new name to add a run.
+# phase_1_mode = "reuse" uses existing verified Phase 1 artifacts.
+# phase_1_mode = "rebuild" regenerates the selected prefix variants first.
+[runs.FE_run_1]
+enabled = true
+profile = "extended_features"
+phase_1_run_name = "FE_run_1"
+phase_1_mode = "reuse"
+prefix_variants = ["current20", "prefix40_stratified"]
+output_root = "0_data_analysis/model_guided_feature_analysis/runs/FE_run_1"
+
+[runs.FE_run_1.diagnostics]
+feature_sets = [
+    "screened_v1",
+    "screened_robust",
+    "screened_acceleration",
+    "screened_compact",
+]
+models = ["xgboost", "extra_trees"]
+permutation_repetitions = 3
+skip_permutation = false
+seed = 13
+dpi = 160
+
+[runs.FE_run_1.model_parameters.xgboost]
+n_estimators = 342
+max_depth = 8
+learning_rate = 0.011845262553864248
+min_child_weight = 0.9955971345967498
+subsample = 0.7752736396167055
+colsample_bytree = 0.6986003693464361
+reg_alpha = 0.3547372178764013
+reg_lambda = 1.6417773645720573
+objective = "reg:squarederror"
+tree_method = "hist"
+device = "cpu"
+n_jobs = 1
+
+[runs.FE_run_1.model_parameters.extra_trees]
+n_estimators = 500
+max_depth = 20
+max_features = 0.67
+min_samples_leaf = 5
+n_jobs = 1
+
+[runs.FE_run_2]
+enabled = true
+profile = "drift_ablation_features"
+phase_1_run_name = "FE_run_2"
+phase_1_mode = "rebuild"
+prefix_variants = ["current20"]
+output_root = "0_data_analysis/model_guided_feature_analysis/runs/FE_run_2"
+
+[runs.FE_run_2.diagnostics]
+feature_sets = [
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+models = ["xgboost", "extra_trees"]
+permutation_repetitions = 3
+skip_permutation = false
+seed = 13
+dpi = 160
+
+[runs.FE_run_2.model_parameters.xgboost]
+n_estimators = 342
+max_depth = 8
+learning_rate = 0.011845262553864248
+min_child_weight = 0.9955971345967498
+subsample = 0.7752736396167055
+colsample_bytree = 0.6986003693464361
+reg_alpha = 0.3547372178764013
+reg_lambda = 1.6417773645720573
+objective = "reg:squarederror"
+tree_method = "hist"
+device = "cpu"
+n_jobs = 1
+
+[runs.FE_run_2.model_parameters.extra_trees]
+n_estimators = 500
+max_depth = 20
+max_features = 0.67
+min_samples_leaf = 5
+n_jobs = 1
