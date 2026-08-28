@@ -206,6 +206,9 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# Local verification scratch space.
+.tmp/
+
 # PyPI configuration file
 .pypirc
 
@@ -238,6 +241,11 @@ __marimo__/
 
 # TensorBoard event files, written live during Steps 5 and 6.
 2_model_architecture_study/tensorboard_monitoring/logs/
+
+# Versioned Phase 1 feature experiments and post-Phase-1 diagnostics are
+# reproducible generated artifacts and can contain large compressed tables.
+1_dataset_construction/runs/
+0_data_analysis/model_guided_feature_analysis/runs/
 
 # ---------------------------------------------------------------------------
 # Phase 3 final model training and inference

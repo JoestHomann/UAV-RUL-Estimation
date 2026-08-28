@@ -1,0 +1,37 @@
+settings_version = 1
+
+[profiles.legacy]
+feature_profile = "legacy"
+feature_sets = [
+    "age_only",
+    "last_values",
+    "screened",
+    "all_nonconstant",
+]
+prefix_variants = ["current20"]
+
+[profiles.run5]
+feature_profile = "run5"
+feature_sets = [
+    "age_only",
+    "last_values",
+    "screened",
+    "all_nonconstant",
+    "screened_v1",
+    "screened_robust",
+    "screened_acceleration",
+    "screened_compact",
+    "all_generated_v2",
+]
+prefix_variants = ["current20", "prefix40_stratified"]
+
+[prefix_variants.current20]
+strategy = "empirical"
+cutoffs_per_uav = 20
+seed = 20260814
+
+[prefix_variants.prefix40_stratified]
+strategy = "stratified_empirical"
+cutoffs_per_uav = 40
+seed = 20260814
+

@@ -61,7 +61,7 @@ class CandidateSpace:
         self.architectures = architectures
 
     def candidate_budget(self, family: str, maximum_budget: int) -> int:
-        """Return one trial for a fixed baseline and the settings cap otherwise."""
+        """Return one trial for a fixed configuration and the cap otherwise."""
 
         architecture = self._architecture(family)
         alternatives = max(

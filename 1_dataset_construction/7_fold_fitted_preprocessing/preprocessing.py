@@ -22,17 +22,21 @@ from common import (  # noqa: E402
     STEP_7_ARTIFACT_DIR,
     save_json,
 )
+from feature_recipes import LEGACY_FEATURE_SETS, catalog_feature_sets
 
 
-FEATURE_SETS = ("age_only", "last_values", "screened", "all_nonconstant")
+# Retained as a compatibility alias for callers that imported the legacy tuple.
+FEATURE_SETS = LEGACY_FEATURE_SETS
 RELATIVE_VARIATION_TOLERANCE = 1e-12
 
 
 def selected_feature_names(catalog: pd.DataFrame, feature_set: str) -> list[str]:
-    if feature_set not in FEATURE_SETS:
-        raise ValueError(f"Unknown feature set {feature_set!r}; choose from {FEATURE_SETS}")
     if feature_set not in catalog.columns:
-        raise ValueError(f"Feature catalog does not contain {feature_set!r}")
+        available = ", ".join(catalog_feature_sets(catalog))
+        raise ValueError(
+            f"Feature catalog does not contain {feature_set!r}; available: "
+            f"{available}"
+        )
     mask = catalog[feature_set].astype(bool)
     names = catalog.loc[mask, "feature_name"].tolist()
     if not names:
@@ -127,15 +131,21 @@ def main() -> None:
     parser.add_argument("--feature-dir", type=Path, default=STEP_5_ARTIFACT_DIR)
     parser.add_argument("--feature-set-dir", type=Path, default=STEP_6_ARTIFACT_DIR)
     parser.add_argument("--output-dir", type=Path, default=STEP_7_ARTIFACT_DIR)
+    parser.add_argument("--feature-sets", nargs="+")
     args = parser.parse_args()
 
     folds = pd.read_csv(args.fold_dir / "outer_folds.csv")
     training = pd.read_csv(args.feature_dir / "training_features.csv.gz")
     catalog = pd.read_csv(args.feature_set_dir / "feature_catalog.csv")
+    feature_sets = (
+        tuple(args.feature_sets)
+        if args.feature_sets
+        else catalog_feature_sets(catalog)
+    )
     records: list[dict[str, float | int | str]] = []
     feature_counts: dict[str, int] = {}
 
-    for feature_set in FEATURE_SETS:
+    for feature_set in feature_sets:
         names = selected_feature_names(catalog, feature_set)
         feature_counts[feature_set] = len(names)
         for outer_fold in sorted(folds["outer_fold"].unique()):

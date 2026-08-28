@@ -22,6 +22,7 @@ import pandas as pd
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
 MODEL_ADAPTER_DIR = PHASE_DIR / "4_model_adapters"
+INNER_MODEL_SELECTION_DIR = PHASE_DIR / "5_inner_model_selection"
 DEFAULT_SPECIFICATION_PATH = (
     PHASE_DIR
     / "1_architecture_study_settings"
@@ -32,9 +33,12 @@ DEFAULT_SPECIFICATION_PATH = (
 
 if str(MODEL_ADAPTER_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_ADAPTER_DIR))
+if str(INNER_MODEL_SELECTION_DIR) not in sys.path:
+    sys.path.insert(0, str(INNER_MODEL_SELECTION_DIR))
 if str(PHASE_DIR) not in sys.path:
     sys.path.insert(0, str(PHASE_DIR))
 
+from candidate_space import CandidateSpace  # noqa: E402
 from run_layout import (  # noqa: E402
     STEP_5_DIRECTORY_NAME,
     step_directory_for_specification,
@@ -469,6 +473,7 @@ def _verify_step5_result_tables(
     maximum_budget = int(
         settings["tuning"]["candidate_budget_per_architecture"]
     )
+    candidate_space = CandidateSpace(settings["architectures"])
     if set(folds["configuration_id"]) != set(candidates["configuration_id"]):
         raise LockedEvaluationGateError(
             "Step 5 candidate and inner-fold configuration IDs differ"
@@ -485,16 +490,9 @@ def _verify_step5_result_tables(
             (candidates["model_family"] == family)
             & (candidates["outer_fold"].astype(int) == outer_fold)
         ].copy()
-        architecture = settings["architectures"][family]
-        alternatives = max(
-            len(architecture["feature_sets"]),
-            len(architecture["lookbacks"]),
-            1,
-        )
-        expected_budget = (
-            maximum_budget
-            if architecture["search"] or alternatives > 1
-            else 1
+        expected_budget = candidate_space.candidate_budget(
+            family,
+            maximum_budget,
         )
         if len(group) != expected_budget:
             raise LockedEvaluationGateError(

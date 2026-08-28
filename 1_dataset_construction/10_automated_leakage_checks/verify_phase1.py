@@ -34,8 +34,8 @@ from common import (
     load_dataset,
     save_json,
 )
+from feature_recipes import catalog_feature_sets
 from preprocessing import (
-    FEATURE_SETS,
     fit_robust_scaler,
     outer_fold_rows,
     selected_feature_names,
@@ -65,6 +65,11 @@ def main() -> None:
     parser.add_argument("--preprocessing-dir", type=Path, default=STEP_7_ARTIFACT_DIR)
     parser.add_argument("--baseline-dir", type=Path, default=STEP_9_ARTIFACT_DIR)
     parser.add_argument("--output-dir", type=Path, default=STEP_10_ARTIFACT_DIR)
+    parser.add_argument(
+        "--feature-profile",
+        choices=("legacy", "run5"),
+        default="legacy",
+    )
     args = parser.parse_args()
 
     outer = pd.read_csv(args.fold_dir / "outer_folds.csv")
@@ -78,6 +83,7 @@ def main() -> None:
         args.audit_dir / "test_fligh_cycles_cut_offs.csv"
     )
     catalog = pd.read_csv(args.feature_set_dir / "feature_catalog.csv")
+    feature_sets = catalog_feature_sets(catalog)
     feature_names = catalog["feature_name"].tolist()
     forbidden = ("rul", "target", "terminal", "lifetime", "final", "future")
     invalid_names = [
@@ -125,14 +131,23 @@ def main() -> None:
         feature_file_results[filename] = {"rows": rows, "features": columns}
 
     train = load_dataset(args.train_csv, require_target=True)
-    assert_feature_causality(train, training_manifest)
+    assert_feature_causality(
+        train,
+        training_manifest,
+        feature_profile=args.feature_profile,
+    )
+    total_weights = training_manifest.groupby(ID_COLUMN)["sample_weight"].sum()
+    if not np.allclose(total_weights.to_numpy(dtype=float), 1.0):
+        raise AssertionError("Training prefixes do not give every UAV total weight one")
+    if training_manifest.duplicated([ID_COLUMN, "cutoff"]).any():
+        raise AssertionError("Training prefixes contain duplicate UAV/cutoff rows")
 
     training_features = pd.read_csv(feature_dir / "training_features.csv.gz")
     saved_scalers = pd.read_csv(
         args.preprocessing_dir / "fold_scaler_parameters.csv.gz"
     )
     preprocessing_checks: dict[str, int] = {}
-    for feature_set in FEATURE_SETS:
+    for feature_set in feature_sets:
         names = selected_feature_names(catalog, feature_set)
         for outer_fold in sorted(outer["outer_fold"].unique()):
             fit_rows, held_out_rows = outer_fold_rows(
@@ -208,6 +223,7 @@ def main() -> None:
             "locked_cutoffs_exactly_match_test_history_lengths": True,
             "development_cutoffs_exactly_match_test_history_lengths": True,
             "feature_tables_finite": True,
+            "training_prefixes_equalize_total_uav_weight": True,
             "feature_names_exclude_target_and_future_fields": True,
             "future_rows_cannot_change_prefix_features": True,
             "preprocessing_fitted_separately_for_each_outer_training_fold": True,

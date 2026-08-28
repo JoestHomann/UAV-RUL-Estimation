@@ -608,3 +608,30 @@ This is an initial evidence-based classification, not the final feature selectio
 - Persistent shifts: `telemetry_19` and `21`, each in five training UAVs. ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../../0_data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
 - Highest-priority training UAVs: `UAV_0024`, `UAV_0055`, and `UAV_0096`. ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../../0_data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
 - Highest-priority test UAVs: `UAV_0124`, `UAV_0171`, and `UAV_0123`. ([Anomaly diagnostics](#anomaly-diagnostics), [anomaly plot](../../0_data_analysis/core_data_analysis/figures/anomalies/anomaly_summary.png))
+
+## Run 5 model-guided feature diagnostics
+
+Run 5 adds a separate model-guided analysis after candidate Phase 1 feature
+tables have been generated. It uses only training prefixes, UAV-grouped folds,
+and development scenarios. Locked scenarios and labelled test outcomes are not
+loaded.
+
+Both XGBoost and ExtraTrees are fitted with fixed, predeclared settings on each
+outer-training partition and predict the held-out development UAVs. Running
+both models distinguishes a representation problem shared by two strong tree
+families from an error pattern specific to one learner. Their paired residuals
+also show whether an average ensemble could provide complementary errors.
+
+The analysis reports:
+
+- cross-fitted residual metrics by cutoff band and UAV anomaly-score band;
+- residual correlations with endpoint telemetry channels;
+- grouped permutation importance by telemetry channel and feature block;
+- train/test feature drift for every candidate feature set using unlabelled
+  test inputs only;
+- XGBoost/ExtraTrees residual agreement and averaged-prediction RMSE.
+
+Candidate feature transformations are retained only when their improvement is
+consistent across held-out UAV folds and is not driven by one anomaly band.
+This analysis screens feature recipes; it does not replace the nested model
+selection or authorize opening locked scenarios.

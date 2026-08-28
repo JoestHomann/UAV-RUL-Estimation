@@ -4,4 +4,8 @@
 
 **Writes:** `artifacts/training_prefixes.csv`, `artifacts/training_prefix_config.json`
 
-The output contains 20 cutoffs per UAV and equal total sample weight per UAV.
+The legacy output contains 20 cutoffs per UAV and equal total sample weight per
+UAV. The Run 5 `prefix40_stratified` policy requests up to 40 distinct eligible
+cutoffs, allocates them across empirical test cutoff-age bands, and uses
+`1 / actual_prefix_count` weights. One short-lived UAV supports 39 distinct
+eligible cutoffs; every UAV still has total weight one.

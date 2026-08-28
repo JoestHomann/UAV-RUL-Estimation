@@ -436,9 +436,7 @@ class RepresentationSpecification(StrictModel):
     targets, or the evaluation protocol.
     """
 
-    tabular_feature_sets: list[
-        Literal["age_only", "last_values", "screened", "all_nonconstant"]
-    ]
+    tabular_feature_sets: list[str]
     sequence_channel_count: PositiveInt
     sequence_channels: list[str]
     sequence_lookbacks: list[PositiveInt]
@@ -458,6 +456,12 @@ class RepresentationSpecification(StrictModel):
             )
         if len(self.sequence_channels) != len(set(self.sequence_channels)):
             raise ValueError("sequence_channels must not contain duplicates")
+        if not self.tabular_feature_sets:
+            raise ValueError("tabular_feature_sets must not be empty")
+        if len(self.tabular_feature_sets) != len(set(self.tabular_feature_sets)):
+            raise ValueError("tabular_feature_sets must not contain duplicates")
+        if any(not name.strip() for name in self.tabular_feature_sets):
+            raise ValueError("tabular_feature_sets must contain non-empty names")
         return self
 
 
@@ -577,10 +581,36 @@ class PhaseOneSpecification(StrictModel):
     expected_inner_folds_per_outer_fold: PositiveInt
     expected_development_scenarios: PositiveInt
     expected_locked_scenarios: PositiveInt
-    expected_prefixes_per_training_uav: PositiveInt
+    expected_prefixes_per_training_uav: PositiveInt | None = None
+    minimum_prefixes_per_training_uav: PositiveInt | None = None
+    maximum_prefixes_per_training_uav: PositiveInt | None = None
     expected_generated_features: PositiveInt
     expected_feature_sets: dict[str, PositiveInt]
     artifacts: dict[str, ArtifactSpecification]
+
+    @model_validator(mode="after")
+    def prefix_count_is_exact_or_bounded(self) -> PhaseOneSpecification:
+        exact = self.expected_prefixes_per_training_uav
+        bounds = (
+            self.minimum_prefixes_per_training_uav,
+            self.maximum_prefixes_per_training_uav,
+        )
+        if exact is not None and any(value is not None for value in bounds):
+            raise ValueError(
+                "declare either expected_prefixes_per_training_uav or the "
+                "minimum/maximum prefix bounds, not both"
+            )
+        if exact is None:
+            if any(value is None for value in bounds):
+                raise ValueError(
+                    "variable prefix counts require both "
+                    "minimum_prefixes_per_training_uav and "
+                    "maximum_prefixes_per_training_uav"
+                )
+            assert bounds[0] is not None and bounds[1] is not None
+            if bounds[0] > bounds[1]:
+                raise ValueError("minimum prefixes cannot exceed maximum prefixes")
+        return self
 
 
 class ArchitectureStudySettings(StrictModel):
@@ -684,12 +714,12 @@ class ArchitectureStudySettings(StrictModel):
                 "phase_1.artifacts must contain exactly "
                 f"{sorted(EXPECTED_PHASE_1_ARTIFACTS)}"
             )
-        if (
-            self.phase_1.expected_feature_sets.get("all_nonconstant")
-            != self.phase_1.expected_generated_features
+        if set(self.phase_1.expected_feature_sets) != set(
+            self.representations.tabular_feature_sets
         ):
             raise ValueError(
-                "all_nonconstant must contain every expected generated feature"
+                "phase_1.expected_feature_sets must exactly match "
+                "representations.tabular_feature_sets"
             )
         return self
 
@@ -1023,6 +1053,45 @@ def _verify_cross_artifact_consistency(
     return len(assertions)
 
 
+def _verify_training_prefix_counts(settings: ArchitectureStudySettings) -> None:
+    """Check the declared exact count or bounds against each training UAV."""
+
+    specification = settings.phase_1.artifacts["training_prefixes"]
+    path = _resolve_input_path(specification.path)
+    try:
+        prefixes = pd.read_csv(path, usecols=["uav_id"])
+    except (OSError, ValueError, pd.errors.ParserError) as error:
+        raise SettingsError(
+            f"training_prefixes: cannot inspect per-UAV counts: {error}"
+        ) from error
+    counts = prefixes.groupby("uav_id", sort=False).size()
+    if len(counts) != settings.phase_1.expected_training_uavs:
+        raise SettingsError(
+            "training_prefixes: observed prefix groups do not match "
+            "expected_training_uavs"
+        )
+
+    exact = settings.phase_1.expected_prefixes_per_training_uav
+    if exact is not None:
+        invalid = counts[counts != exact]
+        if not invalid.empty:
+            raise SettingsError(
+                "training_prefixes: per-UAV counts are outside the exact "
+                f"contract of {exact}"
+            )
+        return
+
+    minimum = settings.phase_1.minimum_prefixes_per_training_uav
+    maximum = settings.phase_1.maximum_prefixes_per_training_uav
+    assert minimum is not None and maximum is not None
+    invalid = counts[(counts < minimum) | (counts > maximum)]
+    if not invalid.empty:
+        raise SettingsError(
+            "training_prefixes: per-UAV counts are outside the declared "
+            f"bounds [{minimum}, {maximum}]"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Public verification API and command-line entry point
 # ---------------------------------------------------------------------------
@@ -1057,6 +1126,7 @@ def verify_phase_1_inputs(settings: ArchitectureStudySettings) -> VerificationSu
 
     # Cross-file checks happen last so they can assume all required JSON files
     # exist, parse successfully, and contain their minimum required interface.
+    _verify_training_prefix_counts(settings)
     assertion_count = _verify_cross_artifact_consistency(settings, json_payloads)
     return VerificationSummary(
         status="passed",

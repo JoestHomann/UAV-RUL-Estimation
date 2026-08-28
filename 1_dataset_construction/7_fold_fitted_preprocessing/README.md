@@ -9,3 +9,7 @@ parameter table records `scale_method`, `iqr`, and `standard_deviation` so use o
 the standard-deviation or unit-scale fallback remains auditable. It also records
 the observed data range and feature-relative tolerance used to distinguish real
 variation from floating-point noise.
+
+Feature sets are discovered from Boolean membership columns in the selected
+catalog. Versioned profiles can therefore add sets without changing a
+hard-coded Python tuple.

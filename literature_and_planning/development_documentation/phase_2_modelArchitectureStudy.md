@@ -565,3 +565,42 @@ LSTM
 A small Transformer and RBF-SVR are also enabled in Run 4 under their original conditional and optional status labels. GRU, hybrid networks, learned autoencoder representations, advanced operator-learning models, and ensembles are added only if this comparison leaves a specific unanswered question.
 
 This design creates one modular architecture-study pipeline while preserving the important distinction between engineered tabular inputs, fixed-window temporal sequences, and variable-length trajectory retrieval.
+
+## Run 5 feature-recipe comparison
+
+Run 5 keeps the winning tree families fixed while investigating Phase 1
+representations. XGBoost is the primary model and ExtraTrees is the independent
+tree-family check. Architecture discovery, feature discovery, and
+hyperparameter optimization are not mixed in one unrestricted search.
+
+The Phase 2 settings schema accepts feature-set names and counts declared by the
+selected Phase 1 catalog. The artifact paths point to one versioned Run 5
+prefix variant, so completed legacy runs continue to resolve their original
+606-feature artifacts.
+
+Each Run 5 Phase 1 variant publishes a `phase_2_interface.json` handoff. It
+contains the portable artifact paths and the exact structural assertions to
+copy into the Phase 2 TOML. Fixed-size prefix variants use
+`expected_prefixes_per_training_uav`; eligibility-limited variants use explicit
+minimum and maximum bounds. The Phase 2 verifier accepts either form and
+checks it against the selected training-prefix artifact.
+
+Feature screening uses the model-guided Phase 0 runner. Every feature set is
+evaluated with the same fixed XGBoost and ExtraTrees settings on the same
+UAV-grouped development folds. This paired design prevents Optuna from giving
+one feature set more trials than another. The control and best supported recipe
+may then receive equal, full within-family tuning budgets in Phase 2.
+
+Run 5 development order:
+
+1. Generate both prefix variants and all feature recipes through Phase 1.
+2. Run paired XGBoost and ExtraTrees development diagnostics for each recipe.
+3. Select at most one new recipe and one prefix policy using development data.
+4. Compare that frozen choice against `screened_v1` with equal search budgets.
+5. Do not repeatedly modify the recipe in response to the already-observed
+   Run 3 or Run 4 locked results.
+
+Because the original locked scenarios have already been inspected in multiple
+runs, Run 5 results on those scenarios are supporting evidence rather than a
+new untouched generalization estimate. Final external evidence comes from the
+competition evaluation after the Run 5 recipe and training contract are frozen.

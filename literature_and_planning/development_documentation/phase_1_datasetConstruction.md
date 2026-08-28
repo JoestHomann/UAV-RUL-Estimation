@@ -327,5 +327,66 @@ Generated features               606
 
 The complete results are stored in `verification_report.json`. This script should be rerun whenever folds, cutoff generation, feature engineering, preprocessing, or baseline prediction code changes. A passed report confirms that the encoded structural and leakage assertions hold; it does not by itself prove that the selected features or model will predict RUL accurately.
 
+## Run 5 feature experiment profile
+
+Run 5 does not copy Phase 1 into separate `phase_1_1`, `phase_1_2`, and similar
+implementations. One implementation reads `phase_1_settings.toml` and writes
+versioned artifacts under `1_dataset_construction/runs/run_5/`. Existing
+canonical Phase 1 artifacts remain the immutable legacy profile used by Runs
+3 and 4.
+
+Steps 1-3 and 8 remain shared because feature experiments do not alter the
+raw-data audit, UAV folds, validation scenarios, or metrics. Step 9 is repeated
+inside each variant directory so its verified inputs and output stay with that
+variant, although the age-only baseline is expected to be identical. Prefix
+policies receive separate variant directories because they change training
+rows. Feature recipes using the same prefix rows share one superset feature
+table and are declared as membership columns in one feature catalog.
+
+The Run 5 feature sets are:
+
+| Feature set | Count | Purpose |
+| --- | ---: | --- |
+| `screened_v1` | 310 | Exact control matching the existing `screened` set |
+| `screened_robust` | 558 | Control plus robust baseline, distribution, and recent-window features |
+| `screened_acceleration` | 400 | Control plus explicit changes between 5-, 20-, and 50-cycle trends |
+| `screened_compact` | 256 | Control representation using a reduced set of highly redundant degradation channels |
+| `all_generated_v2` | 1,288 | Every legacy and Run 5 generated feature, retained as a maximum-information reference |
+
+Robust features include baseline median, MAD and IQR; history quantiles and
+IQR; median absolute changes; and safely normalized deviations from the UAV's
+own baseline. Acceleration features compare recent means, slopes, and
+variability across the fixed windows. Every value is calculated only from
+cycles at or before the prefix cutoff.
+
+Two training-prefix policies are generated:
+
+- `current20`: the existing 20 empirical test-like cutoffs per UAV;
+- `prefix40_stratified`: up to 40 distinct eligible cutoffs per UAV, allocated
+  across test cutoff-age bands and reweighted so every UAV still contributes a
+  total training weight of one.
+
+The profile is executed with:
+
+```powershell
+py 1_dataset_construction\run_all.py --profile run5 --run-number 5
+```
+
+Every completed variant also writes `phase_2_interface.json`. The interface is
+the authoritative handoff record for Phase 2 and contains the observed prefix
+count or bounds, generated-feature count, exact feature-set counts, training
+row count, and portable paths to all required Phase 1 artifacts. The top-level
+`phase_1_run_manifest.json` links both interfaces. Existing verified artifacts
+can receive a refreshed interface without rebuilding the feature tables:
+
+```powershell
+py 1_dataset_construction\run_all.py --profile run5 --run-number 5 --refresh-interface
+```
+
+Step 7 discovers feature-set membership columns from the catalog instead of a
+hard-coded tuple. Step 10 verifies each generated variant, including prefix
+causality, finite values, catalog membership, equal total UAV weight, and
+fold-fitted preprocessing.
+
 
 

@@ -52,7 +52,7 @@ regularized_linear = false
 random_forest = true
 extra_trees = true
 xgboost = true
-catboost = true
+catboost = false
 mlp = false
 tcn = true
 multiscale_cnn = true
@@ -100,7 +100,7 @@ bootstrap_seed = 20260814    # Options: any integer
 [representations]
 # Feature sets available to tabular architectures; each architecture's own
 # "feature_sets" must be a subset of this.
-tabular_feature_sets = [    # Options: any subset of the four below
+tabular_feature_sets = [    # Options: names declared by the selected Phase 1 catalog
     "age_only",
     "last_values",
     "screened",
@@ -724,7 +724,9 @@ value = 1.0
 
 [phase_1]
 # Expected quantities from the dataset-construction protocol; a mismatch means
-# Phase 1 changed and these settings need review. Options: any positive integer.
+# Phase 1 changed and these settings need review. Prefix policies declare either
+# expected_prefixes_per_training_uav or both minimum/maximum bounds. Options:
+# any positive integer.
 expected_training_uavs = 100
 expected_outer_folds = 5
 expected_inner_folds_per_outer_fold = 4

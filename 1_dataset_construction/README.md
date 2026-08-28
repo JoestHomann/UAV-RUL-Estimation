@@ -8,6 +8,27 @@ Run the complete workflow from the repository root:
 py 1_dataset_construction\run_all.py
 ```
 
+The command above preserves the original 606-feature legacy profile. Run 5
+feature experiments use versioned outputs instead:
+
+```powershell
+py 1_dataset_construction\run_all.py --profile run5 --run-number 5
+```
+
+This builds `current20` and `prefix40_stratified` below
+`1_dataset_construction/runs/run_5/` without replacing the feature artifacts
+used by completed model runs.
+
+Each variant writes `phase_2_interface.json`. This is the copy-ready Phase 2
+contract: it records the generated feature count, catalog set counts, observed
+prefix-count bounds, training-row count, and all Phase 1 artifact paths. To
+refresh only these contracts after upgrading the pipeline, without rebuilding
+features, run:
+
+```powershell
+py 1_dataset_construction\run_all.py --profile run5 --run-number 5 --refresh-interface
+```
+
 Each numbered folder contains its own `artifacts/` directory. Generated data is ignored by Git, while the `.gitignore` and step README remain tracked.
 
 Artifacts are immutable between steps: a later step reads earlier outputs and writes a new file in its own folder. This makes the complete data flow traceable without hiding which step changed the representation.
@@ -21,7 +42,9 @@ Artifacts are immutable between steps: a later step reads earlier outputs and wr
 - Every scenario contains one prefix from every training UAV.
 - Every scenario reproduces the exact 100-value test history-length distribution.
 - Long test-like cutoffs are assigned only to training UAVs that can support them before failure.
-- Training uses 20 distinct test-like cutoffs per UAV with equal total UAV weight.
+- Legacy and `current20` training use 20 distinct test-like cutoffs per UAV.
+- `prefix40_stratified` uses as many as 40 eligible age-band-stratified cutoffs.
+- Every prefix policy gives each UAV a total training weight of one.
 
 ## Feature sets
 
@@ -33,6 +56,11 @@ All generated model columns start with `feature__`. Identifiers, folds, targets,
 | `last_values` | Age plus the final available value of every nonconstant channel | 24 |
 | `screened` | Rich temporal features for degradation candidates plus baseline/context summaries | 310 |
 | `all_nonconstant` | All generated features from the 22 nonconstant channels | 606 |
+
+The Run 5 profile additionally declares `screened_v1`, `screened_robust`,
+`screened_acceleration`, `screened_compact`, and `all_generated_v2`. Their
+counts come from the versioned catalog rather than a hard-coded implementation
+constant.
 
 For each nonconstant channel, the feature table contains current and initial values, early-life baseline, baseline deviation, whole-prefix summaries, slopes, deltas, and 5/20/50-cycle recent summaries. `telemetry_07` and `telemetry_16` also receive state-transition and dwell-time features.
 

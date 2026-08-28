@@ -4,4 +4,7 @@
 
 **Writes:** `artifacts/feature_catalog.csv`
 
-The catalog identifies membership in the age-only, last-value, screened, and all-nonconstant feature sets.
+The catalog identifies membership in explicitly named feature sets loaded from
+`phase_1_settings.toml`. The legacy profile retains the original four sets; the
+Run 5 profile adds control, robust, acceleration, compact, and complete-superset
+alternatives. This step declares candidates and never selects a winner.

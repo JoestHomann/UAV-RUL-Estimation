@@ -1234,7 +1234,7 @@
         "transformer"
       ],
       "enabled": {
-        "catboost": true,
+        "catboost": false,
         "cycle_only_baseline": false,
         "extra_trees": true,
         "lstm": false,

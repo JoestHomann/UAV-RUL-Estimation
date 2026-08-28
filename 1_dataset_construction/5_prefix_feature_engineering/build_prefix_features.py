@@ -25,6 +25,7 @@ from common import (
     STEP_4_ARTIFACT_DIR,
     STEP_5_ARTIFACT_DIR,
     load_dataset,
+    save_json,
 )
 
 
@@ -52,6 +53,7 @@ STATE_STATISTICS = (
     "current_run_length",
     "time_since_last_change",
 )
+FEATURE_PROFILES = ("legacy", "run5")
 
 
 def linear_slope(cycles: np.ndarray, values: np.ndarray) -> float:
@@ -67,6 +69,23 @@ def linear_slope(cycles: np.ndarray, values: np.ndarray) -> float:
 
 def sample_sd(values: np.ndarray) -> float:
     return float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+
+
+def robust_location_scale(values: np.ndarray) -> tuple[float, float, float, float]:
+    """Return median, IQR, MAD, and a safe SD-like robust scale."""
+
+    median = float(np.median(values))
+    q25, q75 = np.quantile(values, [0.25, 0.75])
+    iqr = float(q75 - q25)
+    mad = float(np.median(np.abs(values - median)))
+    scale = 1.4826 * mad
+    if scale <= 1e-12:
+        scale = iqr / 1.349
+    if scale <= 1e-12:
+        scale = sample_sd(values)
+    if scale <= 1e-12:
+        scale = 1.0
+    return median, iqr, mad, float(scale)
 
 
 def current_run_length(values: np.ndarray) -> int:
@@ -88,7 +107,13 @@ def extract_prefix_features(
     channels: list[str] = MODEL_CHANNELS,
     rolling_windows: tuple[int, ...] = DEFAULT_WINDOWS,
     baseline_window: int = 10,
+    feature_profile: str = "legacy",
 ) -> dict[str, float]:
+    if feature_profile not in FEATURE_PROFILES:
+        raise ValueError(
+            f"Unknown feature profile {feature_profile!r}; choose from "
+            f"{FEATURE_PROFILES}"
+        )
     cycles_full = history[CYCLE_COLUMN].to_numpy(dtype=int)
     position = int(np.searchsorted(cycles_full, cutoff, side="right"))
     if position == 0 or cycles_full[position - 1] != cutoff:
@@ -107,6 +132,7 @@ def extract_prefix_features(
         differences = np.diff(values)
         baseline = values[: min(baseline_window, len(values))]
         baseline_mean = float(np.mean(baseline))
+        window_summaries: dict[int, dict[str, float]] = {}
         global_values = {
             "last": float(values[-1]),
             "first": float(values[0]),
@@ -139,10 +165,91 @@ def extract_prefix_features(
                 "delta": float(recent_values[-1] - recent_values[0]),
                 "last_minus_mean": float(recent_values[-1] - recent_mean),
             }
+            window_summaries[int(window)] = window_values
             for statistic, value in window_values.items():
                 features[
                     f"{FEATURE_PREFIX}{channel}__w{window}_{statistic}"
                 ] = value
+
+        if feature_profile == "run5":
+            (
+                baseline_median,
+                baseline_iqr,
+                baseline_mad,
+                baseline_scale,
+            ) = robust_location_scale(baseline)
+            history_median, history_iqr, _, history_scale = robust_location_scale(
+                values
+            )
+            q10, q90 = np.quantile(values, [0.10, 0.90])
+            robust_global_values = {
+                "baseline_median": baseline_median,
+                "baseline_iqr": baseline_iqr,
+                "baseline_mad": baseline_mad,
+                "history_median": history_median,
+                "history_iqr": history_iqr,
+                "history_q10": float(q10),
+                "history_q90": float(q90),
+                "median_abs_delta": (
+                    float(np.median(np.abs(differences)))
+                    if len(differences)
+                    else 0.0
+                ),
+                "baseline_robust_z": float(
+                    (values[-1] - baseline_median) / baseline_scale
+                ),
+                "history_robust_z": float(
+                    (values[-1] - history_median) / history_scale
+                ),
+            }
+            for statistic, value in robust_global_values.items():
+                features[f"{FEATURE_PREFIX}{channel}__{statistic}"] = value
+
+            for window in rolling_windows:
+                recent_values = values[-window:]
+                recent_differences = np.diff(recent_values)
+                recent_median, recent_iqr, _, _ = robust_location_scale(
+                    recent_values
+                )
+                robust_window_values = {
+                    "median": recent_median,
+                    "iqr": recent_iqr,
+                    "median_abs_delta": (
+                        float(np.median(np.abs(recent_differences)))
+                        if len(recent_differences)
+                        else 0.0
+                    ),
+                    "baseline_robust_z": float(
+                        (recent_median - baseline_median) / baseline_scale
+                    ),
+                }
+                for statistic, value in robust_window_values.items():
+                    features[
+                        f"{FEATURE_PREFIX}{channel}__w{window}_{statistic}"
+                    ] = value
+
+            ordered_windows = sorted(window_summaries)
+            for shorter, longer in zip(
+                ordered_windows,
+                ordered_windows[1:],
+                strict=False,
+            ):
+                for statistic in ("mean", "sd", "slope"):
+                    value = (
+                        window_summaries[shorter][statistic]
+                        - window_summaries[longer][statistic]
+                    )
+                    features[
+                        f"{FEATURE_PREFIX}{channel}__w{shorter}_minus_"
+                        f"w{longer}_{statistic}"
+                    ] = float(value)
+            for window in ordered_windows:
+                features[
+                    f"{FEATURE_PREFIX}{channel}__w{window}_minus_history_mean"
+                ] = float(
+                    window_summaries[window]["mean"]
+                    - global_values["history_mean"]
+                )
 
         if channel in STATE_CHANNELS:
             transition_count = int(np.count_nonzero(differences != 0))
@@ -164,6 +271,7 @@ def build_feature_table(
     manifest: pd.DataFrame,
     *,
     channels: list[str] = MODEL_CHANNELS,
+    feature_profile: str = "legacy",
 ) -> pd.DataFrame:
     histories = {
         str(uav_id): history.reset_index(drop=True)
@@ -177,7 +285,10 @@ def build_feature_table(
         key = (uav_id, cutoff)
         if key not in cache:
             cache[key] = extract_prefix_features(
-                histories[uav_id], cutoff, channels=channels
+                histories[uav_id],
+                cutoff,
+                channels=channels,
+                feature_profile=feature_profile,
             )
         feature_records.append(cache[key])
     feature_frame = pd.DataFrame.from_records(feature_records, index=manifest.index)
@@ -188,7 +299,12 @@ def build_feature_table(
     return result
 
 
-def assert_feature_causality(train: pd.DataFrame, manifest: pd.DataFrame) -> None:
+def assert_feature_causality(
+    train: pd.DataFrame,
+    manifest: pd.DataFrame,
+    *,
+    feature_profile: str = "legacy",
+) -> None:
     histories = {
         str(uav_id): history.reset_index(drop=True)
         for uav_id, history in train.groupby(ID_COLUMN, sort=True)
@@ -200,13 +316,21 @@ def assert_feature_causality(train: pd.DataFrame, manifest: pd.DataFrame) -> Non
         history = histories[uav_id]
         if cutoff >= int(history[CYCLE_COLUMN].max()):
             continue
-        original = extract_prefix_features(history, cutoff)
+        original = extract_prefix_features(
+            history,
+            cutoff,
+            feature_profile=feature_profile,
+        )
         altered = history.copy()
         future = altered[CYCLE_COLUMN] > cutoff
         altered.loc[future, MODEL_CHANNELS] = (
             altered.loc[future, MODEL_CHANNELS] * -17.0 + 1_000_000.0
         )
-        modified = extract_prefix_features(altered, cutoff)
+        modified = extract_prefix_features(
+            altered,
+            cutoff,
+            feature_profile=feature_profile,
+        )
         if original.keys() != modified.keys():
             raise AssertionError("Feature keys changed after future rows were modified")
         if not np.array_equal(
@@ -236,6 +360,11 @@ def main() -> None:
     parser.add_argument("--scenario-dir", type=Path, default=STEP_3_ARTIFACT_DIR)
     parser.add_argument("--prefix-dir", type=Path, default=STEP_4_ARTIFACT_DIR)
     parser.add_argument("--output-dir", type=Path, default=STEP_5_ARTIFACT_DIR)
+    parser.add_argument(
+        "--feature-profile",
+        choices=FEATURE_PROFILES,
+        default="legacy",
+    )
     args = parser.parse_args()
 
     train = load_dataset(args.train_csv, require_target=True)
@@ -258,13 +387,40 @@ def main() -> None:
             pd.read_csv(args.scenario_dir / "test_endpoints.csv"),
         ),
     }
-    assert_feature_causality(train, manifests["training_features.csv.gz"][1])
+    assert_feature_causality(
+        train,
+        manifests["training_features.csv.gz"][1],
+        feature_profile=args.feature_profile,
+    )
 
     feature_dir = args.output_dir
     generated_paths: list[Path] = []
     for filename, (dataset, manifest) in manifests.items():
-        table = build_feature_table(dataset, manifest)
+        table = build_feature_table(
+            dataset,
+            manifest,
+            feature_profile=args.feature_profile,
+        )
         generated_paths.append(save_feature_table(table, feature_dir / filename))
+    feature_count = len(
+        [
+            column
+            for column in table.columns
+            if column.startswith(FEATURE_PREFIX)
+        ]
+    )
+    generated_paths.append(
+        save_json(
+            {
+                "feature_profile": args.feature_profile,
+                "feature_count": feature_count,
+                "baseline_window": 10,
+                "rolling_windows": list(DEFAULT_WINDOWS),
+                "causal_prefix_only": True,
+            },
+            feature_dir / "feature_generation_config.json",
+        )
+    )
     print("\n".join(f"Saved {path}" for path in generated_paths))
 
 
