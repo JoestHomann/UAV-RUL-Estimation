@@ -136,11 +136,8 @@
             "low": 0.0
           },
           "boosting_type": {
-            "kind": "categorical",
-            "values": [
-              "Plain",
-              "Ordered"
-            ]
+            "kind": "fixed",
+            "value": "Plain"
           },
           "depth": {
             "kind": "categorical",

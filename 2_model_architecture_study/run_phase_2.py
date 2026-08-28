@@ -307,6 +307,40 @@ def _run_script(
         )
 
 
+def _interleave_by_family(
+    pairs: list[tuple[str, int]],
+) -> list[tuple[str, int]]:
+    """Order studies round-robin across families instead of family by family.
+
+    Callers build pairs family-major, and a FIFO pool therefore keeps a
+    contiguous window of that list in flight: all five folds of one family,
+    plus one fold of the next. Families are not interchangeable in what they
+    load. The sequence architectures place their tensors on CUDA whenever it
+    is available, while the tree families never leave the CPU, so a
+    family-major window saturates one device and leaves the other idle for
+    however long that family takes. Round-robin spreads the in-flight window
+    across as many distinct families as there are workers, which overlaps
+    CPU-bound and GPU-bound studies for the whole of Steps 5 and 6.
+
+    This is an execution concern only, in the same sense as
+    "[execution].max_workers": it cannot change results. Every study is an
+    independent subprocess with its own sampler seeded from the settings, and
+    consolidation reads finished studies back from disk in a fixed order, so
+    the order studies are started in is not observable in any artifact.
+    """
+
+    remaining: dict[str, list[tuple[str, int]]] = {}
+    for pair in pairs:
+        remaining.setdefault(pair[0], []).append(pair)
+    ordered: list[tuple[str, int]] = []
+    while remaining:
+        for family in list(remaining):
+            ordered.append(remaining[family].pop(0))
+            if not remaining[family]:
+                del remaining[family]
+    return ordered
+
+
 def _run_pairs_in_parallel(
     *,
     step: StepDefinition,
@@ -370,7 +404,7 @@ def _run_pairs_in_parallel(
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
             executor.submit(_run_one, family, outer_fold): (family, outer_fold)
-            for family, outer_fold in pairs
+            for family, outer_fold in _interleave_by_family(pairs)
         }
         for future in as_completed(futures):
             pair = futures[future]
