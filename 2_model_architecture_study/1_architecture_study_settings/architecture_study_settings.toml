@@ -374,9 +374,17 @@ kind = "uniform"
 low = 0.5
 high = 1.0
 
+# "Ordered" was measured in run 4 at ~1662 s per inner-fold fit against ~35 s
+# for "Plain" (47x), rising to 3112 s mean and 5177 s worst case at depth 10,
+# because ordered boosting fits one model per permutation and this family is
+# pinned to thread_count = 1 for determinism. Five ordered candidates consumed
+# 97.5% of the family's compute for a best inner RMSE of 29.19 against 29.37
+# for plain: a 0.6% gain for 47x the cost. Ordered boosting targets small data
+# with categorical features; all 606 features here are numeric, so the leakage
+# it guards against does not apply. Fixed to "Plain" on that measurement.
 [architectures.catboost.search.boosting_type]
-kind = "categorical"
-values = ["Plain", "Ordered"]
+kind = "fixed"
+value = "Plain"
 
 # Feed-forward network on the same engineered rows the tree models use.
 [architectures.mlp]

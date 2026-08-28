@@ -1238,19 +1238,19 @@
       ],
       "enabled": {
         "catboost": true,
-        "cycle_only_baseline": true,
+        "cycle_only_baseline": false,
         "extra_trees": true,
-        "lstm": true,
+        "lstm": false,
         "mean_baseline": true,
-        "mlp": true,
+        "mlp": false,
         "multiscale_cnn": true,
         "random_forest": true,
-        "rbf_svr": true,
-        "regularized_linear": true,
+        "rbf_svr": false,
+        "regularized_linear": false,
         "sensor_graph_tcn": true,
         "tcn": true,
         "trajectory_dtw_knn": true,
-        "transformer": true,
+        "transformer": false,
         "xgboost": true
       },
       "optional_architectures": [
@@ -1259,7 +1259,7 @@
       ]
     },
     "tuning": {
-      "candidate_budget_per_architecture": 25,
+      "candidate_budget_per_architecture": 50,
       "retraining_seeds": [
         13,
         37,
