@@ -396,40 +396,23 @@ def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -
     _run_command(
         [
             sys.executable,
-            str(paths["phase_2_inner_selection"]),
+            str(paths["phase_2_orchestrator"]),
             "--specification",
             str(phase2["specification"]),
-            "--output-dir",
-            str(step5),
+            "--from-step",
+            "5",
+            "--through-step",
+            "6",
             "--tabular-manifest",
             str(phase2["tabular_manifest"]),
             "--sequence-manifest",
             str(phase2["sequence_manifest"]),
             "--trajectory-manifest",
             str(phase2["trajectory_manifest"]),
+            "--model-registry",
+            str(phase2["registry"]),
         ],
-        label=f"{name}: Phase 2 Step 5 inner selection",
-    )
-    _run_command(
-        [
-            sys.executable,
-            str(paths["phase_2_locked_evaluation"]),
-            "--specification",
-            str(phase2["specification"]),
-            "--selection-manifest",
-            str(step5 / "selection_manifest.json"),
-            "--selected-configurations",
-            str(step5 / "selected_configurations.csv"),
-            "--output-dir",
-            str(step6),
-            "--tabular-manifest",
-            str(phase2["tabular_manifest"]),
-            "--sequence-manifest",
-            str(phase2["sequence_manifest"]),
-            "--trajectory-manifest",
-            str(phase2["trajectory_manifest"]),
-        ],
-        label=f"{name}: Phase 2 Step 6 locked evaluation",
+        label=f"{name}: Phase 2 Steps 5-6 parallel selection and evaluation",
     )
     _run_command(
         [
@@ -564,6 +547,9 @@ def run_experiment(
                 _run_phase2(name, config, experiment)
             else:
                 _run_phase3(name, config, experiment, force)
+        except KeyboardInterrupt:
+            _mark_stage(name, experiment, stage, "interrupted")
+            raise
         except Exception:
             _mark_stage(name, experiment, stage, "failed")
             raise

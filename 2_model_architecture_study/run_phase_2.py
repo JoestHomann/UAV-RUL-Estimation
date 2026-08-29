@@ -70,12 +70,44 @@ MODEL_REGISTRY_PATH = (
     PHASE_DIR / "4_model_adapters" / "artifacts" / "model_registry.json"
 )
 
+# These paths default to the standard Phase 2 artifacts, but the experiment
+# manager can replace them for one invocation so parallel Steps 5 and 6 use
+# that experiment's local inputs without changing the global defaults.
+INPUT_ARGUMENTS: list[str] = []
+
+
+def _configure_invocation(
+    *,
+    specification_path: Path,
+    tabular_manifest_path: Path | None,
+    sequence_manifest_path: Path | None,
+    trajectory_manifest_path: Path | None,
+    model_registry_path: Path,
+) -> None:
+    """Configure optional experiment-local inputs for this process."""
+
+    global SPECIFICATION_PATH, MODEL_REGISTRY_PATH, INPUT_ARGUMENTS
+
+    SPECIFICATION_PATH = specification_path.resolve()
+    MODEL_REGISTRY_PATH = model_registry_path.resolve()
+    INPUT_ARGUMENTS = []
+    for flag, path in (
+        ("--tabular-manifest", tabular_manifest_path),
+        ("--sequence-manifest", sequence_manifest_path),
+        ("--trajectory-manifest", trajectory_manifest_path),
+    ):
+        if path is not None:
+            INPUT_ARGUMENTS.extend((flag, str(path.resolve())))
+
 
 def _step_5_manifest_path() -> Path:
     """Locate Step 5's manifest inside the run folder the settings select."""
 
     return (
-        step_directory_for_specification(STEP_5_DIRECTORY_NAME)
+        step_directory_for_specification(
+            STEP_5_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
         / "selection_manifest.json"
     )
 
@@ -84,7 +116,10 @@ def _step_6_manifest_path() -> Path:
     """Locate Step 6's manifest inside the run folder the settings select."""
 
     return (
-        step_directory_for_specification(STEP_6_DIRECTORY_NAME)
+        step_directory_for_specification(
+            STEP_6_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
         / "locked_evaluation_manifest.json"
     )
 
@@ -93,7 +128,10 @@ def _step_7_manifest_path() -> Path:
     """Locate Step 7's manifest inside the run folder the settings select."""
 
     return (
-        step_directory_for_specification(STEP_7_DIRECTORY_NAME)
+        step_directory_for_specification(
+            STEP_7_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
         / "comparison_manifest.json"
     )
 
@@ -307,6 +345,53 @@ def _run_script(
         )
 
 
+def _input_arguments() -> list[str]:
+    """Return the local adapter arguments configured for this invocation."""
+
+    return INPUT_ARGUMENTS.copy()
+
+
+def _study_arguments(step: StepDefinition) -> list[str]:
+    """Build the runner arguments for one parallel family/fold study."""
+
+    if step.number == 5:
+        output_dir = step_directory_for_specification(
+            STEP_5_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
+        return [
+            "--specification",
+            str(SPECIFICATION_PATH),
+            "--output-dir",
+            str(output_dir),
+            *_input_arguments(),
+        ]
+    if step.number == 6:
+        output_dir = step_directory_for_specification(
+            STEP_6_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
+        step_5_dir = step_directory_for_specification(
+            STEP_5_DIRECTORY_NAME,
+            specification_path=SPECIFICATION_PATH,
+        )
+        return [
+            "--specification",
+            str(SPECIFICATION_PATH),
+            "--selection-manifest",
+            str(step_5_dir / "selection_manifest.json"),
+            "--selected-configurations",
+            str(step_5_dir / "selected_configurations.csv"),
+            "--output-dir",
+            str(output_dir),
+            *_input_arguments(),
+        ]
+    raise Phase2PipelineError(
+        f"Parallel study arguments are only supported for Steps 5 and 6, "
+        f"not Step {step.number}"
+    )
+
+
 def _interleave_by_family(
     pairs: list[tuple[str, int]],
 ) -> list[tuple[str, int]]:
@@ -396,7 +481,13 @@ def _run_pairs_in_parallel(
             raise _StudySkipped(family, outer_fold)
         _run_script(
             step,
-            ["--family", family, "--outer-fold", str(outer_fold)],
+            [
+                "--family",
+                family,
+                "--outer-fold",
+                str(outer_fold),
+                *_study_arguments(step),
+            ],
             env=environment,
         )
 
@@ -654,7 +745,21 @@ def _run_step_7() -> None:
     # Step 7 is intentionally rerun whenever requested. This keeps its tables
     # and figures synchronized with Step 6 without introducing timestamps or
     # hashes, both of which are deliberately absent from this project design.
-    _run_script(STEPS[7])
+    output_dir = step_directory_for_specification(
+        STEP_7_DIRECTORY_NAME,
+        specification_path=SPECIFICATION_PATH,
+    )
+    _run_script(
+        STEPS[7],
+        [
+            "--specification",
+            str(SPECIFICATION_PATH),
+            "--locked-manifest",
+            str(_step_6_manifest_path()),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
     manifest = _read_json(
         _step_7_manifest_path(),
         "Step 7 comparison manifest",
@@ -848,6 +953,36 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--specification",
+        type=Path,
+        default=SPECIFICATION_PATH,
+        help="Location of Step 1's generated experiment specification.",
+    )
+    parser.add_argument(
+        "--tabular-manifest",
+        type=Path,
+        default=None,
+        help="Optional experiment-local Step 2 tabular adapter manifest.",
+    )
+    parser.add_argument(
+        "--sequence-manifest",
+        type=Path,
+        default=None,
+        help="Optional experiment-local Step 3 sequence adapter manifest.",
+    )
+    parser.add_argument(
+        "--trajectory-manifest",
+        type=Path,
+        default=None,
+        help="Optional experiment-local Step 3 trajectory adapter manifest.",
+    )
+    parser.add_argument(
+        "--model-registry",
+        type=Path,
+        default=MODEL_REGISTRY_PATH,
+        help="Optional experiment-local Step 4 model registry.",
+    )
+    parser.add_argument(
         "--status",
         action="store_true",
         help="Show current progress without running or modifying any step.",
@@ -892,6 +1027,13 @@ def main() -> None:
         parser.error("--max-workers must be at least 1")
 
     try:
+        _configure_invocation(
+            specification_path=args.specification,
+            tabular_manifest_path=args.tabular_manifest,
+            sequence_manifest_path=args.sequence_manifest,
+            trajectory_manifest_path=args.trajectory_manifest,
+            model_registry_path=args.model_registry,
+        )
         if args.status:
             print_status()
             return

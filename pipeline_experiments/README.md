@@ -28,10 +28,13 @@ inputs and writes its resolved settings under
 `pipeline_experiments/runs/<experiment>/phase2/`, while Steps 5-7 use the
 configured numbered Phase 2 run folder. Phase 3 uses the configured numbered
 Phase 3 run folder. All generated manifests retain the exact paths used by
-that experiment.
+that experiment. Phase 2 Steps 5 and 6 use the standard parallel orchestrator;
+`max_workers` controls the number of independent family/outer-fold subprocesses
+that can run concurrently.
 
 The launcher resumes Phase 2 and Phase 3 checkpoints. A partial Phase 1 or
-Phase 2 run can be continued by running the same command again. Use new
+Phase 2 run can be continued by running the same command again; an interrupted
+stage is recorded as `interrupted` until it is resumed. Use new
 `phase_1_run_name`, `phase_2_run_number`, and `phase_3_run_number` values for a
 new scientific experiment. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
@@ -45,6 +48,7 @@ then edit the question-specific fields:
   construction policy;
 - `architectures`, `feature_set`, `candidate_budget`, and seeds choose the
   Phase 2 study;
+- `max_workers` controls parallel Step 5 and Step 6 study workers;
 - `target_profile` and `prediction_profile` choose raw/capped targets and
   symmetric/conservative fitting;
 - the Phase 3 fields enable optional final selection, training, inference,
