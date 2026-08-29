@@ -5,6 +5,9 @@
 # with an existing run. The launcher writes resolved settings and status below
 # pipeline_experiments/runs/<name>/.
 
+# Run with: python pipeline_experiments\run_experiments.py --run PE_run_1
+# Replace PE_run_1 with the name of any other experiment to run that one instead.
+
 settings_version = 1
 
 [paths]
@@ -89,6 +92,8 @@ non_overprediction_coverage = 0.6
 # the launcher never creates a large implicit Cartesian product.
 [experiments.PE_run_1]
 enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
 phase_1_profile = "drift_ablation"
 phase_1_run_name = "PE_run_1"
 phase_1_mode = "rebuild"
@@ -122,6 +127,8 @@ phase_3_model_seed = 13
 # identities plus the scientific choices that define the question.
 [experiments.PE_conservative_cap125]
 enabled = false
+from_stage = "phase1"
+through_stage = "phase2"
 phase_1_profile = "drift_ablation"
 phase_1_run_name = "PE_conservative_cap125"
 phase_1_mode = "rebuild"

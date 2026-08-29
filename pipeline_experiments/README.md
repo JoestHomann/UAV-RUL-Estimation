@@ -12,11 +12,15 @@ From the repository root:
 
 ```powershell
 .venv\Scripts\python.exe pipeline_experiments\run_experiments.py --list
-.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_1 --through-stage phase1
-.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_1 --from-stage phase2 --through-stage phase2
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_1
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_1 --from-stage phase1 --through-stage phase1
 .venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_1 --from-stage phase3 --through-stage phase3
 .venv\Scripts\python.exe pipeline_experiments\run_experiments.py --status
 ```
+
+Each experiment can set `from_stage` and `through_stage` in the TOML. These
+values are used when the command does not provide the corresponding CLI
+option; explicit CLI options override the catalog for one invocation.
 
 Phase 1 creates a named run under
 `1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 copies the selected

@@ -521,6 +521,14 @@ def _stage_complete(name: str, experiment: dict[str, Any], stage: str) -> bool:
     return path.is_file()
 
 
+def _resolve_stage(value: Any, *, key: str, default: str) -> str:
+    stage = default if value is None else value
+    if stage not in STAGES:
+        allowed = ", ".join(STAGES)
+        raise ExperimentManagerError(f"{key} must be one of: {allowed}")
+    return stage
+
+
 def run_experiment(
     name: str,
     config_path: Path,
@@ -531,6 +539,8 @@ def run_experiment(
     force: bool,
 ) -> None:
     experiment = _experiment(config, name)
+    from_stage = _resolve_stage(from_stage, key="from_stage", default="phase1")
+    through_stage = _resolve_stage(through_stage, key="through_stage", default="phase2")
     first = STAGES.index(from_stage)
     last = STAGES.index(through_stage)
     if first > last:
@@ -577,8 +587,8 @@ def main() -> None:
     parser.add_argument("--run", dest="run_name")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--status", action="store_true")
-    parser.add_argument("--from-stage", choices=STAGES, default="phase1")
-    parser.add_argument("--through-stage", choices=STAGES, default="phase2")
+    parser.add_argument("--from-stage", choices=STAGES)
+    parser.add_argument("--through-stage", choices=STAGES)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
@@ -594,12 +604,25 @@ def main() -> None:
             return
         if not args.run_name:
             parser.error("--run is required unless --list or --status is used")
+        experiment = _experiment(config, args.run_name)
+        from_stage = _resolve_stage(
+            args.from_stage if args.from_stage is not None else experiment.get("from_stage"),
+            key="from_stage",
+            default="phase1",
+        )
+        through_stage = _resolve_stage(
+            args.through_stage
+            if args.through_stage is not None
+            else experiment.get("through_stage"),
+            key="through_stage",
+            default="phase2",
+        )
         run_experiment(
             args.run_name,
             config_path,
             config,
-            from_stage=args.from_stage,
-            through_stage=args.through_stage,
+            from_stage=from_stage,
+            through_stage=through_stage,
             force=args.force,
         )
     except ExperimentManagerError as error:

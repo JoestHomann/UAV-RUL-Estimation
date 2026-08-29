@@ -41,6 +41,15 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
     def test_stage_order_is_explicit(self) -> None:
         self.assertEqual(run_experiments.STAGES, ("phase1", "phase2", "phase3"))
 
+    def test_experiment_declares_default_stage_range(self) -> None:
+        experiment = run_experiments._experiment(self.config, "PE_run_1")
+        self.assertEqual(experiment["from_stage"], "phase2")
+        self.assertEqual(experiment["through_stage"], "phase2")
+        self.assertEqual(
+            run_experiments._resolve_stage(experiment.get("from_stage"), key="from_stage", default="phase1"),
+            "phase2",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
