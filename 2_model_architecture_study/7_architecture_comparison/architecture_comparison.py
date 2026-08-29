@@ -34,6 +34,23 @@ METRICS = (
     "underprediction_rate",
     "mean_underprediction",
 )
+METRIC_DIFFERENCE_INTERPRETATIONS = {
+    "r2": "positive means family_a has higher R2",
+    "rmse": "negative means family_a has lower RMSE",
+    "mae": "negative means family_a has lower MAE",
+    "bias": "signed bias difference; zero is the target for each family",
+    "overprediction_rate": "negative means family_a overpredicts less often",
+    "mean_overprediction": (
+        "negative means family_a has lower mean overprediction magnitude"
+    ),
+    "root_mean_squared_overprediction": (
+        "negative means family_a has lower RMS overprediction magnitude"
+    ),
+    "underprediction_rate": "positive means family_a underpredicts more often",
+    "mean_underprediction": (
+        "positive means family_a has greater mean underprediction magnitude"
+    ),
+}
 AGE_BANDS = ("1-50", "51-100", "101-200", ">200")
 RUL_BANDS = ("0-25", "26-50", "51-100", "above_100")
 GROUP_TYPES = (
@@ -891,12 +908,7 @@ class ArchitectureComparisonAnalyzer:
                         - bootstrap_lookup[family_b][metric].to_numpy(float)
                     )
                     finite = differences[np.isfinite(differences)]
-                    interpretation = {
-                        "r2": "positive means family_a has higher R2",
-                        "rmse": "negative means family_a has lower RMSE",
-                        "mae": "negative means family_a has lower MAE",
-                        "bias": "signed bias difference; zero is the target for each family",
-                    }[metric]
+                    interpretation = METRIC_DIFFERENCE_INTERPRETATIONS[metric]
                     records.append(
                         {
                             "settings_version": self.settings_version,
