@@ -111,8 +111,8 @@ bootstrap_seed = 20260814    # Options: any integer
 [target]
 # Raw RUL remains the evaluation target. This section controls only the target
 # supplied while fitting a model.
-mode = "raw"    # Options: "raw", "piecewise_cap"
-# maximum_rul is required for piecewise_cap and must be omitted for raw mode.
+mode = "raw"    # Options: "raw", "piecewise_cap", "failure_cycle"
+# maximum_rul is required for piecewise_cap and omitted for other modes.
 
 [prediction_policy]
 # Conservative fitting and prediction settings. The neutral values below
@@ -302,6 +302,14 @@ values = [1, 2, 5, 10]
 kind = "categorical"
 values = [0.15, 0.2, 0.33, 0.67, 1.0]
 
+[architectures.extra_trees.search.fault_mode_strategy]
+kind = "fixed"
+value = "none"
+
+[architectures.extra_trees.search.signal_compression_strategy]
+kind = "fixed"
+value = "none"
+
 # Gradient-boosted trees, the second nonlinear tabular reference.
 [architectures.xgboost]
 status = "included"
@@ -358,6 +366,14 @@ high = 10.0
 kind = "log_uniform"
 low = 1e-3
 high = 100.0
+
+[architectures.xgboost.search.fault_mode_strategy]
+kind = "fixed"
+value = "none"
+
+[architectures.xgboost.search.signal_compression_strategy]
+kind = "fixed"
+value = "none"
 
 # CatBoost provides a second regularized boosting mechanism over the same
 # numerical engineered features. CPU execution is fixed for reproducibility.

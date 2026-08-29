@@ -56,6 +56,8 @@ XGBOOST_HYPERPARAMETERS = {
     "colsample_bytree": 1.0,
     "reg_alpha": 0.0,
     "reg_lambda": 1.0,
+    "fault_mode_strategy": "none",
+    "signal_compression_strategy": "none",
 }
 MLP_HYPERPARAMETERS = {
     "hidden_layers": [8],

@@ -32,9 +32,72 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         experiments = run_experiments._experiments(self.config)
         self.assertIn("PE_run_1", experiments)
         self.assertIn("drift_ablation", self.config["profiles"])
+        self.assertIn("signal_family_ablation", self.config["profiles"])
         self.assertIn("current", self.config["scenario_profiles"])
         self.assertIn("dense_stride_5", self.config["prefix_variants"])
         self.assertEqual(run_experiments._configured_max_workers(self.config), 6)
+
+    def test_signal_family_ablation_is_an_explicit_development_group(self) -> None:
+        group = run_experiments._experiment_group(
+            self.config,
+            "PE_signal_family_ablation",
+        )
+        self.assertEqual(group["control"], "PE_signal_control")
+        self.assertEqual(len(group["experiments"]), 6)
+        observed_sets = []
+        for name in group["experiments"]:
+            experiment = run_experiments._experiment(self.config, name)
+            self.assertEqual(experiment["phase_2_scope"], "selection_only")
+            self.assertEqual(experiment["architectures"], ["extra_trees", "xgboost"])
+            self.assertEqual(experiment["candidate_budget"], 25)
+            self.assertFalse(experiment["phase_3_enabled"])
+            observed_sets.append(experiment["feature_set"])
+        self.assertEqual(
+            observed_sets,
+            self.config["profiles"]["signal_family_ablation"]["feature_sets"],
+        )
+
+    def test_recommended_experiment_groups_are_development_only(self) -> None:
+        group_names = {
+            "PE_failure_cycle_target",
+            "PE_baseline_normalization",
+            "PE_fault_mode",
+            "PE_signal_compression",
+            "PE_dense_prefix_training",
+        }
+        groups = run_experiments._experiment_groups(self.config)
+        self.assertTrue(group_names.issubset(groups))
+        for group_name in group_names:
+            group = groups[group_name]
+            for name in group["experiments"]:
+                experiment = run_experiments._experiment(self.config, name)
+                self.assertEqual(experiment["phase_2_scope"], "selection_only")
+                self.assertEqual(
+                    experiment["architectures"],
+                    ["extra_trees", "xgboost"],
+                )
+                self.assertEqual(experiment["candidate_budget"], 25)
+                self.assertFalse(experiment["phase_3_enabled"])
+
+    def test_target_and_adapter_strategy_cells_are_explicit(self) -> None:
+        self.assertEqual(
+            run_experiments._experiment(self.config, "PE_failure_cycle")[
+                "target_profile"
+            ],
+            "failure_cycle",
+        )
+        self.assertEqual(
+            run_experiments._experiment(self.config, "PE_fault_mode_experts")[
+                "fault_mode_strategy"
+            ],
+            "experts",
+        )
+        self.assertEqual(
+            run_experiments._experiment(self.config, "PE_compression_pca")[
+                "signal_compression_strategy"
+            ],
+            "pca_only",
+        )
 
     def test_ready_experiment_uses_distinct_run_identities(self) -> None:
         experiment = run_experiments._experiment(self.config, "PE_run_1")

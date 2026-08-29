@@ -104,6 +104,10 @@ class ModelAdapter(ABC):
             )
         if not np.isfinite(predictions).all():
             raise ModelAdapterError("Model produced missing or non-finite predictions")
+        predictions = self.target_policy.inverse_predictions(
+            predictions,
+            cutoff_values(data),
+        )
         predictions = self.prediction_policy.adjust_predictions(predictions)
         return np.maximum(predictions, self.prediction_minimum)
 
@@ -122,7 +126,10 @@ class ModelAdapter(ABC):
     def fitting_target_values(self, dataset: Any) -> NDArray[np.float64]:
         """Return the transformed model-fitting target for this run."""
 
-        return self.target_policy.transform(target_values(dataset))
+        return self.target_policy.transform(
+            target_values(dataset),
+            cutoff_values(dataset),
+        )
 
     def log_training_step(
         self,
@@ -235,6 +242,20 @@ def target_values(dataset: Any) -> NDArray[np.float64]:
         raise ModelAdapterError("Target length does not match dataset length")
     if not np.isfinite(values).all():
         raise ModelAdapterError("RUL target contains missing or non-finite values")
+    return values
+
+
+def cutoff_values(dataset: Any) -> NDArray[np.float64] | None:
+    """Return aligned endpoint cutoffs when the dataset exposes metadata."""
+
+    metadata = getattr(dataset, "metadata", None)
+    if metadata is None or "cutoff" not in metadata.columns:
+        return None
+    values = np.asarray(metadata["cutoff"], dtype=np.float64).reshape(-1)
+    if len(values) != len(dataset):
+        raise ModelAdapterError("Cutoff length does not match dataset length")
+    if not np.isfinite(values).all() or np.any(values < 0.0):
+        raise ModelAdapterError("Endpoint cutoffs must be finite and nonnegative")
     return values
 
 

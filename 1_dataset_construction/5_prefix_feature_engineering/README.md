@@ -7,7 +7,14 @@
 Every row contains only features computable at its recorded cutoff.
 
 `--feature-profile legacy` reproduces the original 606 features. The `extended`
-profile adds robust baseline/history/window summaries and explicit contrasts
-between 5-, 20-, and 50-cycle trends. Both profiles retain the future-row
+profile adds robust baseline/history/window summaries, explicit contrasts
+between 5-, 20-, and 50-cycle trends, and direction-normalized degradation
+onset/change-point features for the ten screened degradation channels. It also
+adds robust-scaled history slopes and robust-scaled window slopes, deltas, and
+last-minus-mean values. These use each prefix's early-life median/MAD scale and
+support matched raw-versus-normalized feature experiments. Onsets
+require three consecutive observations at least two robust baseline scales in
+the degradation direction. Change points are positive prefix-local mean shifts
+with at least five observations on each side. Both profiles retain the future-row
 causality test, and the selected profile is written to
 `feature_generation_config.json`.

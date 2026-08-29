@@ -22,6 +22,14 @@ PHASE_1_ROOT = REPOSITORY_ROOT / "1_dataset_construction"
 PHASE_3_ROOT = REPOSITORY_ROOT / "3_final_model_training_and_inference"
 STAGES = ("phase1", "phase2", "phase3")
 PHASE_2_SCOPES = ("selection_only", "complete")
+FAULT_MODE_STRATEGIES = ("none", "indicator", "experts")
+SIGNAL_COMPRESSION_STRATEGIES = (
+    "none",
+    "median_only",
+    "pca_only",
+    "individual_plus_median",
+    "individual_plus_pca",
+)
 
 
 class ExperimentManagerError(ValueError):
@@ -85,6 +93,54 @@ def _experiment(config: dict[str, Any], name: str) -> dict[str, Any]:
         available = ", ".join(sorted(_experiments(config)))
         raise ExperimentManagerError(f"Unknown experiment {name!r}; available: {available}")
     return experiment
+
+
+def _experiment_groups(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    value = config.get("experiment_groups", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError("experiment_groups must be a TOML table")
+    result: dict[str, dict[str, Any]] = {}
+    known_experiments = set(_experiments(config))
+    for name, group in value.items():
+        if not isinstance(name, str) or not name or not isinstance(group, dict):
+            raise ExperimentManagerError("Every experiment group must be a named TOML table")
+        members = group.get("experiments")
+        if (
+            not isinstance(members, list)
+            or not members
+            or not all(isinstance(item, str) and item for item in members)
+            or len(members) != len(set(members))
+        ):
+            raise ExperimentManagerError(
+                f"experiment_groups.{name}.experiments must be a non-empty unique string list"
+            )
+        unknown = sorted(set(members) - known_experiments)
+        if unknown:
+            raise ExperimentManagerError(
+                f"experiment_groups.{name} references unknown experiments: {unknown}"
+            )
+        control = group.get("control")
+        if not isinstance(control, str) or control not in members:
+            raise ExperimentManagerError(
+                f"experiment_groups.{name}.control must name one group experiment"
+            )
+        reporter = group.get("reporter")
+        if not isinstance(reporter, str) or not reporter:
+            raise ExperimentManagerError(
+                f"experiment_groups.{name}.reporter must be a non-empty path"
+            )
+        result[name] = group
+    return result
+
+
+def _experiment_group(config: dict[str, Any], name: str) -> dict[str, Any]:
+    group = _experiment_groups(config).get(name)
+    if group is None:
+        available = ", ".join(sorted(_experiment_groups(config)))
+        raise ExperimentManagerError(
+            f"Unknown experiment group {name!r}; available: {available}"
+        )
+    return group
 
 
 def _configured_max_workers(config: dict[str, Any]) -> int | str:
@@ -227,6 +283,26 @@ def _phase2_settings(
     settings["tuning"]["retraining_seeds"] = list(
         experiment.get("retraining_seeds", settings["tuning"]["retraining_seeds"])
     )
+    strategy_defaults = {
+        "fault_mode_strategy": "none",
+        "signal_compression_strategy": "none",
+    }
+    for parameter, default in strategy_defaults.items():
+        value = str(experiment.get(parameter, default))
+        allowed = (
+            FAULT_MODE_STRATEGIES
+            if parameter == "fault_mode_strategy"
+            else SIGNAL_COMPRESSION_STRATEGIES
+        )
+        if value not in allowed:
+            raise ExperimentManagerError(
+                f"{parameter} must be one of: {', '.join(allowed)}"
+            )
+        for family in ("extra_trees", "xgboost"):
+            settings["architectures"][family]["search"][parameter] = {
+                "kind": "fixed",
+                "value": value,
+            }
 
     target_profiles = config.get("target_profiles", {})
     prediction_profiles = config.get("prediction_profiles", {})
@@ -365,7 +441,14 @@ def _phase2_settings(
     settings["representations"]["tabular_feature_sets"] = list(expected_sets)
     for family, architecture in settings["architectures"].items():
         if architecture["representation"] == "tabular":
-            architecture["feature_sets"] = ["age_only"] if family == "cycle_only_baseline" else [feature_set]
+            cycle_baseline_set = (
+                "age_only" if "age_only" in expected_sets else feature_set
+            )
+            architecture["feature_sets"] = (
+                [cycle_baseline_set]
+                if family == "cycle_only_baseline"
+                else [feature_set]
+            )
 
     return settings
 
@@ -643,6 +726,54 @@ def run_experiment(
         print(f"{name}: {stage} complete")
 
 
+def run_experiment_group(
+    name: str,
+    config_path: Path,
+    config: dict[str, Any],
+    *,
+    force: bool,
+) -> None:
+    """Run an explicit ordered experiment group and then build its report."""
+
+    group = _experiment_group(config, name)
+    for experiment_name in group["experiments"]:
+        experiment = _experiment(config, experiment_name)
+        from_stage = _resolve_stage(
+            experiment.get("from_stage"),
+            key=f"experiments.{experiment_name}.from_stage",
+            default="phase1",
+        )
+        through_stage = _resolve_stage(
+            experiment.get("through_stage"),
+            key=f"experiments.{experiment_name}.through_stage",
+            default="phase2",
+        )
+        run_experiment(
+            experiment_name,
+            config_path,
+            config,
+            from_stage=from_stage,
+            through_stage=through_stage,
+            force=force,
+        )
+
+    reporter = _repo_path(
+        group["reporter"],
+        description=f"experiment_groups.{name}.reporter",
+    )
+    _run_command(
+        [
+            sys.executable,
+            str(reporter),
+            "--config",
+            str(config_path),
+            "--group",
+            name,
+        ],
+        label=f"{name}: paired ablation report",
+    )
+
+
 def print_status(config: dict[str, Any]) -> None:
     for name, experiment in sorted(_experiments(config).items()):
         state = _state(name, experiment)
@@ -660,6 +791,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--run", dest="run_name")
+    parser.add_argument("--group", dest="group_name")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--from-stage", choices=STAGES)
@@ -673,12 +805,24 @@ def main() -> None:
         if args.list:
             for name, experiment in sorted(_experiments(config).items()):
                 print(f"{name}: {'enabled' if experiment.get('enabled', True) else 'disabled'}")
+            for name, group in sorted(_experiment_groups(config).items()):
+                print(f"{name}: group ({len(group['experiments'])} experiments)")
             return
         if args.status:
             print_status(config)
             return
-        if not args.run_name:
-            parser.error("--run is required unless --list or --status is used")
+        if args.run_name and args.group_name:
+            parser.error("declare either --run or --group, not both")
+        if not args.run_name and not args.group_name:
+            parser.error("--run or --group is required unless --list or --status is used")
+        if args.group_name:
+            run_experiment_group(
+                args.group_name,
+                config_path,
+                config,
+                force=args.force,
+            )
+            return
         experiment = _experiment(config, args.run_name)
         from_stage = _resolve_stage(
             args.from_stage if args.from_stage is not None else experiment.get("from_stage"),

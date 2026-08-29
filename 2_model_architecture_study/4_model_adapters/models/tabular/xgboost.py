@@ -17,6 +17,10 @@ from base import (
     tabular_values,
     target_values,
 )
+from models.tabular.fold_fitted_transforms import (
+    FaultModeTransformer,
+    SignalCompressionTransformer,
+)
 
 
 class AsymmetricSquaredObjective:
@@ -104,6 +108,32 @@ class XGBoostAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         training_values, self.feature_names = tabular_values(training_data)
+        self.signal_transformer = SignalCompressionTransformer(
+            str(self.hyperparameters["signal_compression_strategy"])
+        )
+        training_values, self.transformed_feature_names = (
+            self.signal_transformer.fit_transform(training_values, self.feature_names)
+        )
+        self.fault_mode_strategy = str(
+            self.hyperparameters["fault_mode_strategy"]
+        )
+        self.fault_mode_transformer = FaultModeTransformer(
+            self.fault_mode_strategy,
+            seed=self.seed,
+        )
+        training_assignments = self.fault_mode_transformer.fit(
+            training_values,
+            self.transformed_feature_names,
+            training_data.metadata,
+        )
+        if self.fault_mode_strategy == "indicator":
+            training_values, self.transformed_feature_names = (
+                self.fault_mode_transformer.append_indicator(
+                    training_values,
+                    self.transformed_feature_names,
+                    training_assignments,
+                )
+            )
         targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
 
@@ -126,28 +156,13 @@ class XGBoostAdapter(ModelAdapter):
         elif self.prediction_policy.loss == "quantile":
             objective = "reg:quantileerror"
             objective_arguments["quantile_alpha"] = self.prediction_policy.quantile
-        self.estimator = XGBRegressor(
+        self.estimator = self._new_estimator(
+            tree_count=tree_count,
             objective=objective,
-            eval_metric="rmse",
-            n_estimators=tree_count,
-            learning_rate=float(self.hyperparameters["learning_rate"]),
-            max_depth=int(self.hyperparameters["max_depth"]),
-            min_child_weight=float(self.hyperparameters["min_child_weight"]),
-            subsample=float(self.hyperparameters["subsample"]),
-            colsample_bytree=float(self.hyperparameters["colsample_bytree"]),
-            reg_alpha=float(self.hyperparameters["reg_alpha"]),
-            reg_lambda=float(self.hyperparameters["reg_lambda"]),
-            random_state=self.seed,
-            # Candidate-level work is controlled outside the estimator. One
-            # worker prevents nested CPU oversubscription.
-            n_jobs=1,
-            tree_method="hist",
-            device=self.device,
-            early_stopping_rounds=(
-                int(self.early_stopping_patience) if use_early_stopping else None
-            ),
+            objective_arguments=objective_arguments,
+            use_early_stopping=use_early_stopping,
             callbacks=[progress_callback],
-            **objective_arguments,
+            seed=self.seed,
         )
 
         fit_arguments: dict[str, Any] = {
@@ -160,10 +175,28 @@ class XGBoostAdapter(ModelAdapter):
             "sample_weight_eval_set": [weights],
         }
         if validation_data is not None:
-            validation_values, _ = tabular_values(
+            validation_values, validation_names = tabular_values(
                 validation_data,
                 self.feature_names,
             )
+            validation_values, transformed_names = self.signal_transformer.transform(
+                validation_values,
+                validation_names,
+            )
+            validation_assignments = self.fault_mode_transformer.assign(
+                validation_values,
+                transformed_names,
+            )
+            if self.fault_mode_strategy == "indicator":
+                validation_values, transformed_names = (
+                    self.fault_mode_transformer.append_indicator(
+                        validation_values,
+                        transformed_names,
+                        validation_assignments,
+                    )
+                )
+            if transformed_names != self.transformed_feature_names:
+                raise ModelAdapterError("Transformed XGBoost feature columns changed")
             fit_arguments["eval_set"].append(
                 (validation_values, self.fitting_target_values(validation_data))
             )
@@ -176,6 +209,34 @@ class XGBoostAdapter(ModelAdapter):
         # after training keeps the persisted XGBoost estimator free of live
         # monitoring objects and unnecessary circular references.
         self.estimator.set_params(callbacks=None)
+        best_iteration = getattr(self.estimator, "best_iteration", None)
+        completed_iterations = (
+            int(best_iteration) + 1 if best_iteration is not None else tree_count
+        )
+        self.expert_estimators: dict[int, XGBRegressor] = {}
+        if self.fault_mode_strategy == "experts":
+            for mode in (0, 1):
+                mask = (
+                    (training_assignments.modes == mode)
+                    & training_assignments.trusted
+                )
+                if np.count_nonzero(mask) < 10:
+                    continue
+                estimator = self._new_estimator(
+                    tree_count=completed_iterations,
+                    objective=objective,
+                    objective_arguments=objective_arguments,
+                    use_early_stopping=False,
+                    callbacks=None,
+                    seed=self.seed + mode + 1,
+                )
+                estimator.fit(
+                    training_values[mask],
+                    targets[mask],
+                    sample_weight=weights[mask],
+                    verbose=False,
+                )
+                self.expert_estimators[mode] = estimator
         self._is_fitted = True
 
         validation_rmse = None
@@ -186,10 +247,6 @@ class XGBoostAdapter(ModelAdapter):
                 target_values(validation_data),
                 self.predict(validation_data),
             )
-        best_iteration = getattr(self.estimator, "best_iteration", None)
-        completed_iterations = (
-            int(best_iteration) + 1 if best_iteration is not None else tree_count
-        )
         self.training_summary = TrainingSummary(
             model_family=self.family,
             seed=self.seed,
@@ -205,8 +262,58 @@ class XGBoostAdapter(ModelAdapter):
         )
         return self.training_summary
 
+    def _new_estimator(
+        self,
+        *,
+        tree_count: int,
+        objective: str | AsymmetricSquaredObjective,
+        objective_arguments: dict[str, Any],
+        use_early_stopping: bool,
+        callbacks: list[Any] | None,
+        seed: int,
+    ) -> XGBRegressor:
+        return XGBRegressor(
+            objective=objective,
+            eval_metric="rmse",
+            n_estimators=tree_count,
+            learning_rate=float(self.hyperparameters["learning_rate"]),
+            max_depth=int(self.hyperparameters["max_depth"]),
+            min_child_weight=float(self.hyperparameters["min_child_weight"]),
+            subsample=float(self.hyperparameters["subsample"]),
+            colsample_bytree=float(self.hyperparameters["colsample_bytree"]),
+            reg_alpha=float(self.hyperparameters["reg_alpha"]),
+            reg_lambda=float(self.hyperparameters["reg_lambda"]),
+            random_state=seed,
+            # Candidate-level work is controlled outside the estimator. One
+            # worker prevents nested CPU oversubscription.
+            n_jobs=1,
+            tree_method="hist",
+            device=self.device,
+            early_stopping_rounds=(
+                int(self.early_stopping_patience) if use_early_stopping else None
+            ),
+            callbacks=callbacks,
+            **objective_arguments,
+        )
+
     def _predict_raw(self, data: Any) -> NDArray[np.float64]:
         """Predict from unscaled features in their fitted order."""
 
-        values, _ = tabular_values(data, self.feature_names)
-        return np.asarray(self.estimator.predict(values), dtype=np.float64)
+        values, names = tabular_values(data, self.feature_names)
+        values, transformed_names = self.signal_transformer.transform(values, names)
+        assignments = self.fault_mode_transformer.assign(values, transformed_names)
+        if self.fault_mode_strategy == "indicator":
+            values, transformed_names = self.fault_mode_transformer.append_indicator(
+                values,
+                transformed_names,
+                assignments,
+            )
+        if transformed_names != self.transformed_feature_names:
+            raise ModelAdapterError("Transformed XGBoost feature columns changed")
+        predictions = np.asarray(self.estimator.predict(values), dtype=np.float64)
+        if self.fault_mode_strategy == "experts":
+            for mode, estimator in self.expert_estimators.items():
+                mask = (assignments.modes == mode) & assignments.trusted
+                if np.any(mask):
+                    predictions[mask] = estimator.predict(values[mask])
+        return predictions

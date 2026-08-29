@@ -45,6 +45,29 @@ feature_sets = [
 ]
 prefix_variants = ["current20", "dense_stride_5"]
 
+[profiles.signal_family_ablation]
+feature_profile = "extended"
+scenario_profile = "current"
+feature_sets = [
+    "signal_control",
+    "signal_family_13_16_22_25_28",
+    "signal_family_19_21",
+    "signal_family_15_23",
+    "signal_family_07",
+    "signal_all_families",
+]
+prefix_variants = ["current20", "dense_stride_5"]
+
+[profiles.baseline_normalization]
+feature_profile = "extended"
+scenario_profile = "current"
+feature_sets = [
+    "normalization_raw",
+    "normalization_robust",
+    "normalization_combined",
+]
+prefix_variants = ["current20"]
+
 [scenario_profiles.current]
 assignment = "eligible_random"
 development_scenarios = 5
@@ -79,6 +102,9 @@ mode = "raw"
 mode = "piecewise_cap"
 maximum_rul = 125.0
 
+[target_profiles.failure_cycle]
+mode = "failure_cycle"
+
 [prediction_profiles.symmetric]
 loss = "symmetric_rmse"
 overprediction_weight = 1.0
@@ -94,6 +120,57 @@ quantile = 0.5
 calibration = "fixed_offset"
 safety_offset = 5.0
 non_overprediction_coverage = 0.6
+
+[experiment_groups.PE_signal_family_ablation]
+control = "PE_signal_control"
+experiments = [
+    "PE_signal_control",
+    "PE_signal_family_13_16_22_25_28",
+    "PE_signal_family_19_21",
+    "PE_signal_family_15_23",
+    "PE_signal_family_07",
+    "PE_signal_all_families",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE_failure_cycle_target]
+control = "PE_failure_raw_rul"
+experiments = ["PE_failure_raw_rul", "PE_failure_cycle"]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE_baseline_normalization]
+control = "PE_normalization_raw"
+experiments = [
+    "PE_normalization_raw",
+    "PE_normalization_robust",
+    "PE_normalization_combined",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE_fault_mode]
+control = "PE_fault_mode_global"
+experiments = [
+    "PE_fault_mode_global",
+    "PE_fault_mode_indicator",
+    "PE_fault_mode_experts",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE_signal_compression]
+control = "PE_compression_individual"
+experiments = [
+    "PE_compression_individual",
+    "PE_compression_median",
+    "PE_compression_pca",
+    "PE_compression_individual_median",
+    "PE_compression_individual_pca",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE_dense_prefix_training]
+control = "PE_dense_current20"
+experiments = ["PE_dense_current20", "PE_dense_stride5"]
+reporter = "pipeline_experiments/report_experiment_group.py"
 
 # CatBoost was removed after the initial Run 6 attempt was stopped because its
 # CPU search dominated this pipeline experiment. Completed checkpoints for the
@@ -213,3 +290,466 @@ phase_3_selected_model_family = "xgboost"
 phase_3_candidate_budget = 50
 phase_3_search_seed = 13
 phase_3_model_seed = 13
+
+# Development-only grouped degradation-signal ablation. Run the explicit group
+# so Phase 1 is built once, all five treatments reuse it, and the paired report
+# is generated only after every component selection succeeds.
+[experiments.PE_signal_control]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 10
+phase_2_settings_version = 16
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_control"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_signal_family_13_16_22_25_28]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 11
+phase_2_settings_version = 17
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_family_13_16_22_25_28"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_signal_family_19_21]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 12
+phase_2_settings_version = 18
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_family_19_21"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_signal_family_15_23]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 13
+phase_2_settings_version = 19
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_family_15_23"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_signal_family_07]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 14
+phase_2_settings_version = 20
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_family_07"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_signal_all_families]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 15
+phase_2_settings_version = 21
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# Predicting total failure cycle makes every prefix from one UAV share a target;
+# raw RUL metrics are restored before any selection metric is calculated.
+[experiments.PE_failure_raw_rul]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "drift_ablation"
+phase_1_run_name = "PE_run_1"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 16
+phase_2_settings_version = 22
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_failure_cycle]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "drift_ablation"
+phase_1_run_name = "PE_run_1"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 17
+phase_2_settings_version = 23
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "failure_cycle"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# Fold-fitted two-mode clustering uses only the latest available training
+# prefix per training UAV. Untrusted assignments retain the global fallback.
+[experiments.PE_fault_mode_global]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 18
+phase_2_settings_version = 24
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+fault_mode_strategy = "none"
+phase_3_enabled = false
+
+[experiments.PE_fault_mode_indicator]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 19
+phase_2_settings_version = 25
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+fault_mode_strategy = "indicator"
+phase_3_enabled = false
+
+[experiments.PE_fault_mode_experts]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 20
+phase_2_settings_version = 26
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+fault_mode_strategy = "experts"
+phase_3_enabled = false
+
+# Family compression is conditional on the signal ablation. The predeclared
+# all-family cells make the mechanism testable; edit the retained family list
+# only after recording the ablation decision.
+[experiments.PE_compression_individual]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 21
+phase_2_settings_version = 27
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+signal_compression_strategy = "none"
+phase_3_enabled = false
+
+[experiments.PE_compression_median]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 22
+phase_2_settings_version = 28
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+signal_compression_strategy = "median_only"
+phase_3_enabled = false
+
+[experiments.PE_compression_pca]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 23
+phase_2_settings_version = 29
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+signal_compression_strategy = "pca_only"
+phase_3_enabled = false
+
+[experiments.PE_compression_individual_median]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 24
+phase_2_settings_version = 30
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+signal_compression_strategy = "individual_plus_median"
+phase_3_enabled = false
+
+[experiments.PE_compression_individual_pca]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 25
+phase_2_settings_version = 31
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+signal_compression_strategy = "individual_plus_pca"
+phase_3_enabled = false
+
+# Prefix-density comparison preserves equal total UAV weight. The current20
+# control reuses the signal-ablation Phase 1 run; stride 5 owns a new run.
+[experiments.PE_dense_current20]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_signal_family_ablation"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 26
+phase_2_settings_version = 32
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_dense_stride5]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "signal_family_ablation"
+phase_1_run_name = "PE_dense_stride5"
+phase_1_mode = "rebuild"
+prefix_variant = "dense_stride_5"
+scenario_profile = "current"
+phase_2_run_number = 27
+phase_2_settings_version = 33
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# Matched raw and robust-normalized telemetry recipes contain the same feature
+# concepts; the combined cell tests whether absolute context remains useful.
+[experiments.PE_normalization_raw]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "baseline_normalization"
+phase_1_run_name = "PE_baseline_normalization"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 28
+phase_2_settings_version = 34
+architectures = ["extra_trees", "xgboost"]
+feature_set = "normalization_raw"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_normalization_robust]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "baseline_normalization"
+phase_1_run_name = "PE_baseline_normalization"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 29
+phase_2_settings_version = 35
+architectures = ["extra_trees", "xgboost"]
+feature_set = "normalization_robust"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE_normalization_combined]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "baseline_normalization"
+phase_1_run_name = "PE_baseline_normalization"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "current"
+phase_2_run_number = 30
+phase_2_settings_version = 36
+architectures = ["extra_trees", "xgboost"]
+feature_set = "normalization_combined"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false

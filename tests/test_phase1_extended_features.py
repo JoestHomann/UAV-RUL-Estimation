@@ -108,8 +108,33 @@ class PhaseOneExtendedFeatureTests(unittest.TestCase):
 
         self.assertEqual(len(MODEL_CHANNELS), 22)
         self.assertEqual(len(legacy), 606)
-        self.assertEqual(len(extended), 1288)
+        self.assertEqual(len(extended), 1598)
         self.assertTrue(set(legacy).issubset(extended))
+
+    def test_degradation_onset_features_are_direction_normalized(self) -> None:
+        history = synthetic_history("UAV_A", 80)
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+
+        self.assertGreater(
+            features["feature__telemetry_13__degradation_score"],
+            0.0,
+        )
+        self.assertLess(
+            features["feature__telemetry_16__degradation_score"],
+            0.0,
+        )
+        self.assertEqual(
+            features["feature__telemetry_13__degradation_onset_detected"],
+            1.0,
+        )
+        self.assertLessEqual(
+            features["feature__telemetry_13__degradation_onset_cycle"],
+            60.0,
+        )
 
     def test_extended_catalog_declares_control_and_candidate_recipes(self) -> None:
         history = synthetic_history("UAV_A", 80)
@@ -137,7 +162,7 @@ class PhaseOneExtendedFeatureTests(unittest.TestCase):
                 "screened_robust": 558,
                 "screened_acceleration": 400,
                 "screened_compact": 256,
-                "all_generated_v2": 1288,
+                "all_generated_v2": 1598,
             },
         )
         self.assertTrue(catalog["screened"].equals(catalog["screened_v1"]))
@@ -195,6 +220,72 @@ class PhaseOneExtendedFeatureTests(unittest.TestCase):
             self.assertTrue(
                 catalog.loc[robust, "screened_drift_replaced"].all()
             )
+
+    def test_signal_family_sets_add_only_the_declared_temporal_groups(self) -> None:
+        history = synthetic_history("UAV_A", 80)
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+        feature_sets = (
+            "signal_control",
+            "signal_family_13_16_22_25_28",
+            "signal_family_19_21",
+            "signal_family_15_23",
+            "signal_family_07",
+            "signal_all_families",
+        )
+        catalog = feature_catalog(
+            list(features),
+            feature_profile="extended",
+            feature_sets=feature_sets,
+        ).set_index("feature_name")
+
+        counts = {name: int(catalog[name].sum()) for name in feature_sets}
+        self.assertEqual(
+            counts,
+            {
+                "signal_control": 24,
+                "signal_family_13_16_22_25_28": 159,
+                "signal_family_19_21": 76,
+                "signal_family_15_23": 76,
+                "signal_family_07": 55,
+                "signal_all_families": 294,
+            },
+        )
+        temporal = "feature__telemetry_19__degradation_change_magnitude"
+        self.assertFalse(catalog.loc[temporal, "signal_control"])
+        self.assertTrue(catalog.loc[temporal, "signal_family_19_21"])
+        self.assertFalse(catalog.loc[temporal, "signal_family_15_23"])
+        self.assertTrue(catalog.loc[temporal, "signal_all_families"])
+
+    def test_baseline_normalization_sets_are_matched_and_composable(self) -> None:
+        history = synthetic_history("UAV_A", 80)
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+        feature_sets = (
+            "normalization_raw",
+            "normalization_robust",
+            "normalization_combined",
+        )
+        catalog = feature_catalog(
+            list(features),
+            feature_profile="extended",
+            feature_sets=feature_sets,
+        )
+        counts = {name: int(catalog[name].sum()) for name in feature_sets}
+        self.assertEqual(
+            counts,
+            {
+                "normalization_raw": 310,
+                "normalization_robust": 310,
+                "normalization_combined": 618,
+            },
+        )
 
     def test_stratified_policy_caps_only_when_unique_cutoffs_require_it(self) -> None:
         train = pd.concat(

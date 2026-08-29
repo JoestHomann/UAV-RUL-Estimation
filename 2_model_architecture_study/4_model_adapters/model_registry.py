@@ -88,6 +88,8 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "max_depth",
         "min_samples_leaf",
         "max_features",
+        "fault_mode_strategy",
+        "signal_compression_strategy",
     },
     "xgboost": {
         "maximum_trees",
@@ -98,6 +100,8 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "colsample_bytree",
         "reg_alpha",
         "reg_lambda",
+        "fault_mode_strategy",
+        "signal_compression_strategy",
     },
     "catboost": {
         "maximum_trees",

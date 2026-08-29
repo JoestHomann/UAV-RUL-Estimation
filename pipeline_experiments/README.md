@@ -5,6 +5,8 @@ engineering, Phase 2 architecture studies, and optional Phase 3 final training.
 It is deliberately separate from `0_data_analysis`: the files here describe
 reproducible end-to-end experiments and their outcomes, while that phase owns
 feature discovery and diagnostics.
+The compact scientific register, experiment rationale, and result record live
+in [`pipeline_experiments.md`](../literature_and_planning/development_documentation/pipeline_experiments.md).
 
 ## Run an experiment
 
@@ -21,6 +23,59 @@ From the repository root:
 Each experiment can set `from_stage` and `through_stage` in the TOML. These
 values are used when the command does not provide the corresponding CLI
 option; explicit CLI options override the catalog for one invocation.
+
+## Signal-family ablation
+
+Run the complete development-only degradation-signal study with one command:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py `
+  --group PE_signal_family_ablation
+```
+
+The group builds one shared `current20` Phase 1 run, then compares XGBoost and
+ExtraTrees using the same folds, seeds, raw target, symmetric loss, and
+25-candidate budget. The control contains cycle age and the latest value of all
+22 nonconstant telemetry channels. Treatments add temporal features for
+`13/16/22/25/28`, `19/21`, `15/23`, `07`, or all four families.
+
+Every component has `phase_2_scope = "selection_only"`. After all six complete,
+the runner writes paired fold results, a summary, a figure, and a manifest to
+`pipeline_experiments/runs/PE_signal_family_ablation/reporting/`. Positive
+`r2_improvement` and `rmse_improvement` favor the treatment. Retain a family
+only when gains repeat across folds and both model families.
+
+## Degradation-learning experiments
+
+The following groups are predeclared development studies. Every cell uses
+XGBoost and ExtraTrees, a 25-candidate Step 5 search, and keeps locked Steps
+6-7 closed:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --group PE_failure_cycle_target
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --group PE_baseline_normalization
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --group PE_fault_mode
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --group PE_signal_compression
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --group PE_dense_prefix_training
+```
+
+- `PE_failure_cycle_target` compares direct raw-RUL regression with prediction
+  of total failure cycle followed by `RUL = predicted_failure_cycle - cutoff`.
+- `PE_baseline_normalization` compares matched raw temporal features,
+  early-life robust-normalized features, and their union.
+- `PE_fault_mode` compares one global model, a fold-fitted two-mode indicator,
+  and two fold-fitted mode experts with a global fallback for uncertain UAVs.
+- `PE_signal_compression` compares individual degradation features with
+  direction-oriented family medians and fold-fitted family PCA scores, alone
+  and alongside the individual features.
+- `PE_dense_prefix_training` compares `current20` with five-cycle prefix
+  spacing while preserving equal total training weight per UAV.
+
+After a group finishes, its `reporting/` folder contains
+`paired_fold_results.csv`, `paired_summary.csv`,
+`paired_comparison.png`, and `report_manifest.json`. The fault-mode expert and
+dense-prefix cells perform more fitting work than their controls and should be
+expected to run longer.
 
 ## Target/scenario 2x2 experiment
 
@@ -106,6 +161,8 @@ then edit the question-specific fields:
   construction policy;
 - `architectures`, `feature_set`, `candidate_budget`, and seeds choose the
   Phase 2 study;
+- `fault_mode_strategy` and `signal_compression_strategy` select fold-fitted
+  tabular transformations declared by an experiment;
 - `phase_2_scope = "selection_only"` stops at development selection, while
   `"complete"` permits the locked evaluation and comparison;
 - `target_profile` and `prediction_profile` choose raw/capped targets and
@@ -117,9 +174,9 @@ The global `[execution].max_workers` setting controls parallel Step 5 and Step
 6 study workers for every experiment. Set it to a positive integer or to
 `"auto"`; it is an execution setting, not a scientific model setting.
 
-The manager does not create an implicit Cartesian product. Every block is one
-named scientific question, which keeps leaderboard submissions and result
-interpretation straightforward.
+The manager does not create an implicit Cartesian product. Every experiment
+block remains one named scientific question. An `[experiment_groups.*]` table
+only orders explicitly listed experiments and invokes its declared reporter.
 
 ## Compare and record scores
 

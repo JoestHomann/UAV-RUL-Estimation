@@ -22,22 +22,54 @@ class TargetPolicy:
     def from_settings(cls, value: dict[str, Any]) -> "TargetPolicy":
         mode = value.get("mode")
         maximum = value.get("maximum_rul")
-        if mode not in {"raw", "piecewise_cap"}:
+        if mode not in {"raw", "piecewise_cap", "failure_cycle"}:
             raise PolicyError(f"Unknown target mode {mode!r}")
-        if mode == "raw" and maximum is not None:
-            raise PolicyError("Raw target policy cannot define maximum_rul")
+        if mode in {"raw", "failure_cycle"} and maximum is not None:
+            raise PolicyError(f"{mode} target policy cannot define maximum_rul")
         if mode == "piecewise_cap":
             if maximum is None or not np.isfinite(maximum) or float(maximum) <= 0:
                 raise PolicyError("Piecewise target cap must be finite and positive")
             maximum = float(maximum)
         return cls(mode=mode, maximum_rul=maximum)
 
-    def transform(self, values: NDArray[np.float64]) -> NDArray[np.float64]:
+    def transform(
+        self,
+        values: NDArray[np.float64],
+        cutoffs: NDArray[np.float64] | None = None,
+    ) -> NDArray[np.float64]:
         result = np.asarray(values, dtype=np.float64).copy()
         if self.mode == "piecewise_cap":
             assert self.maximum_rul is not None
             result = np.minimum(result, self.maximum_rul)
+        elif self.mode == "failure_cycle":
+            result = result + self._validated_cutoffs(cutoffs, result)
         return result
+
+    def inverse_predictions(
+        self,
+        predictions: NDArray[np.float64],
+        cutoffs: NDArray[np.float64] | None = None,
+    ) -> NDArray[np.float64]:
+        """Return raw-RUL predictions for evaluation and downstream use."""
+
+        result = np.asarray(predictions, dtype=np.float64).copy()
+        if self.mode == "failure_cycle":
+            result = result - self._validated_cutoffs(cutoffs, result)
+        return result
+
+    @staticmethod
+    def _validated_cutoffs(
+        cutoffs: NDArray[np.float64] | None,
+        reference: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        if cutoffs is None:
+            raise PolicyError("failure_cycle target mode requires endpoint cutoffs")
+        values = np.asarray(cutoffs, dtype=np.float64).reshape(-1)
+        if values.shape != reference.reshape(-1).shape:
+            raise PolicyError("Endpoint cutoffs do not align with target rows")
+        if not np.isfinite(values).all() or np.any(values < 0.0):
+            raise PolicyError("Endpoint cutoffs must be finite and nonnegative")
+        return values
 
     def to_dict(self) -> dict[str, Any]:
         return {"mode": self.mode, "maximum_rul": self.maximum_rul}

@@ -64,6 +64,8 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "max_depth",
         "min_samples_leaf",
         "max_features",
+        "fault_mode_strategy",
+        "signal_compression_strategy",
     },
     "xgboost": {
         "maximum_trees",
@@ -74,6 +76,8 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "colsample_bytree",
         "reg_alpha",
         "reg_lambda",
+        "fault_mode_strategy",
+        "signal_compression_strategy",
     },
     "catboost": {
         "maximum_trees",
@@ -443,13 +447,13 @@ class EvaluationSpecification(StrictModel):
 class TargetSpecification(StrictModel):
     """Define the target supplied to model fitting, never evaluation metrics."""
 
-    mode: Literal["raw", "piecewise_cap"]
+    mode: Literal["raw", "piecewise_cap", "failure_cycle"]
     maximum_rul: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def cap_matches_mode(self) -> TargetSpecification:
-        if self.mode == "raw" and self.maximum_rul is not None:
-            raise ValueError("raw target mode cannot define maximum_rul")
+        if self.mode in {"raw", "failure_cycle"} and self.maximum_rul is not None:
+            raise ValueError(f"{self.mode} target mode cannot define maximum_rul")
         if self.mode == "piecewise_cap" and self.maximum_rul is None:
             raise ValueError("piecewise_cap target mode requires maximum_rul")
         return self

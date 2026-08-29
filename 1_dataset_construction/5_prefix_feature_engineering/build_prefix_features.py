@@ -54,6 +54,22 @@ STATE_STATISTICS = (
     "time_since_last_change",
 )
 FEATURE_PROFILES = ("legacy", "extended")
+DEGRADATION_DIRECTIONS = {
+    "telemetry_07": 1.0,
+    "telemetry_13": 1.0,
+    "telemetry_15": 1.0,
+    "telemetry_16": -1.0,
+    "telemetry_19": 1.0,
+    "telemetry_21": 1.0,
+    "telemetry_22": 1.0,
+    "telemetry_23": -1.0,
+    "telemetry_25": -1.0,
+    "telemetry_28": -1.0,
+}
+DEGRADATION_THRESHOLD = 2.0
+DEGRADATION_PERSISTENCE = 3
+CHANGE_POINT_MIN_SEGMENT = 5
+CHANGE_POINT_MIN_MAGNITUDE = 1.0
 
 
 def linear_slope(cycles: np.ndarray, values: np.ndarray) -> float:
@@ -98,6 +114,51 @@ def current_run_length(values: np.ndarray) -> int:
             break
         length += 1
     return length
+
+
+def first_sustained_threshold(
+    scores: np.ndarray,
+    *,
+    start: int,
+    threshold: float = DEGRADATION_THRESHOLD,
+    persistence: int = DEGRADATION_PERSISTENCE,
+) -> int | None:
+    """Return the first prefix-local sustained degradation threshold index."""
+
+    final_start = len(scores) - persistence
+    for index in range(start, final_start + 1):
+        if np.all(scores[index : index + persistence] >= threshold):
+            return index
+    return None
+
+
+def degradation_change_point(
+    scores: np.ndarray,
+    *,
+    baseline_length: int,
+) -> tuple[int | None, float]:
+    """Find the strongest positive mean shift using only the observed prefix."""
+
+    first_split = max(baseline_length, CHANGE_POINT_MIN_SEGMENT)
+    final_split = len(scores) - CHANGE_POINT_MIN_SEGMENT
+    if first_split > final_split:
+        return None, 0.0
+
+    cumulative = np.cumsum(scores, dtype=float)
+    total = float(cumulative[-1])
+    best_split: int | None = None
+    best_magnitude = float("-inf")
+    for split in range(first_split, final_split + 1):
+        before_mean = float(cumulative[split - 1] / split)
+        after_mean = float((total - cumulative[split - 1]) / (len(scores) - split))
+        magnitude = after_mean - before_mean
+        if magnitude > best_magnitude:
+            best_split = split
+            best_magnitude = magnitude
+
+    if best_magnitude < CHANGE_POINT_MIN_MAGNITUDE:
+        return None, max(best_magnitude, 0.0)
+    return best_split, best_magnitude
 
 
 def extract_prefix_features(
@@ -201,6 +262,9 @@ def extract_prefix_features(
                 "history_robust_z": float(
                     (values[-1] - history_median) / history_scale
                 ),
+                "history_slope_robust_scaled": float(
+                    global_values["history_slope"] / baseline_scale
+                ),
             }
             for statistic, value in robust_global_values.items():
                 features[f"{FEATURE_PREFIX}{channel}__{statistic}"] = value
@@ -221,6 +285,16 @@ def extract_prefix_features(
                     ),
                     "baseline_robust_z": float(
                         (recent_median - baseline_median) / baseline_scale
+                    ),
+                    "slope_robust_scaled": float(
+                        window_summaries[int(window)]["slope"] / baseline_scale
+                    ),
+                    "delta_robust_scaled": float(
+                        window_summaries[int(window)]["delta"] / baseline_scale
+                    ),
+                    "last_minus_mean_robust_scaled": float(
+                        window_summaries[int(window)]["last_minus_mean"]
+                        / baseline_scale
                     ),
                 }
                 for statistic, value in robust_window_values.items():
@@ -250,6 +324,50 @@ def extract_prefix_features(
                     window_summaries[window]["mean"]
                     - global_values["history_mean"]
                 )
+
+            direction = DEGRADATION_DIRECTIONS.get(channel)
+            if direction is not None:
+                degradation_scores = (
+                    direction * (values - baseline_median) / baseline_scale
+                )
+                baseline_length = len(baseline)
+                onset_index = first_sustained_threshold(
+                    degradation_scores,
+                    start=baseline_length,
+                )
+                change_index, change_magnitude = degradation_change_point(
+                    degradation_scores,
+                    baseline_length=baseline_length,
+                )
+                degradation_values = {
+                    "degradation_score": float(degradation_scores[-1]),
+                    "degradation_peak_score": float(
+                        np.max(degradation_scores[baseline_length:])
+                        if len(degradation_scores) > baseline_length
+                        else np.max(degradation_scores)
+                    ),
+                    "degradation_onset_detected": float(onset_index is not None),
+                    "degradation_onset_cycle": (
+                        float(cycles[onset_index]) if onset_index is not None else 0.0
+                    ),
+                    "degradation_cycles_since_onset": (
+                        float(cycles[-1] - cycles[onset_index])
+                        if onset_index is not None
+                        else 0.0
+                    ),
+                    "degradation_change_detected": float(change_index is not None),
+                    "degradation_change_point_cycle": (
+                        float(cycles[change_index]) if change_index is not None else 0.0
+                    ),
+                    "degradation_cycles_since_change_point": (
+                        float(cycles[-1] - cycles[change_index])
+                        if change_index is not None
+                        else 0.0
+                    ),
+                    "degradation_change_magnitude": float(change_magnitude),
+                }
+                for statistic, value in degradation_values.items():
+                    features[f"{FEATURE_PREFIX}{channel}__{statistic}"] = value
 
         if channel in STATE_CHANNELS:
             transition_count = int(np.count_nonzero(differences != 0))

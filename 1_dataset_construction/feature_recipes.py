@@ -24,6 +24,15 @@ EXTENDED_FEATURE_SETS = (
     "screened_compact",
     "screened_drift_pruned",
     "screened_drift_replaced",
+    "signal_control",
+    "signal_family_13_16_22_25_28",
+    "signal_family_19_21",
+    "signal_family_15_23",
+    "signal_family_07",
+    "signal_all_families",
+    "normalization_raw",
+    "normalization_robust",
+    "normalization_combined",
     "all_generated_v2",
 )
 CATALOG_METADATA_COLUMNS = (
@@ -110,6 +119,55 @@ DRIFT_PRUNED_GLOBAL_STATISTICS = {
     "mean_abs_delta",
     "max_abs_delta",
 }
+SIGNAL_FAMILIES = {
+    "signal_family_13_16_22_25_28": {
+        "telemetry_13",
+        "telemetry_16",
+        "telemetry_22",
+        "telemetry_25",
+        "telemetry_28",
+    },
+    "signal_family_19_21": {"telemetry_19", "telemetry_21"},
+    "signal_family_15_23": {"telemetry_15", "telemetry_23"},
+    "signal_family_07": {"telemetry_07"},
+}
+SIGNAL_GLOBAL_STATISTICS = {
+    "baseline_delta",
+    "history_slope",
+    "baseline_robust_z",
+    "degradation_score",
+    "degradation_peak_score",
+    "degradation_onset_detected",
+    "degradation_onset_cycle",
+    "degradation_cycles_since_onset",
+    "degradation_change_detected",
+    "degradation_change_point_cycle",
+    "degradation_cycles_since_change_point",
+    "degradation_change_magnitude",
+}
+SIGNAL_WINDOW_STATISTICS = {
+    "slope",
+    "delta",
+    "last_minus_mean",
+    "baseline_robust_z",
+}
+NORMALIZATION_RAW_GLOBAL_STATISTICS = {"last", "history_slope"}
+NORMALIZATION_RAW_WINDOW_STATISTICS = {
+    "mean",
+    "slope",
+    "delta",
+    "last_minus_mean",
+}
+NORMALIZATION_ROBUST_GLOBAL_STATISTICS = {
+    "baseline_robust_z",
+    "history_slope_robust_scaled",
+}
+NORMALIZATION_ROBUST_WINDOW_STATISTICS = {
+    "baseline_robust_z",
+    "slope_robust_scaled",
+    "delta_robust_scaled",
+    "last_minus_mean_robust_scaled",
+}
 
 
 def _parse_feature(feature_name: str) -> tuple[str, str, str]:
@@ -157,6 +215,44 @@ def _is_drift_heavy(channel: str, statistic: str, window: str) -> bool:
     return window == "w50" and statistic == "sd"
 
 
+def _is_signal_temporal_feature(
+    channel: str,
+    statistic: str,
+    window: str,
+) -> bool:
+    if not channel:
+        return False
+    if statistic.startswith("state_"):
+        return channel in {"telemetry_07", "telemetry_16"}
+    if window == "contrast":
+        return statistic.endswith("_slope")
+    if window:
+        return statistic in SIGNAL_WINDOW_STATISTICS
+    return statistic in SIGNAL_GLOBAL_STATISTICS
+
+
+def _is_normalization_feature(
+    channel: str,
+    statistic: str,
+    window: str,
+    *,
+    robust: bool,
+) -> bool:
+    if not channel or window == "contrast":
+        return False
+    if robust:
+        return (
+            statistic in NORMALIZATION_ROBUST_WINDOW_STATISTICS
+            if window
+            else statistic in NORMALIZATION_ROBUST_GLOBAL_STATISTICS
+        )
+    return (
+        statistic in NORMALIZATION_RAW_WINDOW_STATISTICS
+        if window
+        else statistic in NORMALIZATION_RAW_GLOBAL_STATISTICS
+    )
+
+
 def feature_catalog(
     feature_names: list[str],
     *,
@@ -201,6 +297,31 @@ def feature_catalog(
             and not window
             and statistic in CONTEXT_STATISTICS
         )
+        signal_control = age or statistic == "last"
+        signal_memberships = {
+            name: signal_control
+            or (
+                channel in family_channels
+                and _is_signal_temporal_feature(channel, statistic, window)
+            )
+            for name, family_channels in SIGNAL_FAMILIES.items()
+        }
+        signal_all = signal_control or (
+            channel in DEGRADATION_CHANNELS
+            and _is_signal_temporal_feature(channel, statistic, window)
+        )
+        normalization_raw = age or _is_normalization_feature(
+            channel,
+            statistic,
+            window,
+            robust=False,
+        )
+        normalization_robust = age or _is_normalization_feature(
+            channel,
+            statistic,
+            window,
+            robust=True,
+        )
         memberships = {
             "age_only": age,
             "last_values": age or statistic == "last",
@@ -221,6 +342,12 @@ def feature_catalog(
             "screened_compact": compact,
             "screened_drift_pruned": drift_pruned,
             "screened_drift_replaced": drift_pruned or drift_replacement,
+            "signal_control": signal_control,
+            **signal_memberships,
+            "signal_all_families": signal_all,
+            "normalization_raw": normalization_raw,
+            "normalization_robust": normalization_robust,
+            "normalization_combined": normalization_raw or normalization_robust,
             "all_generated_v2": True,
         }
         record: dict[str, Any] = {
