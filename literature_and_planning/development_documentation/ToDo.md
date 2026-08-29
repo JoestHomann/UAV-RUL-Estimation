@@ -13,4 +13,5 @@
 - Different feature scaling instead of robust scaling?
 - GANs for increasing the dataset size?
 - RNN architecture? Better Transformer architecture? For architecture study
+- Increase or decrease capacity of the models? Reduce under- or overfitting?
 - Why is the banana curved, not straight? LG Joest
