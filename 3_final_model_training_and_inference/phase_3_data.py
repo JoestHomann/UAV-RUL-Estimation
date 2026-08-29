@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from sequence_data_adapter import (
@@ -18,6 +19,22 @@ from trajectory_data_adapter import (
 )
 
 from phase_3_common import Phase3Error
+from phase_3_common import REPOSITORY_ROOT
+
+
+def _manifest_path(contract: dict[str, Any], name: str) -> Path:
+    """Resolve one run-specific adapter manifest recorded in the contract."""
+
+    manifests = contract.get("data_manifests", {})
+    value = manifests.get(name) if isinstance(manifests, dict) else None
+    if not isinstance(value, str) or not value:
+        raise Phase3Error(f"Final training contract has no {name} data manifest")
+    path = (REPOSITORY_ROOT / value).resolve()
+    try:
+        path.relative_to(REPOSITORY_ROOT.resolve())
+    except ValueError as error:
+        raise Phase3Error(f"{name} data manifest escapes the repository") from error
+    return path
 
 
 def _tabular_feature_set(contract: dict[str, Any]) -> str:
@@ -32,21 +49,23 @@ def load_final_training_data(
 
     representation = contract["representation"]
     if representation in {"none", "tabular"}:
-        dataset = TabularDataAdapter().load_training(_tabular_feature_set(contract))
+        dataset = TabularDataAdapter(
+            _manifest_path(contract, "tabular")
+        ).load_training(_tabular_feature_set(contract))
         expected = list(contract["input_schema"]["feature_names"])
         if list(dataset.features.columns) != expected:
             raise Phase3Error("Final tabular training feature order changed")
         return dataset, None
     if representation == "sequence":
         lookback = int(contract["input_schema"]["lookback"])
-        adapter = SequenceDataAdapter()
+        adapter = SequenceDataAdapter(_manifest_path(contract, "sequence"))
         dataset = adapter.load_training(lookback)
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final sequence channel order changed")
         scaler = adapter.fit_channel_scaler(contract["training"]["uav_ids"])
         return scaler.transform(dataset), scaler
     if representation == "trajectory":
-        adapter = TrajectoryDataAdapter()
+        adapter = TrajectoryDataAdapter(_manifest_path(contract, "trajectory"))
         dataset = adapter.load_training()
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final trajectory channel order changed")
@@ -63,7 +82,9 @@ def load_final_test_data(
 
     representation = contract["representation"]
     if representation in {"none", "tabular"}:
-        dataset = TabularDataAdapter().load_test(_tabular_feature_set(contract))
+        dataset = TabularDataAdapter(
+            _manifest_path(contract, "tabular")
+        ).load_test(_tabular_feature_set(contract))
         expected = list(contract["input_schema"]["feature_names"])
         if list(dataset.features.columns) != expected:
             raise Phase3Error("Final test feature order differs from the contract")
@@ -72,14 +93,16 @@ def load_final_test_data(
         if not isinstance(preprocessor, RobustChannelScaler):
             raise Phase3Error("Sequence inference requires its fitted channel scaler")
         lookback = int(contract["input_schema"]["lookback"])
-        dataset = SequenceDataAdapter().load_test(lookback)
+        dataset = SequenceDataAdapter(
+            _manifest_path(contract, "sequence")
+        ).load_test(lookback)
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final test channel order differs from the contract")
         return preprocessor.transform(dataset)
     if representation == "trajectory":
         if not isinstance(preprocessor, TrajectoryChannelScaler):
             raise Phase3Error("Trajectory inference requires its fitted channel scaler")
-        adapter = TrajectoryDataAdapter()
+        adapter = TrajectoryDataAdapter(_manifest_path(contract, "trajectory"))
         dataset = adapter.load_test()
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final test trajectory channel order differs from the contract")

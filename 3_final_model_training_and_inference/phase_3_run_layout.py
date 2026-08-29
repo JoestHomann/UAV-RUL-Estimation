@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import tomllib
 from typing import Any
 
@@ -44,9 +45,12 @@ def read_run_number(settings_path: Path = SETTINGS_PATH) -> int:
     """Read the active Phase 3 run number from its human-edited TOML."""
 
     try:
-        with settings_path.open("rb") as stream:
-            payload = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        if settings_path.suffix.lower() == ".json":
+            payload = json.loads(settings_path.read_text(encoding="utf-8"))
+        else:
+            with settings_path.open("rb") as stream:
+                payload = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError, json.JSONDecodeError) as error:
         raise Phase3RunLayoutError(
             f"Cannot read Phase 3 settings {settings_path}: {error}"
         ) from error

@@ -40,6 +40,7 @@ from phase_3_common import (  # noqa: E402
     artifacts_directory,
     atomic_replace,
     complete_manifest,
+    configured_repository_path,
     final_model_path,
     final_preprocessor_path,
     invalidate_downstream_manifests,
@@ -111,7 +112,12 @@ def train_final_model(run_number: int, *, force: bool = False) -> dict[str, Any]
         training_data, preprocessor = load_final_training_data(contract)
         if len(training_data) != int(contract["training"]["row_count"]):
             raise FinalModelTrainingError("Final training row count changed")
-        factory = ModelAdapterFactory(PHASE_2_SPECIFICATION_PATH)
+        specification_path = configured_repository_path(
+            settings,
+            "phase_2_specification",
+            PHASE_2_SPECIFICATION_PATH,
+        )
+        factory = ModelAdapterFactory(specification_path)
         context = TrainingRunContext(
             stage="step_6",
             model_family=contract["model_family"],

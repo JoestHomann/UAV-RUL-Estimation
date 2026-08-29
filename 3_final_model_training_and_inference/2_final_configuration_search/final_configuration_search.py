@@ -53,6 +53,7 @@ from phase_3_common import (  # noqa: E402
     PHASE_2_SPECIFICATION_PATH,
     Phase3Error,
     complete_manifest,
+    configured_repository_path,
     invalidate_downstream_manifests,
     load_resolved_phase_3_settings,
     read_json,
@@ -91,6 +92,11 @@ CANDIDATE_COLUMNS = [
     "mean_fold_r2",
     "mean_fold_mae",
     "mean_fold_bias",
+    "mean_fold_overprediction_rate",
+    "mean_fold_mean_overprediction",
+    "mean_fold_root_mean_squared_overprediction",
+    "mean_fold_underprediction_rate",
+    "mean_fold_mean_underprediction",
     "mean_training_seconds",
     "total_training_seconds",
     "mean_inference_seconds",
@@ -117,6 +123,15 @@ FOLD_COLUMNS = [
     "r2",
     "mae",
     "bias",
+    "overprediction_rate",
+    "mean_overprediction",
+    "root_mean_squared_overprediction",
+    "overprediction_q90",
+    "overprediction_q95",
+    "maximum_overprediction",
+    "underprediction_rate",
+    "mean_underprediction",
+    "root_mean_squared_underprediction",
     "training_rows",
     "training_uavs",
     "validation_rows",
@@ -141,8 +156,18 @@ def _stable_json(value: Any) -> str:
 class FinalSearchSplitRepository:
     """Cache only training-prefix and development-scenario fold views."""
 
-    def __init__(self, expected_scenarios: int) -> None:
+    def __init__(
+        self,
+        expected_scenarios: int,
+        *,
+        tabular_manifest_path: Path | None = None,
+        sequence_manifest_path: Path | None = None,
+        trajectory_manifest_path: Path | None = None,
+    ) -> None:
         self.expected_scenarios = expected_scenarios
+        self._tabular_manifest_path = tabular_manifest_path
+        self._sequence_manifest_path = sequence_manifest_path
+        self._trajectory_manifest_path = trajectory_manifest_path
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
         self._trajectory_adapter: TrajectoryDataAdapter | None = None
@@ -152,17 +177,29 @@ class FinalSearchSplitRepository:
 
     def _tabular(self) -> TabularDataAdapter:
         if self._tabular_adapter is None:
-            self._tabular_adapter = TabularDataAdapter()
+            self._tabular_adapter = (
+                TabularDataAdapter(self._tabular_manifest_path)
+                if self._tabular_manifest_path is not None
+                else TabularDataAdapter()
+            )
         return self._tabular_adapter
 
     def _sequence(self) -> SequenceDataAdapter:
         if self._sequence_adapter is None:
-            self._sequence_adapter = SequenceDataAdapter()
+            self._sequence_adapter = (
+                SequenceDataAdapter(self._sequence_manifest_path)
+                if self._sequence_manifest_path is not None
+                else SequenceDataAdapter()
+            )
         return self._sequence_adapter
 
     def _trajectory(self) -> TrajectoryDataAdapter:
         if self._trajectory_adapter is None:
-            self._trajectory_adapter = TrajectoryDataAdapter()
+            self._trajectory_adapter = (
+                TrajectoryDataAdapter(self._trajectory_manifest_path)
+                if self._trajectory_manifest_path is not None
+                else TrajectoryDataAdapter()
+            )
         return self._trajectory_adapter
 
     @staticmethod
@@ -308,7 +345,11 @@ class FinalConfigurationSearchRunner:
         self.family = str(self.selection["selected_model_family"])
         self.representation = str(self.selection["representation"])
         self.phase_2_specification = read_json(
-            PHASE_2_SPECIFICATION_PATH,
+            configured_repository_path(
+                self.settings,
+                "phase_2_specification",
+                PHASE_2_SPECIFICATION_PATH,
+            ),
             "Phase 2 experiment specification",
         )
         self.phase_2_settings = self.phase_2_specification["settings"]
@@ -340,7 +381,36 @@ class FinalConfigurationSearchRunner:
             if output_dir is None
             else self.output_dir / "tensorboard_logs"
         )
-        self.factory = ModelAdapterFactory(PHASE_2_SPECIFICATION_PATH)
+        self.phase_2_specification_path = configured_repository_path(
+            self.settings,
+            "phase_2_specification",
+            PHASE_2_SPECIFICATION_PATH,
+        )
+        self.tabular_manifest_path = configured_repository_path(
+            self.settings,
+            "tabular_manifest",
+            PHASE_2_DIR
+            / "2_tabular_data_adapter"
+            / "artifacts"
+            / "tabular_dataset_manifest.json",
+        )
+        self.sequence_manifest_path = configured_repository_path(
+            self.settings,
+            "sequence_manifest",
+            PHASE_2_DIR
+            / "3_sequence_data_adapter"
+            / "artifacts"
+            / "sequence_dataset_manifest.json",
+        )
+        self.trajectory_manifest_path = configured_repository_path(
+            self.settings,
+            "trajectory_manifest",
+            PHASE_2_DIR
+            / "3_trajectory_data_adapter"
+            / "artifacts"
+            / "trajectory_dataset_manifest.json",
+        )
+        self.factory = ModelAdapterFactory(self.phase_2_specification_path)
 
     def _clear_output(self) -> None:
         for path in (
@@ -517,6 +587,20 @@ class FinalConfigurationSearchRunner:
                     "r2": metrics["r2"],
                     "mae": metrics["mae"],
                     "bias": metrics["bias"],
+                    **{
+                        name: metrics[name]
+                        for name in (
+                            "overprediction_rate",
+                            "mean_overprediction",
+                            "root_mean_squared_overprediction",
+                            "overprediction_q90",
+                            "overprediction_q95",
+                            "maximum_overprediction",
+                            "underprediction_rate",
+                            "mean_underprediction",
+                            "root_mean_squared_underprediction",
+                        )
+                    },
                     "training_rows": len(split.training),
                     "training_uavs": int(
                         split.training.metadata["uav_id"].nunique()
@@ -556,6 +640,21 @@ class FinalConfigurationSearchRunner:
             "mean_fold_r2": float(np.mean(values("r2"))),
             "mean_fold_mae": float(np.mean(values("mae"))),
             "mean_fold_bias": float(np.mean(values("bias"))),
+            "mean_fold_overprediction_rate": float(
+                np.mean(values("overprediction_rate"))
+            ),
+            "mean_fold_mean_overprediction": float(
+                np.mean(values("mean_overprediction"))
+            ),
+            "mean_fold_root_mean_squared_overprediction": float(
+                np.mean(values("root_mean_squared_overprediction"))
+            ),
+            "mean_fold_underprediction_rate": float(
+                np.mean(values("underprediction_rate"))
+            ),
+            "mean_fold_mean_underprediction": float(
+                np.mean(values("mean_underprediction"))
+            ),
             "mean_training_seconds": float(np.mean(values("training_seconds"))),
             "total_training_seconds": float(np.sum(values("training_seconds"))),
             "mean_inference_seconds": float(np.mean(values("inference_seconds"))),
@@ -699,7 +798,12 @@ class FinalConfigurationSearchRunner:
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = self._study()
-        split_repository = FinalSearchSplitRepository(self.expected_scenarios)
+        split_repository = FinalSearchSplitRepository(
+            self.expected_scenarios,
+            tabular_manifest_path=self.tabular_manifest_path,
+            sequence_manifest_path=self.sequence_manifest_path,
+            trajectory_manifest_path=self.trajectory_manifest_path,
+        )
         folds = split_repository.outer_fold_labels(self.representation)
         if len(folds) != 5:
             raise FinalConfigurationSearchError(

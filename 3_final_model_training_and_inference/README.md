@@ -6,8 +6,10 @@ model on all 100 training UAVs, predicts the test UAVs, and verifies the Kaggle
 submission.
 
 The human-edited source of truth is
-`1_winning_architecture_selection/phase_3_settings.toml`. The generated JSON,
-model, prediction, and submission artifacts must not be edited manually.
+`1_winning_architecture_selection/phase_3_settings.toml`. The experiment
+manager may instead pass a generated, resolved JSON settings file. In both
+cases, the generated JSON, model, prediction, and submission artifacts must
+not be edited manually.
 
 Run all seven steps from the repository root. Step 7 automatically creates the
 model-agnostic plots after submission verification:

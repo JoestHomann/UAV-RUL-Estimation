@@ -10,6 +10,7 @@ anomaly_priority = "0_data_analysis/core_data_analysis/figures/anomalies/uav_ano
 # Phase 1 reads these tables directly from this same file when a run rebuilds.
 [profiles.extended_features]
 feature_profile = "extended"
+scenario_profile = "current"
 feature_sets = [
     "age_only",
     "last_values",
@@ -25,6 +26,7 @@ prefix_variants = ["current20", "prefix40_stratified"]
 
 [profiles.drift_ablation_features]
 feature_profile = "extended"
+scenario_profile = "current"
 feature_sets = [
     "age_only",
     "screened_v1",
@@ -32,6 +34,12 @@ feature_sets = [
     "screened_drift_replaced",
 ]
 prefix_variants = ["current20"]
+
+[scenario_profiles.current]
+assignment = "eligible_random"
+development_scenarios = 5
+locked_scenarios = 20
+seed = 20260814
 
 [prefix_variants.current20]
 strategy = "empirical"

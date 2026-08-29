@@ -412,7 +412,19 @@ class EvaluationSpecification(StrictModel):
     reporting a more favorable metric or using a different weighting policy.
     """
 
-    metrics: list[Literal["r2", "rmse", "mae", "bias"]]
+    metrics: list[
+        Literal[
+            "r2",
+            "rmse",
+            "mae",
+            "bias",
+            "overprediction_rate",
+            "mean_overprediction",
+            "root_mean_squared_overprediction",
+            "underprediction_rate",
+            "mean_underprediction",
+        ]
+    ]
     reported_groups: list[
         Literal[
             "overall",
@@ -420,11 +432,56 @@ class EvaluationSpecification(StrictModel):
             "outer_fold",
             "age_band",
             "lifetime_quantile",
+            "rul_band",
         ]
     ]
     prediction_minimum: float
     bootstrap_repetitions: PositiveInt
     bootstrap_seed: int
+
+
+class TargetSpecification(StrictModel):
+    """Define the target supplied to model fitting, never evaluation metrics."""
+
+    mode: Literal["raw", "piecewise_cap"]
+    maximum_rul: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def cap_matches_mode(self) -> TargetSpecification:
+        if self.mode == "raw" and self.maximum_rul is not None:
+            raise ValueError("raw target mode cannot define maximum_rul")
+        if self.mode == "piecewise_cap" and self.maximum_rul is None:
+            raise ValueError("piecewise_cap target mode requires maximum_rul")
+        return self
+
+
+class PredictionPolicySpecification(StrictModel):
+    """Define conservative fitting and post-model prediction behavior."""
+
+    loss: Literal["symmetric_rmse", "asymmetric_mse", "quantile"]
+    overprediction_weight: float = Field(ge=1.0)
+    quantile: float = Field(gt=0.0, le=0.5)
+    calibration: Literal["none", "fixed_offset"]
+    safety_offset: float = Field(ge=0.0)
+    non_overprediction_coverage: float = Field(gt=0.0, lt=1.0)
+
+    @model_validator(mode="after")
+    def inactive_values_are_neutral(self) -> PredictionPolicySpecification:
+        if self.loss == "symmetric_rmse" and self.overprediction_weight != 1.0:
+            raise ValueError(
+                "symmetric_rmse requires overprediction_weight = 1.0"
+            )
+        if self.loss != "asymmetric_mse" and self.overprediction_weight != 1.0:
+            raise ValueError(
+                "overprediction_weight only applies to asymmetric_mse"
+            )
+        if self.loss != "quantile" and self.quantile != 0.5:
+            raise ValueError("quantile must be 0.5 unless loss = 'quantile'")
+        if self.calibration == "none" and self.safety_offset != 0.0:
+            raise ValueError("calibration = 'none' requires safety_offset = 0.0")
+        if self.calibration == "fixed_offset" and self.safety_offset <= 0.0:
+            raise ValueError("fixed_offset calibration requires a positive offset")
+        return self
 
 
 class RepresentationSpecification(StrictModel):
@@ -631,6 +688,8 @@ class ArchitectureStudySettings(StrictModel):
     study: StudySpecification
     tuning: TuningSpecification
     evaluation: EvaluationSpecification
+    target: TargetSpecification
+    prediction_policy: PredictionPolicySpecification
     representations: RepresentationSpecification
     preprocessing: PreprocessingSpecification
     neural_training: NeuralTrainingSpecification
@@ -786,11 +845,14 @@ def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> ArchitectureStudySettin
     """
 
     try:
-        # "tomllib" expects a binary stream and performs no type coercion of
-        # our own.  The resulting Python mapping is validated in the next step.
-        with path.open("rb") as stream:
-            payload = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        if path.suffix.lower() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            # "tomllib" expects a binary stream and performs no type coercion
+            # of our own. The resulting mapping is validated in the next step.
+            with path.open("rb") as stream:
+                payload = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError, json.JSONDecodeError) as error:
         raise SettingsError(f"Cannot read settings {path}: {error}") from error
 
     try:

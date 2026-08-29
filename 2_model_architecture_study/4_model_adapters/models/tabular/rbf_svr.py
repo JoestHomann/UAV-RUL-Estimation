@@ -30,7 +30,7 @@ class RBFSVRAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         training_values, self.feature_names = tabular_values(training_data)
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
         self.scaler = RobustScaler(
             with_centering=True,

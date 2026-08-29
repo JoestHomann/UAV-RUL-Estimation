@@ -255,3 +255,9 @@ __marimo__/
 # TensorBoard events, test predictions, and submissions. They are generated
 # from the tracked TOML and implementation and can become large.
 3_final_model_training_and_inference/runs/
+
+# Declarative experiment-manager outputs. The catalog and scripts are tracked;
+# generated Phase 1/2/3 preparation data and manual score records are local
+# run artifacts.
+pipeline_experiments/runs/
+pipeline_experiments/experiment_comparison.csv

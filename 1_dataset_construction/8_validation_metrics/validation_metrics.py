@@ -26,6 +26,13 @@ def metric_specification() -> dict[str, Any]:
             "rmse": "sqrt(mean((y_pred-y_true)^2))",
             "mae": "mean(abs(y_pred-y_true))",
             "bias": "mean(y_pred-y_true)",
+            "overprediction_rate": "mean(y_pred > y_true)",
+            "mean_overprediction": "mean(max(y_pred-y_true, 0))",
+            "root_mean_squared_overprediction": (
+                "sqrt(mean(max(y_pred-y_true, 0)^2))"
+            ),
+            "underprediction_rate": "mean(y_pred < y_true)",
+            "mean_underprediction": "mean(max(y_true-y_pred, 0))",
         },
         "reported_groups": [
             "overall",
@@ -33,6 +40,7 @@ def metric_specification() -> dict[str, Any]:
             "outer_fold",
             "age_band",
             "lifetime_quantile",
+            "rul_band",
         ],
         "uncertainty": "95% UAV-bootstrap interval for R2",
     }
@@ -49,6 +57,8 @@ def regression_metrics(table: pd.DataFrame) -> dict[str, Any]:
     y_true = table["y_true"].to_numpy(dtype=float)
     y_pred = table["y_pred"].to_numpy(dtype=float)
     residual = y_pred - y_true
+    overprediction = np.maximum(residual, 0.0)
+    underprediction = np.maximum(-residual, 0.0)
     return {
         "rows": int(len(table)),
         "uavs": int(table[ID_COLUMN].nunique()),
@@ -56,6 +66,19 @@ def regression_metrics(table: pd.DataFrame) -> dict[str, Any]:
         "rmse": float(np.sqrt(np.mean(np.square(residual)))),
         "mae": float(np.mean(np.abs(residual))),
         "bias": float(np.mean(residual)),
+        "overprediction_rate": float(np.mean(residual > 0.0)),
+        "mean_overprediction": float(np.mean(overprediction)),
+        "root_mean_squared_overprediction": float(
+            np.sqrt(np.mean(np.square(overprediction)))
+        ),
+        "overprediction_q90": float(np.quantile(overprediction, 0.90)),
+        "overprediction_q95": float(np.quantile(overprediction, 0.95)),
+        "maximum_overprediction": float(np.max(overprediction)),
+        "underprediction_rate": float(np.mean(residual < 0.0)),
+        "mean_underprediction": float(np.mean(underprediction)),
+        "root_mean_squared_underprediction": float(
+            np.sqrt(np.mean(np.square(underprediction)))
+        ),
     }
 
 
@@ -123,6 +146,11 @@ def evaluate_predictions(
 
     evaluated = predictions.copy()
     evaluated["age_band"] = age_band(evaluated["cutoff"])
+    evaluated["rul_band"] = pd.cut(
+        evaluated["y_true"],
+        bins=[-np.inf, 25.0, 50.0, 100.0, np.inf],
+        labels=["0-25", "26-50", "51-100", "above_100"],
+    )
     overall = regression_metrics(evaluated)
     overall["bootstrap"] = uav_bootstrap_r2(
         evaluated, repetitions=bootstrap_repetitions, seed=seed
@@ -141,6 +169,12 @@ def evaluate_predictions(
         save_csv(
             grouped_metrics(evaluated, ["lifetime_quantile"]),
             output_dir / "lifetime_quantile_metrics.csv",
+        )
+    )
+    paths.append(
+        save_csv(
+            grouped_metrics(evaluated, ["rul_band"]),
+            output_dir / "rul_band_metrics.csv",
         )
     )
     return paths

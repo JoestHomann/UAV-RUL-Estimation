@@ -25,6 +25,7 @@ from phase_3_common import (  # noqa: E402
     phase_2_manifest_paths,
     read_json,
     repository_relative,
+    configured_repository_path,
 )
 
 
@@ -51,6 +52,11 @@ class Phase3Settings(StrictModel):
     run_number: int = Field(gt=0)
     phase_2_run_number: int = Field(gt=0)
     selected_model_family: str = Field(min_length=1)
+    phase_2_specification: str | None = None
+    phase_2_model_registry: str | None = None
+    tabular_manifest: str | None = None
+    sequence_manifest: str | None = None
+    trajectory_manifest: str | None = None
     final_search: FinalSearchSettings
 
     @model_validator(mode="after")
@@ -98,8 +104,11 @@ def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> Phase3Settings:
     """Read and strictly validate the human-authored Phase 3 TOML."""
 
     try:
-        with path.open("rb") as stream:
-            payload = tomllib.load(stream)
+        if path.suffix.lower() == ".json":
+            payload = read_json(path, "Phase 3 settings")
+        else:
+            with path.open("rb") as stream:
+                payload = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise SettingsError(f"Cannot read Phase 3 settings {path}: {error}") from error
     try:
@@ -147,8 +156,14 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         settings.phase_2_run_number,
     )
 
-    specification = read_json(
+    settings_payload = settings.model_dump(mode="json")
+    specification_path = configured_repository_path(
+        settings_payload,
+        "phase_2_specification",
         PHASE_2_SPECIFICATION_PATH,
+    )
+    specification = read_json(
+        specification_path,
         "Phase 2 experiment specification",
     )
     phase_2_settings = specification.get("settings")
@@ -182,7 +197,12 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
             f"Selected family has incomplete Phase 2 tuning: {missing_studies}"
         )
 
-    registry = read_json(PHASE_2_MODEL_REGISTRY_PATH, "Phase 2 model registry")
+    registry_path = configured_repository_path(
+        settings_payload,
+        "phase_2_model_registry",
+        PHASE_2_MODEL_REGISTRY_PATH,
+    )
+    registry = read_json(registry_path, "Phase 2 model registry")
     if registry.get("settings_version") != phase_2_settings_version:
         raise SettingsError("Phase 2 model registry uses another settings version")
     families = registry.get("families")

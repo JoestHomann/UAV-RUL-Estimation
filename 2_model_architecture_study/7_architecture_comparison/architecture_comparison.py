@@ -23,9 +23,27 @@ import pandas as pd
 from comparison_gate import ArchitectureComparisonPlan
 
 
-METRICS = ("r2", "rmse", "mae", "bias")
+METRICS = (
+    "r2",
+    "rmse",
+    "mae",
+    "bias",
+    "overprediction_rate",
+    "mean_overprediction",
+    "root_mean_squared_overprediction",
+    "underprediction_rate",
+    "mean_underprediction",
+)
 AGE_BANDS = ("1-50", "51-100", "101-200", ">200")
-GROUP_TYPES = ("overall", "outer_fold", "scenario", "age_band", "lifetime_quantile")
+RUL_BANDS = ("0-25", "26-50", "51-100", "above_100")
+GROUP_TYPES = (
+    "overall",
+    "outer_fold",
+    "scenario",
+    "age_band",
+    "lifetime_quantile",
+    "rul_band",
+)
 
 PREDICTION_COLUMNS = {
     "settings_version",
@@ -103,6 +121,8 @@ def _regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, flo
     observed = np.asarray(y_true, dtype=np.float64)
     predicted = np.asarray(y_pred, dtype=np.float64)
     residual = predicted - observed
+    overprediction = np.maximum(residual, 0.0)
+    underprediction = np.maximum(-residual, 0.0)
     denominator = float(np.sum(np.square(observed - np.mean(observed))))
     r2 = (
         float("nan")
@@ -114,6 +134,13 @@ def _regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, flo
         "rmse": float(np.sqrt(np.mean(np.square(residual)))),
         "mae": float(np.mean(np.abs(residual))),
         "bias": float(np.mean(residual)),
+        "overprediction_rate": float(np.mean(residual > 0.0)),
+        "mean_overprediction": float(np.mean(overprediction)),
+        "root_mean_squared_overprediction": float(
+            np.sqrt(np.mean(np.square(overprediction)))
+        ),
+        "underprediction_rate": float(np.mean(residual < 0.0)),
+        "mean_underprediction": float(np.mean(underprediction)),
     }
 
 
@@ -127,6 +154,8 @@ def _weighted_regression_metrics(
     weight_sum = float(np.sum(row_weights))
     weighted_mean = float(np.sum(row_weights * y_true) / weight_sum)
     residual = y_pred - y_true
+    overprediction = np.maximum(residual, 0.0)
+    underprediction = np.maximum(-residual, 0.0)
     denominator = float(
         np.sum(row_weights * np.square(y_true - weighted_mean))
     )
@@ -141,6 +170,21 @@ def _weighted_regression_metrics(
         "rmse": float(np.sqrt(squared_error)),
         "mae": float(np.sum(row_weights * np.abs(residual)) / weight_sum),
         "bias": float(np.sum(row_weights * residual) / weight_sum),
+        "overprediction_rate": float(
+            np.sum(row_weights * (residual > 0.0)) / weight_sum
+        ),
+        "mean_overprediction": float(
+            np.sum(row_weights * overprediction) / weight_sum
+        ),
+        "root_mean_squared_overprediction": float(
+            np.sqrt(np.sum(row_weights * np.square(overprediction)) / weight_sum)
+        ),
+        "underprediction_rate": float(
+            np.sum(row_weights * (residual < 0.0)) / weight_sum
+        ),
+        "mean_underprediction": float(
+            np.sum(row_weights * underprediction) / weight_sum
+        ),
     }
 
 
@@ -286,6 +330,11 @@ class ArchitectureComparisonAnalyzer:
             labels=list(AGE_BANDS),
             include_lowest=True,
             right=True,
+        )
+        self.predictions["rul_band"] = pd.cut(
+            self.predictions["y_true"],
+            bins=[-np.inf, 25.0, 50.0, 100.0, np.inf],
+            labels=list(RUL_BANDS),
         )
 
     def calculate(self) -> ComparisonTables:
@@ -623,6 +672,7 @@ class ArchitectureComparisonAnalyzer:
             "scenario": "scenario",
             "age_band": "age_band",
             "lifetime_quantile": "lifetime_quantile",
+            "rul_band": "rul_band",
         }
         records: list[dict[str, Any]] = []
         for family in self.plan.enabled_families:
@@ -651,6 +701,8 @@ class ArchitectureComparisonAnalyzer:
                             )
                         elif group_type == "age_band":
                             ordered_values = list(AGE_BANDS)
+                        elif group_type == "rul_band":
+                            ordered_values = list(RUL_BANDS)
                         else:
                             # Phase 1 lifetime quantiles are integer labels.
                             # Numeric sorting prevents their first occurrence

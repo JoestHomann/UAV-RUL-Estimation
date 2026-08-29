@@ -130,14 +130,25 @@ class NeuralModelAdapter(ModelAdapter):
                 parts.append(predictions.cpu().numpy().astype(np.float64))
         return np.concatenate(parts)
 
-    def _validation_rmse(self, data: Any, inputs: NeuralInputs) -> float:
-        """Evaluate clipped validation predictions with the tuning metric."""
+    def _validation_rmse(
+        self,
+        data: Any,
+        inputs: NeuralInputs,
+        *,
+        fitting_target: bool,
+    ) -> float:
+        """Evaluate validation predictions against raw or fitting RUL."""
 
-        predictions = np.maximum(
-            self._network_predictions(inputs),
-            self.prediction_minimum,
+        predictions = self._network_predictions(inputs)
+        if not fitting_target:
+            predictions = self.prediction_policy.adjust_predictions(predictions)
+        predictions = np.maximum(predictions, self.prediction_minimum)
+        targets = (
+            self.fitting_target_values(data)
+            if fitting_target
+            else target_values(data)
         )
-        return root_mean_squared_error(target_values(data), predictions)
+        return root_mean_squared_error(targets, predictions)
 
     def fit(self, training_data: Any, validation_data: Any | None) -> TrainingSummary:
         """Fit one network with weighted MSE and optional early stopping."""
@@ -152,7 +163,10 @@ class NeuralModelAdapter(ModelAdapter):
         )
         # Pandas may expose read-only NumPy views. torch.tensor deliberately
         # copies them into writable tensors owned by the training loop.
-        targets = torch.tensor(target_values(training_data), dtype=torch.float32)
+        targets = torch.tensor(
+            self.fitting_target_values(training_data),
+            dtype=torch.float32,
+        )
         weights = torch.tensor(
             sample_weight_values(training_data),
             dtype=torch.float32,
@@ -195,8 +209,26 @@ class NeuralModelAdapter(ModelAdapter):
 
                 optimizer.zero_grad(set_to_none=True)
                 predictions = self.network(*model_inputs)
-                squared_errors = torch.square(predictions - batch_targets)
-                weighted_squared_error = torch.sum(batch_weights * squared_errors)
+                residual = predictions - batch_targets
+                if self.prediction_policy.loss == "asymmetric_mse":
+                    policy_weights = torch.where(
+                        residual > 0.0,
+                        torch.full_like(
+                            residual,
+                            self.prediction_policy.overprediction_weight,
+                        ),
+                        torch.ones_like(residual),
+                    )
+                    per_row_loss = policy_weights * torch.square(residual)
+                elif self.prediction_policy.loss == "quantile":
+                    per_row_loss = torch.where(
+                        residual > 0.0,
+                        (1.0 - self.prediction_policy.quantile) * residual,
+                        self.prediction_policy.quantile * -residual,
+                    )
+                else:
+                    per_row_loss = torch.square(residual)
+                weighted_squared_error = torch.sum(batch_weights * per_row_loss)
                 batch_weight_total = torch.sum(batch_weights)
                 loss = weighted_squared_error / batch_weight_total
                 loss.backward()
@@ -218,6 +250,7 @@ class NeuralModelAdapter(ModelAdapter):
                 validation_rmse = self._validation_rmse(
                     validation_data,
                     validation_inputs,
+                    fitting_target=True,
                 )
                 if validation_rmse < best_rmse:
                     best_rmse = validation_rmse
@@ -257,6 +290,7 @@ class NeuralModelAdapter(ModelAdapter):
             final_validation_rmse = self._validation_rmse(
                 validation_data,
                 validation_inputs,
+                fitting_target=False,
             )
         trainable_parameters = sum(
             parameter.numel()

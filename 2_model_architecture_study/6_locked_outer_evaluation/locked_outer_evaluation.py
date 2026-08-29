@@ -290,6 +290,9 @@ class LockedOuterEvaluationRunner:
         selection_manifest_path: Path | None = None,
         selected_configurations_path: Path | None = None,
         output_dir: Path | None = None,
+        tabular_manifest_path: Path | None = None,
+        sequence_manifest_path: Path | None = None,
+        trajectory_manifest_path: Path | None = None,
     ) -> None:
         # This is the critical ordering constraint: the gate reads only Step 1,
         # Step 4, and Step 5 metadata. A failure occurs before data adapters are
@@ -320,12 +323,22 @@ class LockedOuterEvaluationRunner:
         self.training_uavs = int(
             self.settings["phase_1"]["expected_training_uavs"]
         )
-        self.prefixes_per_uav = int(
-            self.settings["phase_1"]["expected_prefixes_per_training_uav"]
+        phase_1 = self.settings["phase_1"]
+        self.prefixes_per_uav = phase_1.get(
+            "expected_prefixes_per_training_uav"
+        )
+        self.minimum_prefixes_per_uav = phase_1.get(
+            "minimum_prefixes_per_training_uav"
+        )
+        self.maximum_prefixes_per_uav = phase_1.get(
+            "maximum_prefixes_per_training_uav"
         )
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
         self._trajectory_adapter: TrajectoryDataAdapter | None = None
+        self.tabular_manifest_path = tabular_manifest_path
+        self.sequence_manifest_path = sequence_manifest_path
+        self.trajectory_manifest_path = trajectory_manifest_path
 
     def validate_request(
         self,
@@ -567,21 +580,33 @@ class LockedOuterEvaluationRunner:
         """Create the Step 2 adapter only after the Step 5 gate has opened."""
 
         if self._tabular_adapter is None:
-            self._tabular_adapter = TabularDataAdapter()
+            self._tabular_adapter = (
+                TabularDataAdapter(self.tabular_manifest_path)
+                if self.tabular_manifest_path is not None
+                else TabularDataAdapter()
+            )
         return self._tabular_adapter
 
     def _sequence(self) -> SequenceDataAdapter:
         """Create the Step 3 adapter only after the Step 5 gate has opened."""
 
         if self._sequence_adapter is None:
-            self._sequence_adapter = SequenceDataAdapter()
+            self._sequence_adapter = (
+                SequenceDataAdapter(self.sequence_manifest_path)
+                if self.sequence_manifest_path is not None
+                else SequenceDataAdapter()
+            )
         return self._sequence_adapter
 
     def _trajectory(self) -> TrajectoryDataAdapter:
         """Create the trajectory adapter only for trajectory families."""
 
         if self._trajectory_adapter is None:
-            self._trajectory_adapter = TrajectoryDataAdapter()
+            self._trajectory_adapter = (
+                TrajectoryDataAdapter(self.trajectory_manifest_path)
+                if self.trajectory_manifest_path is not None
+                else TrajectoryDataAdapter()
+            )
         return self._trajectory_adapter
 
     def _validate_locked_split(
@@ -628,7 +653,6 @@ class LockedOuterEvaluationRunner:
             )
         expected_validation_uavs = self.training_uavs // fold_count
         expected_training_uavs = self.training_uavs - expected_validation_uavs
-        expected_training_rows = expected_training_uavs * self.prefixes_per_uav
         expected_validation_rows = (
             expected_validation_uavs * self.locked_scenarios
         )
@@ -640,16 +664,31 @@ class LockedOuterEvaluationRunner:
             "locked_scenarios": observed_scenarios,
         }
         expected = {
-            "training_rows": expected_training_rows,
             "training_uavs": expected_training_uavs,
             "validation_rows": expected_validation_rows,
             "validation_uavs": expected_validation_uavs,
             "locked_scenarios": self.locked_scenarios,
         }
-        if observed != expected:
+        comparable_observed = {
+            name: value for name, value in observed.items() if name != "training_rows"
+        }
+        if comparable_observed != expected:
             raise LockedOuterEvaluationError(
                 f"Locked split dimensions differ from the settings: {observed}"
             )
+        prefix_counts = training.metadata.groupby("uav_id", sort=False).size()
+        if self.prefixes_per_uav is not None:
+            if not prefix_counts.eq(int(self.prefixes_per_uav)).all():
+                raise LockedOuterEvaluationError(
+                    "Outer-training prefix counts differ from the exact setting"
+                )
+        else:
+            minimum = int(self.minimum_prefixes_per_uav)
+            maximum = int(self.maximum_prefixes_per_uav)
+            if (prefix_counts < minimum).any() or (prefix_counts > maximum).any():
+                raise LockedOuterEvaluationError(
+                    "Outer-training prefix counts fall outside configured bounds"
+                )
 
         metadata_outer_folds = set(
             validation.metadata["outer_fold"].astype(int)

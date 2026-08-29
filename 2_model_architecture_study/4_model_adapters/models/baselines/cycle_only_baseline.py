@@ -46,7 +46,7 @@ class CycleOnlyBaselineAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         cycles = self._cycle_values(training_data)
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
 
         # The explicit weighted least-squares calculation matches the Phase 1

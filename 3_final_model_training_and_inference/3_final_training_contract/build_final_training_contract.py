@@ -32,10 +32,12 @@ from phase_3_common import (  # noqa: E402
     PHASE_2_SPECIFICATION_PATH,
     Phase3Error,
     complete_manifest,
+    configured_repository_path,
     invalidate_downstream_manifests,
     load_resolved_phase_3_settings,
     manifest_path,
     read_json,
+    repository_relative,
     require_current_settings,
     selected_architecture_path,
     selected_configuration_path,
@@ -65,12 +67,20 @@ def _training_view(
     representation: str,
     feature_set: str | None,
     lookback: int | None,
+    *,
+    tabular_manifest_path: Path | None = None,
+    sequence_manifest_path: Path | None = None,
+    trajectory_manifest_path: Path | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Load training-only metadata and ordered inputs for the selected family."""
 
     if representation in {"none", "tabular"}:
         selected_feature_set = feature_set or "age_only"
-        dataset = TabularDataAdapter().load_training(selected_feature_set)
+        dataset = (
+            TabularDataAdapter(tabular_manifest_path)
+            if tabular_manifest_path is not None
+            else TabularDataAdapter()
+        ).load_training(selected_feature_set)
         schema = {
             "representation": representation,
             "feature_set": selected_feature_set,
@@ -83,7 +93,11 @@ def _training_view(
     if representation == "sequence":
         if lookback is None:
             raise FinalTrainingContractError("Sequence configuration has no lookback")
-        dataset = SequenceDataAdapter().load_training(lookback)
+        dataset = (
+            SequenceDataAdapter(sequence_manifest_path)
+            if sequence_manifest_path is not None
+            else SequenceDataAdapter()
+        ).load_training(lookback)
         schema = {
             "representation": representation,
             "feature_set": None,
@@ -94,7 +108,11 @@ def _training_view(
         }
         return dataset, schema
     if representation == "trajectory":
-        dataset = TrajectoryDataAdapter().load_training()
+        dataset = (
+            TrajectoryDataAdapter(trajectory_manifest_path)
+            if trajectory_manifest_path is not None
+            else TrajectoryDataAdapter()
+        ).load_training()
         schema = {
             "representation": representation,
             "feature_set": None,
@@ -180,20 +198,58 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
             f"Non-iterative family {family!r} unexpectedly has a training duration"
         )
 
-    phase_2_specification = read_json(
+    phase_2_specification_path = configured_repository_path(
+        settings,
+        "phase_2_specification",
         PHASE_2_SPECIFICATION_PATH,
+    )
+    phase_2_specification = read_json(
+        phase_2_specification_path,
         "Phase 2 experiment specification",
     )
     phase_2_settings = phase_2_specification["settings"]
     expected_uavs = int(phase_2_settings["phase_1"]["expected_training_uavs"])
-    prefixes_per_uav = int(
-        phase_2_settings["phase_1"]["expected_prefixes_per_training_uav"]
+    training_observation = (
+        phase_2_specification.get("phase_1_verification", {})
+        .get("artifacts", {})
+        .get("training_features", {})
     )
-    expected_rows = expected_uavs * prefixes_per_uav
+    expected_rows = training_observation.get("rows")
+    if isinstance(expected_rows, bool) or not isinstance(expected_rows, int):
+        raise FinalTrainingContractError(
+            "Phase 2 specification does not record the observed training row count"
+        )
+    tabular_manifest_path = configured_repository_path(
+        settings,
+        "tabular_manifest",
+        PHASE_2_DIR
+        / "2_tabular_data_adapter"
+        / "artifacts"
+        / "tabular_dataset_manifest.json",
+    )
+    sequence_manifest_path = configured_repository_path(
+        settings,
+        "sequence_manifest",
+        PHASE_2_DIR
+        / "3_sequence_data_adapter"
+        / "artifacts"
+        / "sequence_dataset_manifest.json",
+    )
+    trajectory_manifest_path = configured_repository_path(
+        settings,
+        "trajectory_manifest",
+        PHASE_2_DIR
+        / "3_trajectory_data_adapter"
+        / "artifacts"
+        / "trajectory_dataset_manifest.json",
+    )
     dataset, input_schema = _training_view(
         representation,
         configuration.get("feature_set"),
         configuration.get("lookback"),
+        tabular_manifest_path=tabular_manifest_path,
+        sequence_manifest_path=sequence_manifest_path,
+        trajectory_manifest_path=trajectory_manifest_path,
     )
     training_uav_ids = _verify_training_rows(dataset, expected_rows, expected_uavs)
 
@@ -215,6 +271,26 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "configuration_id": configuration["configuration_id"],
         "input_schema": input_schema,
         "hyperparameters": hyperparameters,
+        "data_manifests": {
+            "tabular": repository_relative(tabular_manifest_path),
+            "sequence": repository_relative(sequence_manifest_path),
+            "trajectory": repository_relative(trajectory_manifest_path),
+        },
+        "target": phase_2_settings.get(
+            "target",
+            {"mode": "raw", "maximum_rul": None},
+        ),
+        "prediction_policy": phase_2_settings.get(
+            "prediction_policy",
+            {
+                "loss": "symmetric_rmse",
+                "overprediction_weight": 1.0,
+                "quantile": 0.5,
+                "calibration": "none",
+                "safety_offset": 0.0,
+                "non_overprediction_coverage": 0.5,
+            },
+        ),
         "preprocessing": {
             "algorithm": (
                 "robust_channel_scaler"

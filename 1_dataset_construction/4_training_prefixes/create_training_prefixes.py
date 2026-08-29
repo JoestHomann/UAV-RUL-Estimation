@@ -120,33 +120,67 @@ def target_at_cutoff(history: pd.DataFrame, cutoff: int) -> float:
     return float(match.iloc[0])
 
 
+def dense_cutoffs(
+    *,
+    maximum_cutoff: int,
+    minimum_cutoff: int,
+    stride: int,
+) -> np.ndarray:
+    """Return deterministic dense cutoffs and always include the last prefix."""
+
+    if minimum_cutoff > maximum_cutoff:
+        raise ValueError(
+            f"Minimum cutoff {minimum_cutoff} exceeds maximum {maximum_cutoff}"
+        )
+    values = np.arange(minimum_cutoff, maximum_cutoff + 1, stride, dtype=int)
+    if values[-1] != maximum_cutoff:
+        values = np.append(values, maximum_cutoff)
+    return values
+
+
 def make_training_prefixes(
     train: pd.DataFrame,
     histories: pd.DataFrame,
     test_lengths: np.ndarray,
     *,
-    cutoffs_per_uav: int,
+    cutoffs_per_uav: int | None,
     seed: int,
     strategy: str = "empirical",
+    stride: int = 1,
+    minimum_cutoff: int = 1,
 ) -> pd.DataFrame:
     grouped = {str(key): value for key, value in train.groupby(ID_COLUMN, sort=True)}
     rng = np.random.default_rng(seed)
     records: list[dict[str, Any]] = []
     for row in histories.sort_values(ID_COLUMN).itertuples(index=False):
         uav_id = str(getattr(row, ID_COLUMN))
-        sampler = (
-            empirical_cutoffs
-            if strategy == "empirical"
-            else stratified_empirical_cutoffs
-        )
-        if strategy not in {"empirical", "stratified_empirical"}:
+        if strategy not in {
+            "empirical",
+            "stratified_empirical",
+            "dense_all",
+            "dense_stride",
+        }:
             raise ValueError(f"Unknown prefix strategy {strategy!r}")
-        cutoffs = sampler(
-            test_lengths,
-            maximum_cutoff=int(row.final_cycle) - 1,
-            count=cutoffs_per_uav,
-            rng=rng,
-        )
+        if strategy in {"empirical", "stratified_empirical"}:
+            if cutoffs_per_uav is None:
+                raise ValueError(f"{strategy} requires cutoffs_per_uav")
+            sampler = (
+                empirical_cutoffs
+                if strategy == "empirical"
+                else stratified_empirical_cutoffs
+            )
+            cutoffs = sampler(
+                test_lengths,
+                maximum_cutoff=int(row.final_cycle) - 1,
+                count=cutoffs_per_uav,
+                rng=rng,
+            )
+        else:
+            cutoffs = dense_cutoffs(
+                maximum_cutoff=int(row.final_cycle) - 1,
+                minimum_cutoff=minimum_cutoff,
+                stride=1 if strategy == "dense_all" else stride,
+            )
         prefix_weight = 1.0 / len(cutoffs)
         for prefix_number, cutoff in enumerate(sorted(cutoffs), start=1):
             records.append(
@@ -169,12 +203,18 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=STEP_4_ARTIFACT_DIR)
     parser.add_argument("--cutoffs-per-uav", type=int, default=20)
     parser.add_argument("--seed", type=int, default=20260814)
+    parser.add_argument("--stride", type=int, default=1)
+    parser.add_argument("--minimum-cutoff", type=int, default=1)
     parser.add_argument(
         "--strategy",
-        choices=("empirical", "stratified_empirical"),
+        choices=("empirical", "stratified_empirical", "dense_all", "dense_stride"),
         default="empirical",
     )
     args = parser.parse_args()
+    if args.stride <= 0:
+        parser.error("--stride must be positive")
+    if args.minimum_cutoff <= 0:
+        parser.error("--minimum-cutoff must be positive")
 
     train = load_dataset(args.train_csv, require_target=True)
     histories = pd.read_csv(args.audit_dir / "train_flight_cycles.csv")
@@ -185,9 +225,15 @@ def main() -> None:
         train,
         histories,
         test_histories["final_cycle"].to_numpy(dtype=int),
-        cutoffs_per_uav=args.cutoffs_per_uav,
+        cutoffs_per_uav=(
+            args.cutoffs_per_uav
+            if args.strategy in {"empirical", "stratified_empirical"}
+            else None
+        ),
         seed=args.seed + 2,
         strategy=args.strategy,
+        stride=args.stride,
+        minimum_cutoff=args.minimum_cutoff,
     )
 
     prefix_counts = training.groupby(ID_COLUMN).size()
@@ -195,7 +241,9 @@ def main() -> None:
         args.cutoffs_per_uav
     ).all():
         raise AssertionError("Empirical training cutoff counts are not equal by UAV")
-    if (prefix_counts > args.cutoffs_per_uav).any():
+    if args.strategy in {"empirical", "stratified_empirical"} and (
+        prefix_counts > args.cutoffs_per_uav
+    ).any():
         raise AssertionError("Training cutoff count exceeds the configured maximum")
     if training.duplicated([ID_COLUMN, "cutoff"]).any():
         raise AssertionError("Training prefixes contain duplicate UAV/cutoff pairs")
@@ -213,7 +261,13 @@ def main() -> None:
             {
                 "seed": args.seed,
                 "strategy": args.strategy,
-                "cutoffs_per_uav": args.cutoffs_per_uav,
+                "cutoffs_per_uav": (
+                    args.cutoffs_per_uav
+                    if args.strategy in {"empirical", "stratified_empirical"}
+                    else None
+                ),
+                "stride": 1 if args.strategy == "dense_all" else args.stride,
+                "minimum_cutoff": args.minimum_cutoff,
                 "actual_prefixes_per_uav_minimum": int(prefix_counts.min()),
                 "actual_prefixes_per_uav_maximum": int(prefix_counts.max()),
                 "cutoff_source": "empirical test UAV history lengths",

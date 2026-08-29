@@ -27,7 +27,7 @@ class MeanBaselineAdapter(ModelAdapter):
         """Learn one weighted mean without consuming telemetry features."""
 
         started_at = self.start_timer()
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
         self.mean_rul = weighted_mean(targets, weights)
         self._is_fitted = True

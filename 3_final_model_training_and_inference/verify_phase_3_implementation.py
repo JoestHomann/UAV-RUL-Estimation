@@ -116,7 +116,7 @@ def _verify_settings_and_selection() -> tuple[int, str]:
     )
     resolved = load_resolved_phase_3_settings(settings.run_number)
     _require(
-        resolved == settings.model_dump(mode="json"),
+        resolved == settings.model_dump(mode="json", exclude_none=True),
         "Resolved settings do not reproduce the validated TOML",
     )
     _require(
@@ -128,7 +128,7 @@ def _verify_settings_and_selection() -> tuple[int, str]:
         phase_2.selected_family == settings.selected_model_family,
         "Phase 2 verification selected another family",
     )
-    changed = settings.model_dump(mode="json")
+    changed = settings.model_dump(mode="json", exclude_none=True)
     changed["final_search"]["model_seed"] += 1
     with patch.object(common_module.tomllib, "load", return_value=changed):
         try:
@@ -147,7 +147,7 @@ def _verify_development_folds() -> None:
     validation_counts: Counter[str] = Counter()
     sample = None
     for fold in folds:
-        split = adapter.get_final_search_split(fold, "last_values")
+        split = adapter.get_final_search_split(fold, "screened_drift_pruned")
         training_ids = set(split.training.metadata["uav_id"].astype(str))
         validation_ids = set(split.validation.metadata["uav_id"].astype(str))
         _require(len(split.training) == 1600, f"Fold {fold} training rows changed")

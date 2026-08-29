@@ -56,7 +56,7 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
     }
     resolved = {
         "settings_source": repository_relative(settings_path),
-        "settings": settings.model_dump(mode="json"),
+        "settings": settings.model_dump(mode="json", exclude_none=True),
         "phase_2_verification": verification.to_dict(),
         "phase_2_settings": phase_2_settings,
     }

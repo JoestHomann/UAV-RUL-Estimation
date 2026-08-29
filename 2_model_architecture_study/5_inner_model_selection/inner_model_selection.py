@@ -102,6 +102,13 @@ CANDIDATE_COLUMNS = [
     "model_seed",
     "mean_inner_rmse",
     "inner_rmse_standard_deviation",
+    "mean_inner_r2",
+    "mean_inner_bias",
+    "mean_inner_overprediction_rate",
+    "mean_inner_mean_overprediction",
+    "mean_inner_root_mean_squared_overprediction",
+    "mean_inner_underprediction_rate",
+    "mean_inner_mean_underprediction",
     "mean_training_seconds",
     "total_training_seconds",
     "mean_inference_seconds",
@@ -125,6 +132,18 @@ FOLD_COLUMNS = [
     "lookback",
     "model_seed",
     "rmse",
+    "r2",
+    "mae",
+    "bias",
+    "overprediction_rate",
+    "mean_overprediction",
+    "root_mean_squared_overprediction",
+    "overprediction_q90",
+    "overprediction_q95",
+    "maximum_overprediction",
+    "underprediction_rate",
+    "mean_underprediction",
+    "root_mean_squared_underprediction",
     "training_rows",
     "training_uavs",
     "validation_rows",
@@ -237,8 +256,18 @@ class InnerSplitRepository:
     four inner folds for the most recently evaluated lookback.
     """
 
-    def __init__(self, expected_development_scenarios: int) -> None:
+    def __init__(
+        self,
+        expected_development_scenarios: int,
+        *,
+        tabular_manifest_path: Path | None = None,
+        sequence_manifest_path: Path | None = None,
+        trajectory_manifest_path: Path | None = None,
+    ) -> None:
         self.expected_development_scenarios = expected_development_scenarios
+        self.tabular_manifest_path = tabular_manifest_path
+        self.sequence_manifest_path = sequence_manifest_path
+        self.trajectory_manifest_path = trajectory_manifest_path
         self._tabular_adapter: TabularDataAdapter | None = None
         self._sequence_adapter: SequenceDataAdapter | None = None
         self._trajectory_adapter: TrajectoryDataAdapter | None = None
@@ -343,21 +372,33 @@ class InnerSplitRepository:
         """Construct the Step 2 adapter only if a tabular study requests it."""
 
         if self._tabular_adapter is None:
-            self._tabular_adapter = TabularDataAdapter()
+            self._tabular_adapter = (
+                TabularDataAdapter(self.tabular_manifest_path)
+                if self.tabular_manifest_path is not None
+                else TabularDataAdapter()
+            )
         return self._tabular_adapter
 
     def _sequence(self) -> SequenceDataAdapter:
         """Construct the Step 3 adapter only if a sequence study requests it."""
 
         if self._sequence_adapter is None:
-            self._sequence_adapter = SequenceDataAdapter()
+            self._sequence_adapter = (
+                SequenceDataAdapter(self.sequence_manifest_path)
+                if self.sequence_manifest_path is not None
+                else SequenceDataAdapter()
+            )
         return self._sequence_adapter
 
     def _trajectory(self) -> TrajectoryDataAdapter:
         """Construct the trajectory adapter only for trajectory families."""
 
         if self._trajectory_adapter is None:
-            self._trajectory_adapter = TrajectoryDataAdapter()
+            self._trajectory_adapter = (
+                TrajectoryDataAdapter(self.trajectory_manifest_path)
+                if self.trajectory_manifest_path is not None
+                else TrajectoryDataAdapter()
+            )
         return self._trajectory_adapter
 
     def _validate_split(
@@ -558,6 +599,9 @@ class InnerModelSelectionRunner:
         self,
         specification_path: Path = DEFAULT_SPECIFICATION_PATH,
         output_dir: Path | None = None,
+        tabular_manifest_path: Path | None = None,
+        sequence_manifest_path: Path | None = None,
+        trajectory_manifest_path: Path | None = None,
     ) -> None:
         self.specification_path = specification_path.resolve()
         # The run folder is resolved from the same specification this runner
@@ -596,7 +640,15 @@ class InnerModelSelectionRunner:
         self.development_scenarios = int(
             self.settings["phase_1"]["expected_development_scenarios"]
         )
-        self.outer_fold_labels = list(TabularDataAdapter().outer_fold_labels())
+        self.tabular_manifest_path = tabular_manifest_path
+        self.sequence_manifest_path = sequence_manifest_path
+        self.trajectory_manifest_path = trajectory_manifest_path
+        tabular_adapter = (
+            TabularDataAdapter(tabular_manifest_path)
+            if tabular_manifest_path is not None
+            else TabularDataAdapter()
+        )
+        self.outer_fold_labels = list(tabular_adapter.outer_fold_labels())
         if len(self.outer_fold_labels) != self.outer_fold_count:
             raise InnerModelSelectionError(
                 "Observed outer-fold label count does not match the settings: "
@@ -704,7 +756,12 @@ class InnerModelSelectionRunner:
             sampler=sampler,
             pruner=optuna.pruners.NopPruner(),
         )
-        split_repository = InnerSplitRepository(self.development_scenarios)
+        split_repository = InnerSplitRepository(
+            self.development_scenarios,
+            tabular_manifest_path=self.tabular_manifest_path,
+            sequence_manifest_path=self.sequence_manifest_path,
+            trajectory_manifest_path=self.trajectory_manifest_path,
+        )
         seen_configurations: set[str] = set()
 
         # One shared writer covers every candidate and inner fold in this
@@ -871,6 +928,23 @@ class InnerModelSelectionRunner:
                     "lookback": candidate.lookback,
                     "model_seed": self.search_seed,
                     "rmse": rmse,
+                    **{
+                        name: development_metrics[name]
+                        for name in (
+                            "r2",
+                            "mae",
+                            "bias",
+                            "overprediction_rate",
+                            "mean_overprediction",
+                            "root_mean_squared_overprediction",
+                            "overprediction_q90",
+                            "overprediction_q95",
+                            "maximum_overprediction",
+                            "underprediction_rate",
+                            "mean_underprediction",
+                            "root_mean_squared_underprediction",
+                        )
+                    },
                     "training_rows": len(split.training),
                     "training_uavs": int(
                         split.training.metadata["uav_id"].nunique()
@@ -918,6 +992,40 @@ class InnerModelSelectionRunner:
             "model_seed": self.search_seed,
             "mean_inner_rmse": float(np.mean(rmse_values)),
             "inner_rmse_standard_deviation": float(np.std(rmse_values)),
+            "mean_inner_r2": float(
+                np.mean([record["r2"] for record in fold_records])
+            ),
+            "mean_inner_bias": float(
+                np.mean([record["bias"] for record in fold_records])
+            ),
+            "mean_inner_overprediction_rate": float(
+                np.mean(
+                    [record["overprediction_rate"] for record in fold_records]
+                )
+            ),
+            "mean_inner_mean_overprediction": float(
+                np.mean(
+                    [record["mean_overprediction"] for record in fold_records]
+                )
+            ),
+            "mean_inner_root_mean_squared_overprediction": float(
+                np.mean(
+                    [
+                        record["root_mean_squared_overprediction"]
+                        for record in fold_records
+                    ]
+                )
+            ),
+            "mean_inner_underprediction_rate": float(
+                np.mean(
+                    [record["underprediction_rate"] for record in fold_records]
+                )
+            ),
+            "mean_inner_mean_underprediction": float(
+                np.mean(
+                    [record["mean_underprediction"] for record in fold_records]
+                )
+            ),
             "mean_training_seconds": float(np.mean(training_times)),
             "total_training_seconds": float(np.sum(training_times)),
             "mean_inference_seconds": float(np.mean(inference_times)),

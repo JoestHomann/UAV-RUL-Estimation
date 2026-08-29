@@ -136,7 +136,14 @@ def load_settings(path: Path = DEFAULT_SETTINGS) -> LauncherSettings:
 
     reject_unknown_keys(
         payload,
-        {"settings_version", "paths", "profiles", "prefix_variants", "runs"},
+        {
+            "settings_version",
+            "paths",
+            "profiles",
+            "scenario_profiles",
+            "prefix_variants",
+            "runs",
+        },
         "root",
     )
     settings_version = positive_integer(

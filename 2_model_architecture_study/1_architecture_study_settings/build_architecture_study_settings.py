@@ -93,7 +93,7 @@ def main() -> None:
         "--settings",
         type=Path,
         default=DEFAULT_SETTINGS_PATH,
-        help="TOML settings location; experiment values cannot be overridden.",
+        help="TOML or generated JSON settings location.",
     )
     parser.add_argument(
         "--output-dir",

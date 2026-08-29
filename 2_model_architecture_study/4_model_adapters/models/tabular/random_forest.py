@@ -30,7 +30,7 @@ class RandomForestAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         training_values, self.feature_names = tabular_values(training_data)
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
         configured_depth = self.hyperparameters["max_depth"]
         maximum_depth = None if configured_depth == "none" else int(configured_depth)

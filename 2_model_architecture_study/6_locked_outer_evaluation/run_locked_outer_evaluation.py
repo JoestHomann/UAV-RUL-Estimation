@@ -121,6 +121,9 @@ def main() -> None:
             "defaults to runs/run_<run_number>/6_locked_outer_evaluation."
         ),
     )
+    parser.add_argument("--tabular-manifest", type=Path)
+    parser.add_argument("--sequence-manifest", type=Path)
+    parser.add_argument("--trajectory-manifest", type=Path)
     parser.add_argument(
         "--family",
         action="append",
@@ -148,6 +151,9 @@ def main() -> None:
             selection_manifest_path=args.selection_manifest,
             selected_configurations_path=args.selected_configurations,
             output_dir=args.output_dir,
+            tabular_manifest_path=args.tabular_manifest,
+            sequence_manifest_path=args.sequence_manifest,
+            trajectory_manifest_path=args.trajectory_manifest,
         )
         families, outer_folds = runner.validate_request(
             args.families,

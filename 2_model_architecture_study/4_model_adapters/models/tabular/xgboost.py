@@ -19,6 +19,25 @@ from base import (
 )
 
 
+class AsymmetricSquaredObjective:
+    """Provide a picklable XGBoost objective with heavier late-RUL errors."""
+
+    def __init__(self, overprediction_weight: float) -> None:
+        self.overprediction_weight = float(overprediction_weight)
+
+    def __call__(
+        self,
+        y_true: NDArray[np.float64],
+        y_pred: NDArray[np.float64],
+        sample_weight: NDArray[np.float64] | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        residual = np.asarray(y_pred) - np.asarray(y_true)
+        weights = np.where(residual > 0.0, self.overprediction_weight, 1.0)
+        if sample_weight is not None:
+            weights = weights * np.asarray(sample_weight)
+        return 2.0 * weights * residual, 2.0 * weights
+
+
 def _xgboost_cuda_available() -> bool:
     """Return whether both XGBoost and the active machine can use CUDA."""
 
@@ -85,7 +104,7 @@ class XGBoostAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         training_values, self.feature_names = tabular_values(training_data)
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
 
         maximum_trees = int(self.hyperparameters["maximum_trees"])
@@ -98,8 +117,17 @@ class XGBoostAdapter(ModelAdapter):
         progress_callback = self.require_training_monitor().create_xgboost_callback(
             self.log_training_step
         )
+        objective: str | AsymmetricSquaredObjective = "reg:squarederror"
+        objective_arguments: dict[str, Any] = {}
+        if self.prediction_policy.loss == "asymmetric_mse":
+            objective = AsymmetricSquaredObjective(
+                self.prediction_policy.overprediction_weight
+            )
+        elif self.prediction_policy.loss == "quantile":
+            objective = "reg:quantileerror"
+            objective_arguments["quantile_alpha"] = self.prediction_policy.quantile
         self.estimator = XGBRegressor(
-            objective="reg:squarederror",
+            objective=objective,
             eval_metric="rmse",
             n_estimators=tree_count,
             learning_rate=float(self.hyperparameters["learning_rate"]),
@@ -119,6 +147,7 @@ class XGBoostAdapter(ModelAdapter):
                 int(self.early_stopping_patience) if use_early_stopping else None
             ),
             callbacks=[progress_callback],
+            **objective_arguments,
         )
 
         fit_arguments: dict[str, Any] = {
@@ -136,7 +165,7 @@ class XGBoostAdapter(ModelAdapter):
                 self.feature_names,
             )
             fit_arguments["eval_set"].append(
-                (validation_values, target_values(validation_data))
+                (validation_values, self.fitting_target_values(validation_data))
             )
             fit_arguments["sample_weight_eval_set"].append(
                 sample_weight_values(validation_data)

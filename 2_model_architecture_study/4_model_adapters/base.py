@@ -19,6 +19,8 @@ import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
 
+from policies import PredictionPolicy, TargetPolicy
+
 
 Representation = Literal["none", "tabular", "sequence", "trajectory"]
 
@@ -73,6 +75,8 @@ class ModelAdapter(ABC):
         self.hyperparameters = dict(hyperparameters)
         self.seed = int(seed)
         self.prediction_minimum = float(prediction_minimum)
+        self.target_policy = TargetPolicy()
+        self.prediction_policy = PredictionPolicy()
         # Model adapters know only the small neutral monitoring interface. The
         # TensorBoard writer and all filesystem decisions remain isolated in
         # the dedicated "tensorboard_monitoring" folder.
@@ -100,7 +104,25 @@ class ModelAdapter(ABC):
             )
         if not np.isfinite(predictions).all():
             raise ModelAdapterError("Model produced missing or non-finite predictions")
+        predictions = self.prediction_policy.adjust_predictions(predictions)
         return np.maximum(predictions, self.prediction_minimum)
+
+    def configure_policies(
+        self,
+        target_policy: TargetPolicy,
+        prediction_policy: PredictionPolicy,
+    ) -> None:
+        """Attach validated run policies before fitting or persistence."""
+
+        if self._is_fitted:
+            raise ModelAdapterError("Cannot change policies after model fitting")
+        self.target_policy = target_policy
+        self.prediction_policy = prediction_policy
+
+    def fitting_target_values(self, dataset: Any) -> NDArray[np.float64]:
+        """Return the transformed model-fitting target for this run."""
+
+        return self.target_policy.transform(target_values(dataset))
 
     def log_training_step(
         self,

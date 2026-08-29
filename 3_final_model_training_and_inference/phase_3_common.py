@@ -27,6 +27,26 @@ PHASE_2_MODEL_REGISTRY_PATH = (
     PHASE_2_DIR / "4_model_adapters" / "artifacts" / "model_registry.json"
 )
 
+
+def configured_repository_path(
+    settings: dict[str, Any],
+    field: str,
+    default: Path,
+) -> Path:
+    """Resolve an optional repository-relative run dependency."""
+
+    value = settings.get(field)
+    if value is None:
+        return default.resolve()
+    if not isinstance(value, str) or not value:
+        raise Phase3Error(f"{field} must be a non-empty repository-relative path")
+    path = (REPOSITORY_ROOT / value).resolve()
+    try:
+        path.relative_to(REPOSITORY_ROOT.resolve())
+    except ValueError as error:
+        raise Phase3Error(f"{field} escapes the repository") from error
+    return path
+
 STEP_MANIFEST_NAMES = {
     1: "architecture_selection_manifest.json",
     2: "final_search_manifest.json",
@@ -221,18 +241,21 @@ def load_resolved_phase_3_settings(run_number: int) -> dict[str, Any]:
 
 
 def require_current_settings(settings_path: Path) -> int:
-    """Require a downstream command to match the run's resolved TOML exactly."""
+    """Require a downstream command to match resolved TOML or JSON settings."""
 
     run_number = read_run_number(settings_path)
     try:
-        with settings_path.open("rb") as stream:
-            current = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        if settings_path.suffix.lower() == ".json":
+            current = json.loads(settings_path.read_text(encoding="utf-8"))
+        else:
+            with settings_path.open("rb") as stream:
+                current = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError, json.JSONDecodeError) as error:
         raise Phase3Error(f"Cannot read Phase 3 settings {settings_path}: {error}") from error
     resolved = load_resolved_phase_3_settings(run_number)
     if current != resolved:
         raise Phase3Error(
-            "Current Phase 3 TOML differs from this run's resolved settings; "
+            "Current Phase 3 settings differ from this run's resolved settings; "
             "restore the settings or start a new run"
         )
     return run_number

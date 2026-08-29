@@ -73,7 +73,7 @@ class CatBoostAdapter(ModelAdapter):
 
         started_at = self.start_timer()
         training_values, self.feature_names = tabular_values(training_data)
-        targets = target_values(training_data)
+        targets = self.fitting_target_values(training_data)
         weights = sample_weight_values(training_data)
         training_pool = Pool(
             training_values,
@@ -90,8 +90,13 @@ class CatBoostAdapter(ModelAdapter):
             and self.early_stopping_patience is not None
         )
         self.require_training_monitor()
+        loss_function = (
+            f"Quantile:alpha={self.prediction_policy.quantile}"
+            if self.prediction_policy.loss == "quantile"
+            else "RMSE"
+        )
         self.estimator = CatBoostRegressor(
-            loss_function="RMSE",
+            loss_function=loss_function,
             eval_metric="RMSE",
             iterations=tree_count,
             learning_rate=float(self.hyperparameters["learning_rate"]),
@@ -118,7 +123,7 @@ class CatBoostAdapter(ModelAdapter):
             )
             validation_pool = Pool(
                 validation_values,
-                label=target_values(validation_data),
+                label=self.fitting_target_values(validation_data),
                 weight=sample_weight_values(validation_data),
                 feature_names=list(self.feature_names),
             )

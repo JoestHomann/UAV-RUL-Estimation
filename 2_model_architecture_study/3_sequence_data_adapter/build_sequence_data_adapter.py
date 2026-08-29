@@ -236,6 +236,7 @@ def _source_label(
 def _copy_inputs(
     specification: dict[str, Any],
     output_dir: Path,
+    test_endpoints_path: str = TEST_ENDPOINTS_PATH,
 ) -> dict[str, dict[str, Any]]:
     """Refresh the eight local input copies and prepare manifest entries."""
 
@@ -245,6 +246,8 @@ def _copy_inputs(
 
     for logical_name, plan_entry in COPY_PLAN.items():
         source_label, expected_rows = _source_label(specification, plan_entry)
+        if logical_name == "test_endpoints":
+            source_label = test_endpoints_path
         source_path = _resolve_source(source_label)
         destination_name = plan_entry["destination"]
         if not isinstance(destination_name, str):
@@ -442,11 +445,12 @@ def _write_json(payload: dict[str, Any], path: Path) -> None:
 def build_sequence_data_adapter(
     specification_path: Path = DEFAULT_SPECIFICATION_PATH,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
+    test_endpoints_path: str = TEST_ENDPOINTS_PATH,
 ) -> tuple[Path, Path]:
     """Refresh all Step 3 artifacts and fail if any copy differs."""
 
     specification = _load_experiment_specification(specification_path)
-    files = _copy_inputs(specification, output_dir)
+    files = _copy_inputs(specification, output_dir, test_endpoints_path)
     manifest = _build_manifest(specification, specification_path, files)
     manifest_path = output_dir / MANIFEST_FILENAME
     report_path = output_dir / REPORT_FILENAME
@@ -480,12 +484,19 @@ def main() -> None:
         default=DEFAULT_OUTPUT_DIR,
         help="Directory for copied inputs and generated metadata.",
     )
+    parser.add_argument(
+        "--test-endpoints",
+        type=str,
+        default=TEST_ENDPOINTS_PATH,
+        help="Repository-relative Phase 1 test-endpoint CSV path.",
+    )
     args = parser.parse_args()
 
     try:
         manifest_path, report_path = build_sequence_data_adapter(
             args.specification,
             args.output_dir,
+            args.test_endpoints,
         )
     except SequenceBuildError as error:
         print(f"Sequence data adapter build failed:\n{error}", file=sys.stderr)

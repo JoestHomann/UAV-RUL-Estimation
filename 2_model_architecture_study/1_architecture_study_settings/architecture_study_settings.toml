@@ -80,7 +80,17 @@ retraining_seeds = [13, 37, 73]    # Options: any list of distinct integers
 [evaluation]
 # Metrics for every architecture and group; RMSE is the tuning objective and
 # the rest are never combined into an automatic ranking score.
-metrics = ["r2", "rmse", "mae", "bias"]    # Options: any subset of these four
+metrics = [
+    "r2",
+    "rmse",
+    "mae",
+    "bias",
+    "overprediction_rate",
+    "mean_overprediction",
+    "root_mean_squared_overprediction",
+    "underprediction_rate",
+    "mean_underprediction",
+]    # Options: the supported regression and one-sided safety metrics
 # Breakdowns reported alongside the overall result.
 reported_groups = [    # Options: any subset of the five below
     "overall",
@@ -88,6 +98,7 @@ reported_groups = [    # Options: any subset of the five below
     "outer_fold",
     "age_band",
     "lifetime_quantile",
+    "rul_band",
 ]
 # Floor on reported predictions, since remaining useful life cannot be negative.
 prediction_minimum = 0.0    # Options: any float
@@ -96,6 +107,22 @@ prediction_minimum = 0.0    # Options: any float
 bootstrap_repetitions = 1000    # Options: any positive integer
 # Seed making the bootstrap repeatable.
 bootstrap_seed = 20260814    # Options: any integer
+
+[target]
+# Raw RUL remains the evaluation target. This section controls only the target
+# supplied while fitting a model.
+mode = "raw"    # Options: "raw", "piecewise_cap"
+# maximum_rul is required for piecewise_cap and must be omitted for raw mode.
+
+[prediction_policy]
+# Conservative fitting and prediction settings. The neutral values below
+# reproduce all existing runs.
+loss = "symmetric_rmse"    # Options: "symmetric_rmse", "asymmetric_mse", "quantile"
+overprediction_weight = 1.0    # Above 1 only for asymmetric_mse
+quantile = 0.5    # Below 0.5 only for quantile loss
+calibration = "none"    # Options: "none", "fixed_offset"
+safety_offset = 0.0    # Positive only for fixed_offset calibration
+non_overprediction_coverage = 0.5    # Recorded calibration target
 
 [representations]
 # Feature sets available to tabular architectures; each architecture's own

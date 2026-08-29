@@ -29,6 +29,13 @@ from models.tabular.rbf_svr import RBFSVRAdapter
 from models.tabular.regularized_linear import RegularizedLinearAdapter
 from models.tabular.xgboost import XGBoostAdapter
 from models.trajectory.trajectory_dtw_knn import TrajectoryDTWKNNAdapter
+from policies import (
+    LOSS_CAPABILITIES,
+    TARGET_CAPABLE_FAMILIES,
+    PredictionPolicy,
+    TargetPolicy,
+    verify_family_policies,
+)
 
 
 STEP_DIR = Path(__file__).resolve().parent
@@ -242,6 +249,27 @@ class ModelAdapterFactory:
             )
         self._validate_hyperparameters(family, hyperparameters)
 
+        target_policy = TargetPolicy.from_settings(
+            self.settings.get(
+                "target",
+                {"mode": "raw", "maximum_rul": None},
+            )
+        )
+        prediction_policy = PredictionPolicy.from_settings(
+            self.settings.get(
+                "prediction_policy",
+                {
+                    "loss": "symmetric_rmse",
+                    "overprediction_weight": 1.0,
+                    "quantile": 0.5,
+                    "calibration": "none",
+                    "safety_offset": 0.0,
+                    "non_overprediction_coverage": 0.5,
+                },
+            )
+        )
+        verify_family_policies(family, target_policy, prediction_policy)
+
         common_arguments: dict[str, Any] = {
             "hyperparameters": hyperparameters,
             "seed": seed,
@@ -249,13 +277,14 @@ class ModelAdapterFactory:
             "training_monitor": training_monitor,
         }
         adapter_class = ADAPTER_CLASSES[family]
+        adapter: ModelAdapter
         if family in {"xgboost", "catboost"}:
-            return adapter_class(
+            adapter = adapter_class(
                 **common_arguments,
                 early_stopping_patience=architecture["early_stopping_patience"],
                 training_iterations=training_iterations,
             )
-        if family in {
+        elif family in {
             "mlp",
             "tcn",
             "multiscale_cnn",
@@ -270,16 +299,19 @@ class ModelAdapterFactory:
                 early_stopping_patience=shared["early_stopping_patience"],
                 gradient_clip_global_norm=shared["gradient_clip_global_norm"],
             )
-            return adapter_class(
+            adapter = adapter_class(
                 **common_arguments,
                 training_config=training_config,
                 training_epochs=training_iterations,
             )
-        if training_iterations is not None:
+        elif training_iterations is not None:
             raise ModelAdapterError(
                 f"Model family {family!r} does not accept fixed training iterations"
             )
-        return adapter_class(**common_arguments)
+        else:
+            adapter = adapter_class(**common_arguments)
+        adapter.configure_policies(target_policy, prediction_policy)
+        return adapter
 
 
 def build_registry_payload(
@@ -306,6 +338,12 @@ def build_registry_payload(
             "supports_sample_weights": True,
             "stochastic": adapter_class.stochastic,
             "prediction_minimum": settings["evaluation"]["prediction_minimum"],
+            "supports_piecewise_target": family in TARGET_CAPABLE_FAMILIES,
+            "supported_losses": sorted(
+                LOSS_CAPABILITIES.get(family, {"symmetric_rmse"})
+            ),
+            "target_policy": settings["target"],
+            "prediction_policy": settings["prediction_policy"],
             "persistence": "trusted local joblib artifact",
         }
 

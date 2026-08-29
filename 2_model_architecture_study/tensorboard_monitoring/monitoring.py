@@ -269,7 +269,7 @@ def calculate_regression_metrics(
     targets: Any,
     predictions: Any,
 ) -> dict[str, float]:
-    """Calculate the four regression metrics used across Phase 2.
+    """Calculate shared accuracy and one-sided safety metrics.
 
     This is not a monitoring helper. Step 5 selects candidates on the RMSE
     this function returns, so it is a load-bearing calculation that happens to
@@ -287,6 +287,8 @@ def calculate_regression_metrics(
             "Cannot evaluate non-finite targets or predictions"
         )
     residual = predicted - observed
+    overprediction = np.maximum(residual, 0.0)
+    underprediction = np.maximum(-residual, 0.0)
     denominator = float(np.sum(np.square(observed - np.mean(observed))))
     return {
         "rmse": float(np.sqrt(np.mean(np.square(residual)))),
@@ -297,6 +299,19 @@ def calculate_regression_metrics(
             else 1.0 - float(np.sum(np.square(residual))) / denominator
         ),
         "bias": float(np.mean(residual)),
+        "overprediction_rate": float(np.mean(residual > 0.0)),
+        "mean_overprediction": float(np.mean(overprediction)),
+        "root_mean_squared_overprediction": float(
+            np.sqrt(np.mean(np.square(overprediction)))
+        ),
+        "overprediction_q90": float(np.quantile(overprediction, 0.90)),
+        "overprediction_q95": float(np.quantile(overprediction, 0.95)),
+        "maximum_overprediction": float(np.max(overprediction)),
+        "underprediction_rate": float(np.mean(residual < 0.0)),
+        "mean_underprediction": float(np.mean(underprediction)),
+        "root_mean_squared_underprediction": float(
+            np.sqrt(np.mean(np.square(underprediction)))
+        ),
     }
 
 
