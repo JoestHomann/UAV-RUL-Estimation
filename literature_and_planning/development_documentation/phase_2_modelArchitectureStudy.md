@@ -408,7 +408,7 @@ Search spaces must be fixed before locked evaluation. The following initial boun
 | Random Forest | `n_estimators`: `500`; `max_depth`: `None`, `5`, `10`, or `20`; `min_samples_leaf`: `1`, `2`, `5`, or `10`; `max_features`: `0.33`, `0.67`, or `1.0` |
 | Extra Trees | Same tree counts, depths, leaf sizes, and feature fractions as Random Forest; split thresholds are randomized and bootstrap sampling is disabled |
 | XGBoost | At most `2,000` trees with early stopping; `learning_rate`: `0.01-0.2`; `max_depth`: `2`, `3`, `4`, `6`, or `8`; `min_child_weight`: `0.5-20`; `subsample`: `0.6-1.0`; `colsample_bytree`: `0.5-1.0`; L1/L2 penalties on logarithmic scales |
-| CatBoost | At most `1,500` CPU trees with early stopping; `learning_rate`: `0.01-0.2`; depth: `4`, `6`, `8`, or `10`; L2 leaf regularization, random strength, bagging temperature, feature fraction, and `Plain`/`Ordered` boosting type |
+| CatBoost | At most `1,500` CPU trees with early stopping; `learning_rate`: `0.01-0.2`; depth: `4`, `6`, `8`, or `10`; L2 leaf regularization, random strength, bagging temperature, feature fraction, and fixed `Plain` boosting |
 | MLP | Hidden layers: `[64]`, `[128, 64]`, or `[256, 128]`; dropout: `0.0-0.5`; weight decay: `1e-6` to `1e-2`; learning rate: `1e-4` to `3e-3` |
 | TCN | Residual blocks: `3-5`; channels: `32`, `64`, or `128`; kernel: `5` or `7`; doubling dilations; dropout: `0.1-0.5`; lookback: `50` or `100` |
 | Multi-scale CNN | Branch channels: `16`, `32`, or `64`; joint kernels: `[3,5,9]`, `[3,7,15]`, or `[5,11,21]`; dropout: `0.1-0.5`; lookback: `50` or `100` |

@@ -23,8 +23,9 @@ values are used when the command does not provide the corresponding CLI
 option; explicit CLI options override the catalog for one invocation.
 
 Phase 1 creates a named run under
-`1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 copies the selected
-inputs and writes its resolved settings under
+`1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 reads the dedicated
+`pipeline_experiments/phase_2_settings.toml`, binds the selected experiment and
+Phase 1 interface, and writes its resolved settings under
 `pipeline_experiments/runs/<experiment>/phase2/`, while Steps 5-7 use the
 configured numbered Phase 2 run folder. Phase 3 uses the configured numbered
 Phase 3 run folder. All generated manifests retain the exact paths used by
@@ -38,6 +39,16 @@ stage is recorded as `interrupted` until it is resumed. Use new
 `phase_1_run_name`, `phase_2_run_number`, and `phase_3_run_number` values for a
 new scientific experiment. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
+
+## Configuration ownership
+
+Standalone Phase 2 runs use
+`2_model_architecture_study/1_architecture_study_settings/architecture_study_settings.toml`.
+Pipeline experiments never read or modify that file. They use the independent
+`pipeline_experiments/phase_2_settings.toml` for Phase 2 defaults and model
+search spaces, while `pipeline_experiments.toml` owns named experiment choices.
+The two workflows may therefore evolve without silently changing each other's
+runs.
 
 ## Edit the catalog
 

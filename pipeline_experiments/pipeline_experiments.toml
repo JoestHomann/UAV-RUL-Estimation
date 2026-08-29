@@ -13,13 +13,14 @@ settings_version = 1
 [execution]
 # Global limit for concurrent Phase 2 family/outer-fold study subprocesses.
 # Use "auto" to let the Phase 2 orchestrator use every available CPU core.
-max_workers = 4
+max_workers = 6
 
 [paths]
 train_csv = "data/train.csv"
 test_csv = "data/test.csv"
 phase_1_runner = "1_dataset_construction/run_all.py"
-phase_2_settings_template = "2_model_architecture_study/1_architecture_study_settings/architecture_study_settings.toml"
+# Pipeline-owned Phase 2 configuration; standalone Phase 2 has its own TOML.
+phase_2_settings = "pipeline_experiments/phase_2_settings.toml"
 phase_2_settings_builder = "2_model_architecture_study/1_architecture_study_settings/build_architecture_study_settings.py"
 phase_2_orchestrator = "2_model_architecture_study/run_phase_2.py"
 tabular_adapter_builder = "2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py"
@@ -94,8 +95,9 @@ calibration = "fixed_offset"
 safety_offset = 5.0
 non_overprediction_coverage = 0.6
 
-# This is a ready-to-run baseline experiment. It is intentionally explicit:
-# the launcher never creates a large implicit Cartesian product.
+# CatBoost was removed after the initial Run 6 attempt was stopped because its
+# CPU search dominated this pipeline experiment. Completed checkpoints for the
+# remaining families can resume without rerunning their finished folds.
 [experiments.PE_run_1]
 enabled = true
 from_stage = "phase2"
@@ -112,7 +114,6 @@ architectures = [
     "random_forest",
     "extra_trees",
     "xgboost",
-    "catboost",
 ]
 feature_set = "screened_drift_pruned"
 candidate_budget = 50
@@ -129,7 +130,9 @@ phase_3_search_seed = 13
 phase_3_model_seed = 13
 
 # Examples for future runs. Copy one, rename the table, and change all run
-# identities plus the scientific choices that define the question.
+# identities plus the scientific choices that define the question. General
+# pipeline experiments use XGBoost plus ExtraTrees; CatBoost belongs in a
+# separate confirmation experiment when it answers a specific question.
 [experiments.PE_conservative_cap125]
 enabled = false
 from_stage = "phase1"
@@ -140,8 +143,8 @@ phase_1_mode = "rebuild"
 prefix_variant = "current20"
 scenario_profile = "early_and_middle"
 phase_2_run_number = 7
-phase_2_settings_version = 13
-architectures = ["random_forest", "xgboost", "catboost"]
+phase_2_settings_version = 14
+architectures = ["extra_trees", "xgboost"]
 feature_set = "screened_drift_pruned"
 candidate_budget = 50
 search_seed = 13

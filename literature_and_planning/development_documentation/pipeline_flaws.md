@@ -307,7 +307,10 @@ Run a focused study with at least the following configurations:
 
 - unchanged raw-target control;
 - caps at 110, 125, 140, and 150;
-- XGBoost and CatBoost as the first tabular families;
+- XGBoost as the primary tabular family and ExtraTrees as the independent
+  tree-family control;
+- CatBoost only in a separate confirmation experiment after the cheaper
+  families support a specific pipeline change;
 - symmetric RMSE as the conservatism control;
 - asymmetric overprediction weights of 1.5, 2.0, and 3.0;
 - lower-quantile objectives at selected quantiles between 0.30 and 0.45;

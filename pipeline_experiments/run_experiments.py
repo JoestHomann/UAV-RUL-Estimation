@@ -164,12 +164,20 @@ def _phase2_settings(
     interface_path: Path,
 ) -> dict[str, Any]:
     paths = _paths(config)
+    settings_path = paths["phase_2_settings"]
     try:
-        with paths["phase_2_settings_template"].open("rb") as stream:
+        settings_path.relative_to(MANAGER_DIR.resolve())
+    except ValueError as error:
+        raise ExperimentManagerError(
+            "paths.phase_2_settings must point inside pipeline_experiments"
+        ) from error
+    try:
+        with settings_path.open("rb") as stream:
             settings = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as error:
-        raise ExperimentManagerError(f"Cannot read Phase 2 settings template: {error}") from error
-    settings = copy.deepcopy(settings)
+        raise ExperimentManagerError(
+            f"Cannot read pipeline experiment Phase 2 settings: {error}"
+        ) from error
 
     models = experiment.get("architectures")
     if not isinstance(models, list) or not models or not all(isinstance(item, str) for item in models):
