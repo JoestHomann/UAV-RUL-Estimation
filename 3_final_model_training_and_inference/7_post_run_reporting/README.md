@@ -21,6 +21,17 @@ candidate/fold stability, selected fold metrics, input alternatives, training
 cost, the final training curve when a shared TensorBoard loss exists, and
 target-free test prediction diagnostics.
 
+New Phase 3 searches also persist development out-of-fold predictions in
+`2_final_configuration_search/artifacts/final_search_oof_predictions.csv`.
+When that artifact is available, reporting automatically adds the selected
+configuration's residual ECDF, overprediction diagnostics, fixed-offset
+trade-off, positive-residual tails by true-RUL band, and observed-versus-
+predicted scatter (including the descriptive minus-six-cycle view). These
+figures use development targets only, are diagnostic, and never tune or apply
+an offset. Test-target safety metrics are never calculated. Reports for older
+runs without the OOF artifact remain valid and record the five unavailable
+development safety figures in `report_manifest.json`.
+
 The plots use only fields common to all registered model adapters. A family
 without an iterative training curve still receives every applicable plot, and
 the missing curve is recorded in `report_manifest.json` rather than treated as

@@ -38,7 +38,18 @@ from phase_3_common import (  # noqa: E402
 from phase_3_run_layout import SETTINGS_PATH, tensorboard_log_root  # noqa: E402
 
 
-REPORT_VERSION = 1
+REPORT_VERSION = 2
+OFFSET_CYCLES = (0.0, 3.0, 6.0, 10.0)
+OOF_COLUMNS = {
+    "candidate_number",
+    "outer_fold",
+    "uav_id",
+    "scenario",
+    "cutoff",
+    "observed_rul",
+    "predicted_rul",
+    "residual",
+}
 CANDIDATE_COLUMNS = {
     "candidate_number",
     "feature_set",
@@ -578,6 +589,223 @@ def _test_prediction_diagnostics(
     return _finish_figure(figure, path)
 
 
+def _prepare_development_oof(
+    oof: pd.DataFrame,
+    selected_number: int,
+) -> pd.DataFrame:
+    """Validate and select development OOF rows for the winning candidate."""
+
+    _require_columns(oof, OOF_COLUMNS, "Development OOF predictions")
+    rows = oof.loc[
+        pd.to_numeric(oof["candidate_number"], errors="coerce").eq(selected_number)
+    ].copy()
+    if rows.empty:
+        raise Phase3ReportingError(
+            "Development OOF predictions contain no selected candidate rows"
+        )
+    for column in ("cutoff", "observed_rul", "predicted_rul", "residual"):
+        rows[column] = pd.to_numeric(rows[column], errors="coerce")
+    if not rows[["cutoff", "observed_rul", "predicted_rul", "residual"]].notna().all().all():
+        raise Phase3ReportingError("Development OOF predictions contain non-numeric values")
+    expected = rows["predicted_rul"] - rows["observed_rul"]
+    if not np.allclose(rows["residual"].to_numpy(float), expected.to_numpy(float)):
+        raise Phase3ReportingError("Development OOF residuals do not match predictions")
+    rows["rul_band"] = pd.cut(
+        rows["observed_rul"],
+        bins=[-np.inf, 25.0, 50.0, 100.0, np.inf],
+        labels=["0-25", "26-50", "51-100", ">100"],
+    )
+    return rows
+
+
+def _development_residual_ecdf(
+    rows: pd.DataFrame,
+    family: str,
+    path: Path,
+) -> Path:
+    residuals = np.sort(rows["residual"].to_numpy(float))
+    coverage = np.arange(1, len(residuals) + 1, dtype=float) / len(residuals)
+    figure, axis = plt.subplots(figsize=(13, 7))
+    axis.plot(residuals, coverage, color="#2563eb", linewidth=1.9)
+    for index, offset in enumerate(OFFSET_CYCLES):
+        axis.axvline(
+            offset,
+            color="black" if offset == 0.0 else "#6b7280",
+            linestyle="-" if offset == 0.0 else "--",
+            linewidth=1.2,
+        )
+        axis.text(
+            offset,
+            0.02 + 0.04 * index,
+            f"{offset:g}",
+            rotation=90,
+            va="bottom",
+            ha="right",
+            fontsize=8,
+        )
+    axis.set_xlabel("Residual threshold (predicted - observed RUL cycles)")
+    axis.set_ylabel("Cumulative fraction at or below threshold")
+    axis.set_xscale("symlog", linthresh=15.0)
+    axis.set_ylim(0.0, 1.0)
+    axis.grid(alpha=0.25)
+    axis.set_title(
+        f"{_display_name(family)} development OOF residual ECDF\n"
+        "the ECDF at an offset is the resulting non-overprediction rate"
+    )
+    return _finish_figure(figure, path)
+
+
+def _development_overprediction_diagnostics(
+    rows: pd.DataFrame,
+    family: str,
+    path: Path,
+) -> Path:
+    positive = rows.loc[rows["residual"] > 0.0, "residual"]
+    overall = [
+        float(np.mean(rows["residual"] > 0.0)),
+        float(positive.mean()) if len(positive) else 0.0,
+        float(positive.quantile(0.90)) if len(positive) else 0.0,
+        float(positive.quantile(0.95)) if len(positive) else 0.0,
+        float(positive.max()) if len(positive) else 0.0,
+    ]
+    labels = ["Rate", "Mean", "P90", "P95", "Maximum"]
+    figure, axes = plt.subplots(1, 2, figsize=(15, 6))
+    bars = axes[0].bar(
+        ["Overprediction"],
+        [overall[0]],
+        color="#dc2626",
+        edgecolor="black",
+    )
+    axes[0].bar_label(bars, fmt="%.3f", padding=3)
+    axes[0].set_ylim(0.0, 1.0)
+    axes[0].set_ylabel("Fraction of development OOF rows")
+    axes[0].set_title("Overprediction frequency")
+    axes[0].grid(axis="y", alpha=0.25)
+    bars = axes[1].bar(labels[1:], overall[1:], color="#f97316", edgecolor="black")
+    axes[1].bar_label(bars, fmt="%.1f", padding=3)
+    axes[1].set_ylabel("Positive residual (RUL cycles)")
+    axes[1].set_title("Overprediction magnitude")
+    axes[1].grid(axis="y", alpha=0.25)
+    figure.suptitle(
+        f"{_display_name(family)} development OOF safety diagnostics\n"
+        "positive residuals mean predicted RUL exceeds observed RUL",
+        fontsize=14,
+    )
+    return _finish_figure(figure, path)
+
+
+def _development_offset_tradeoff(
+    rows: pd.DataFrame,
+    family: str,
+    prediction_minimum: float,
+    path: Path,
+) -> Path:
+    observed = rows["observed_rul"].to_numpy(float)
+    predicted = rows["predicted_rul"].to_numpy(float)
+    denominator = float(np.sum(np.square(observed - np.mean(observed))))
+    records: list[dict[str, float]] = []
+    for offset in OFFSET_CYCLES:
+        adjusted = np.maximum(predicted - offset, prediction_minimum)
+        residual = adjusted - observed
+        records.append(
+            {
+                "offset": offset,
+                "r2": float("nan") if denominator <= 0.0 else 1.0 - float(np.sum(residual**2)) / denominator,
+                "rmse": float(np.sqrt(np.mean(residual**2))),
+                "bias": float(np.mean(residual)),
+                "rate": float(np.mean(residual > 0.0)),
+            }
+        )
+    table = pd.DataFrame(records)
+    figure, axes = plt.subplots(2, 2, figsize=(15, 10), sharex=True)
+    for axis, column, label in (
+        (axes[0, 0], "r2", "R2"),
+        (axes[0, 1], "rmse", "RMSE (RUL cycles)"),
+        (axes[1, 0], "bias", "Bias (RUL cycles)"),
+        (axes[1, 1], "rate", "Overprediction rate"),
+    ):
+        axis.plot(table["offset"], table[column], marker="o", color="#2563eb", linewidth=2.0)
+        axis.set_ylabel(label)
+        axis.grid(alpha=0.25)
+    axes[1, 0].axhline(0.0, color="#6b7280", linestyle="--", linewidth=1.0)
+    for axis in axes[1]:
+        axis.set_xlabel("RUL cycles subtracted from prediction")
+    figure.suptitle(
+        f"{_display_name(family)} development OOF offset trade-off\n"
+        "diagnostic only: offsets are predeclared and no value is selected",
+        fontsize=14,
+    )
+    return _finish_figure(figure, path)
+
+
+def _development_positive_tails(
+    rows: pd.DataFrame,
+    family: str,
+    path: Path,
+) -> Path:
+    groups = ["overall", "0-25", "26-50", "51-100", ">100"]
+    values: list[list[float]] = []
+    for group in groups:
+        group_rows = rows if group == "overall" else rows.loc[rows["rul_band"].astype(str).eq(group)]
+        positive = group_rows.loc[group_rows["residual"] > 0.0, "residual"]
+        values.append(
+            [
+                float(positive.quantile(0.90)) if len(positive) else 0.0,
+                float(positive.quantile(0.95)) if len(positive) else 0.0,
+                float(positive.max()) if len(positive) else 0.0,
+            ]
+        )
+    table = np.asarray(values, dtype=float)
+    positions = np.arange(len(groups))
+    figure, axis = plt.subplots(figsize=(13, 6.5))
+    width = 0.25
+    for index, (label, color) in enumerate(
+        (("P90", "#f97316"), ("P95", "#dc2626"), ("Maximum", "#7f1d1d"))
+    ):
+        bars = axis.bar(positions + (index - 1) * width, table[:, index], width, label=label, color=color)
+        axis.bar_label(bars, fmt="%.1f", padding=2, fontsize=8)
+    axis.set_xticks(positions, groups)
+    axis.set_ylabel("Positive residual (RUL cycles)")
+    axis.set_xlabel("True RUL band")
+    axis.grid(axis="y", alpha=0.25)
+    axis.legend(frameon=False)
+    axis.set_title(
+        f"{_display_name(family)} development OOF positive-residual tails\n"
+        "percentiles are conditional on predictions that overestimate RUL"
+    )
+    return _finish_figure(figure, path)
+
+
+def _development_prediction_scatter(
+    rows: pd.DataFrame,
+    family: str,
+    prediction_minimum: float,
+    path: Path,
+) -> Path:
+    observed = rows["observed_rul"].to_numpy(float)
+    predicted = rows["predicted_rul"].to_numpy(float)
+    adjusted = np.maximum(predicted - 6.0, prediction_minimum)
+    lower = float(min(observed.min(), predicted.min(), adjusted.min()))
+    upper = float(max(observed.max(), predicted.max(), adjusted.max()))
+    figure, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+    for axis, values, title in (
+        (axes[0], predicted, "Unadjusted"),
+        (axes[1], adjusted, "Minus 6 RUL cycles"),
+    ):
+        axis.scatter(observed, values, s=16, alpha=0.30, color="#2563eb", edgecolor="none")
+        axis.plot([lower, upper], [lower, upper], color="black", linestyle="--")
+        axis.set_title(title)
+        axis.set_xlabel("Observed RUL")
+        axis.grid(alpha=0.20)
+    axes[0].set_ylabel("Predicted RUL")
+    figure.suptitle(
+        f"{_display_name(family)} development OOF prediction alignment\n"
+        "the six-cycle offset is diagnostic and is not selected from this figure",
+        fontsize=14,
+    )
+    return _finish_figure(figure, path)
+
+
 def build_report(run_number: int) -> dict[str, Any]:
     settings = read_json(
         step_directory(1, run_number=run_number)
@@ -611,6 +839,7 @@ def build_report(run_number: int) -> dict[str, Any]:
         search_artifacts / "final_search_fold_results.csv",
         "final-search fold results",
     )
+    oof_path = search_artifacts / "final_search_oof_predictions.csv"
     predictions = _read_csv(test_predictions_path(run_number), "test predictions")
     _require_columns(candidates, CANDIDATE_COLUMNS, "Candidate results")
     _require_columns(folds, FOLD_COLUMNS, "Fold results")
@@ -680,6 +909,57 @@ def build_report(run_number: int) -> dict[str, Any]:
         ),
     }
     skipped: dict[str, str] = {}
+    if oof_path.is_file():
+        oof = _prepare_development_oof(
+            _read_csv(oof_path, "development OOF predictions"),
+            selected_number,
+        )
+        prediction_minimum = float(selection.get("prediction_minimum", 0.0))
+        figures.update(
+            {
+                "development_residual_ecdf": _development_residual_ecdf(
+                    oof,
+                    family,
+                    figure_dir / "development_residual_ecdf_with_offsets.png",
+                ),
+                "development_overprediction_diagnostics": _development_overprediction_diagnostics(
+                    oof,
+                    family,
+                    figure_dir / "development_overprediction_diagnostics.png",
+                ),
+                "development_offset_tradeoff": _development_offset_tradeoff(
+                    oof,
+                    family,
+                    prediction_minimum,
+                    figure_dir / "development_offset_tradeoff.png",
+                ),
+                "development_positive_residual_tails": _development_positive_tails(
+                    oof,
+                    family,
+                    figure_dir / "development_positive_residual_tails.png",
+                ),
+                "development_prediction_scatter": _development_prediction_scatter(
+                    oof,
+                    family,
+                    prediction_minimum,
+                    figure_dir / "development_prediction_scatter.png",
+                ),
+            }
+        )
+    else:
+        reason = (
+            "Skipped because this run predates persisted development OOF "
+            "predictions; test targets are unavailable and no test safety "
+            "diagnostics are calculated."
+        )
+        for name in (
+            "development_residual_ecdf",
+            "development_overprediction_diagnostics",
+            "development_offset_tradeoff",
+            "development_positive_residual_tails",
+            "development_prediction_scatter",
+        ):
+            skipped[name] = reason
     training_curve = _final_training_curve(
         run_number,
         family,
@@ -712,7 +992,8 @@ def build_report(run_number: int) -> dict[str, Any]:
         "test_prediction_rows": len(predictions),
         "test_prediction_minimum": float(predictions["RUL"].min()),
         "test_prediction_median": float(predictions["RUL"].median()),
-        "test_prediction_maximum": float(predictions["RUL"].max()),
+            "test_prediction_maximum": float(predictions["RUL"].max()),
+        "development_oof_predictions_available": oof_path.is_file(),
         "test_targets_loaded": False,
         "test_metrics_calculated": False,
         "selection_changed": False,
@@ -734,6 +1015,10 @@ def build_report(run_number: int) -> dict[str, Any]:
             "fold_results": (
                 "../2_final_configuration_search/artifacts/"
                 "final_search_fold_results.csv"
+            ),
+            "development_oof_predictions": (
+                "../2_final_configuration_search/artifacts/"
+                "final_search_oof_predictions.csv"
             ),
             "test_predictions": "../5_test_inference/artifacts/test_predictions.csv",
         },

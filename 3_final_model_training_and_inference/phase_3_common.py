@@ -163,10 +163,14 @@ def phase_2_run_root(run_number: int) -> Path:
     return PHASE_2_DIR / "runs" / f"run_{run_number}"
 
 
-def phase_2_manifest_paths(run_number: int) -> dict[str, Path]:
+def phase_2_manifest_paths(
+    run_number: int,
+    *,
+    run_root: Path | None = None,
+) -> dict[str, Path]:
     """Return the three completed Phase 2 manifests required by Step 1."""
 
-    root = phase_2_run_root(run_number)
+    root = phase_2_run_root(run_number) if run_root is None else run_root.resolve()
     return {
         "selection": root / "5_inner_model_selection" / "selection_manifest.json",
         "locked_evaluation": root

@@ -65,7 +65,7 @@ from phase_3_common import (  # noqa: E402
 from phase_3_run_layout import tensorboard_log_root  # noqa: E402
 
 
-SEARCH_VERSION = 1
+SEARCH_VERSION = 2
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
     "catboost",
@@ -142,6 +142,23 @@ FOLD_COLUMNS = [
     "epochs_or_iterations",
     "best_epoch_or_iteration",
     "trainable_parameters",
+]
+
+OOF_COLUMNS = [
+    "settings_version",
+    "phase_3_run_number",
+    "model_family",
+    "candidate_number",
+    "configuration_id",
+    "optuna_trial_number",
+    "outer_fold",
+    "validation_row",
+    "uav_id",
+    "scenario",
+    "cutoff",
+    "observed_rul",
+    "predicted_rul",
+    "residual",
 ]
 
 
@@ -416,6 +433,7 @@ class FinalConfigurationSearchRunner:
         for path in (
             self.artifact_dir / "final_search_candidate_results.csv",
             self.artifact_dir / "final_search_fold_results.csv",
+            self.artifact_dir / "final_search_oof_predictions.csv",
             self.selected_output_path,
             self.manifest_output_path,
             self.status_path,
@@ -442,7 +460,13 @@ class FinalConfigurationSearchRunner:
         )
 
     @staticmethod
-    def _records(study: Study) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def _records(
+        study: Study,
+    ) -> tuple[
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
         complete = [
             trial
             for trial in study.trials
@@ -456,7 +480,12 @@ class FinalConfigurationSearchRunner:
             for trial in complete
             for record in trial.user_attrs["fold_records"]
         ]
-        return candidates, folds
+        oof = [
+            dict(record)
+            for trial in complete
+            for record in trial.user_attrs.get("oof_records", [])
+        ]
+        return candidates, folds, oof
 
     def _write_status(
         self,
@@ -478,7 +507,7 @@ class FinalConfigurationSearchRunner:
         write_json(payload, self.status_path)
 
     def _checkpoint(self, study: Study, _: FrozenTrial | None = None) -> None:
-        candidates, folds = self._records(study)
+        candidates, folds, oof = self._records(study)
         write_csv(
             candidates,
             CANDIDATE_COLUMNS,
@@ -488,6 +517,11 @@ class FinalConfigurationSearchRunner:
             folds,
             FOLD_COLUMNS,
             self.artifact_dir / "final_search_fold_results.csv",
+        )
+        write_csv(
+            oof,
+            OOF_COLUMNS,
+            self.artifact_dir / "final_search_oof_predictions.csv",
         )
         self._write_status("running", len(candidates))
 
@@ -515,9 +549,14 @@ class FinalConfigurationSearchRunner:
         folds: tuple[int, ...],
         split_repository: FinalSearchSplitRepository,
         monitors: dict[int, Any],
-    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    ) -> tuple[
+        dict[str, Any],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
         configuration_id = f"{self.family}__candidate_{candidate_number:03d}"
         fold_records: list[dict[str, Any]] = []
+        oof_records: list[dict[str, Any]] = []
         for outer_fold in folds:
             split = split_repository.get(
                 family=self.family,
@@ -566,6 +605,29 @@ class FinalConfigurationSearchRunner:
                     ):
                         raise FinalConfigurationSearchError(
                             "Adapter and final-search RMSE calculations disagree"
+                        )
+                    targets = target_values(split.validation)
+                    metadata = split.validation.metadata.reset_index(drop=True)
+                    for validation_row, (target, prediction) in enumerate(
+                        zip(targets, predictions, strict=True)
+                    ):
+                        oof_records.append(
+                            {
+                                "settings_version": self.settings_version,
+                                "phase_3_run_number": self.run_number,
+                                "model_family": self.family,
+                                "candidate_number": candidate_number,
+                                "configuration_id": configuration_id,
+                                "optuna_trial_number": trial.number,
+                                "outer_fold": outer_fold,
+                                "validation_row": validation_row,
+                                "uav_id": str(metadata.loc[validation_row, "uav_id"]),
+                                "scenario": int(metadata.loc[validation_row, "scenario"]),
+                                "cutoff": float(metadata.loc[validation_row, "cutoff"]),
+                                "observed_rul": float(target),
+                                "predicted_rul": float(prediction),
+                                "residual": float(prediction - target),
+                            }
                         )
                 finally:
                     if model is not None:
@@ -676,10 +738,10 @@ class FinalConfigurationSearchRunner:
             hyperparameters=candidate.hyperparameters,
             log_root=self.log_root,
         )
-        return candidate_record, fold_records
+        return candidate_record, fold_records, oof_records
 
     def _finish(self, study: Study, folds: tuple[int, ...]) -> dict[str, Any]:
-        candidates, fold_records = self._records(study)
+        candidates, fold_records, oof_records = self._records(study)
         if len(candidates) != self.candidate_budget:
             raise FinalConfigurationSearchError(
                 f"Completed {len(candidates)} of {self.candidate_budget} candidates"
@@ -705,6 +767,11 @@ class FinalConfigurationSearchRunner:
             FOLD_COLUMNS,
             self.artifact_dir / "final_search_fold_results.csv",
         )
+        write_csv(
+            oof_records,
+            OOF_COLUMNS,
+            self.artifact_dir / "final_search_oof_predictions.csv",
+        )
         configuration = json.loads(str(selected["configuration_json"]))
         selected_payload = {
             "selection_version": 1,
@@ -729,6 +796,9 @@ class FinalConfigurationSearchRunner:
             ),
             "search_seed": self.search_seed,
             "model_seed": self.model_seed,
+            "prediction_minimum": float(
+                self.phase_2_settings["evaluation"]["prediction_minimum"]
+            ),
             "selection_metric": "mean_fold_rmse",
             "selection_direction": "minimize",
             "tie_breaker": "candidate_number",
@@ -764,6 +834,7 @@ class FinalConfigurationSearchRunner:
             "artifacts": {
                 "candidate_results": "artifacts/final_search_candidate_results.csv",
                 "fold_results": "artifacts/final_search_fold_results.csv",
+                "oof_predictions": "artifacts/final_search_oof_predictions.csv",
                 "selected_configuration": "artifacts/selected_configuration.json",
                 "study_checkpoint": "checkpoints/final_search.sqlite3",
             },
@@ -809,7 +880,7 @@ class FinalConfigurationSearchRunner:
             raise FinalConfigurationSearchError(
                 f"Expected five outer folds, observed {len(folds)}"
             )
-        existing_candidates, _ = self._records(study)
+        existing_candidates, _, _ = self._records(study)
         seen = {str(record["configuration_json"]) for record in existing_candidates}
         if len(existing_candidates) > self.candidate_budget:
             raise FinalConfigurationSearchError(
@@ -836,12 +907,12 @@ class FinalConfigurationSearchRunner:
                     canonical = candidate.canonical_json()
                     if canonical in seen:
                         raise optuna.TrialPruned("Duplicate resolved candidate")
-                    candidates, _ = self._records(study)
+                    candidates, _, _ = self._records(study)
                     next_number = max(
                         [int(record["candidate_number"]) for record in candidates],
                         default=0,
                     ) + 1
-                    candidate_record, fold_records = self._evaluate_candidate(
+                    candidate_record, fold_records, oof_records = self._evaluate_candidate(
                         trial=trial,
                         candidate=candidate,
                         candidate_number=next_number,
@@ -852,6 +923,7 @@ class FinalConfigurationSearchRunner:
                     trial.set_user_attr("candidate_number", next_number)
                     trial.set_user_attr("candidate_record", candidate_record)
                     trial.set_user_attr("fold_records", fold_records)
+                    trial.set_user_attr("oof_records", oof_records)
                     trial.set_user_attr("configuration_json", canonical)
                     seen.add(canonical)
                     return float(candidate_record["mean_fold_rmse"])

@@ -973,6 +973,8 @@ def save_comparison(
     tables: ComparisonTables,
     plan: ArchitectureComparisonPlan,
     output_dir: Path,
+    *,
+    predictions: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Persist tables, figures, and a manifest that explicitly forbids ranking."""
 
@@ -1020,7 +1022,14 @@ def save_comparison(
     # directly testable and reusable without a display backend.
     from plot_architecture_comparison import create_comparison_figures
 
-    figure_paths = create_comparison_figures(tables, plan, output_dir / "figures")
+    if predictions is None:
+        predictions = pd.read_csv(plan.predictions_path)
+    figure_paths = create_comparison_figures(
+        tables,
+        plan,
+        output_dir / "figures",
+        predictions,
+    )
     manifest = {
         "comparison_version": 1,
         "settings_version": int(plan.settings["settings_version"]),

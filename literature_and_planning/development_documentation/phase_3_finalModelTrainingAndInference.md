@@ -130,6 +130,10 @@ directory is referenced in place and is not renamed or modified.
 The allowed values are:
 
 - `settings_version`, `run_number`, and `phase_2_run_number`: positive integers;
+- optional `phase_2_run_root`: a repository-relative Phase 2 artifact root;
+  pipeline experiments generate this field so Phase 3 reads the experiment's
+  own `phase2/` directory, while standalone runs omit it and use the numbered
+  Phase 2 directory;
 - `selected_model_family`: a family with complete tuning, locked evaluation,
   and comparison results in the referenced Phase 2 run;
 - `candidate_budget`: a positive integer, initially `25`;

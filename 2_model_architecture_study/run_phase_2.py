@@ -25,14 +25,15 @@ PHASE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PHASE_DIR.parent
 
 from run_layout import (  # noqa: E402
+    RUN_ROOT_ENVIRONMENT_VARIABLE,
     RunLayoutError,
     STEP_5_DIRECTORY_NAME,
     STEP_6_DIRECTORY_NAME,
     STEP_7_DIRECTORY_NAME,
     read_run_number,
-    run_root,
+    run_root_for_specification,
     step_directory_for_specification,
-    tensorboard_log_root,
+    tensorboard_log_root_for_specification,
 )
 from tensorboard_monitoring import (  # noqa: E402
     FIT_CURVE_ENVIRONMENT_VARIABLE,
@@ -83,6 +84,7 @@ def _configure_invocation(
     sequence_manifest_path: Path | None,
     trajectory_manifest_path: Path | None,
     model_registry_path: Path,
+    run_root_path: Path | None,
 ) -> None:
     """Configure optional experiment-local inputs for this process."""
 
@@ -90,6 +92,8 @@ def _configure_invocation(
 
     SPECIFICATION_PATH = specification_path.resolve()
     MODEL_REGISTRY_PATH = model_registry_path.resolve()
+    if run_root_path is not None:
+        os.environ[RUN_ROOT_ENVIRONMENT_VARIABLE] = str(run_root_path.resolve())
     INPUT_ARGUMENTS = []
     for flag, path in (
         ("--tabular-manifest", tabular_manifest_path),
@@ -840,8 +844,14 @@ def print_status() -> None:
         ):
             print(line + "unknown until Step 1 has run")
         return
-    print(f"Run: {run_number} ({run_root(run_number)})")
-    print(f"TensorBoard logs: {tensorboard_log_root(run_number)}")
+    resolved_run_root = run_root_for_specification(
+        specification_path=SPECIFICATION_PATH,
+    )
+    print(f"Run: {run_number} ({resolved_run_root})")
+    print(
+        "TensorBoard logs: "
+        f"{tensorboard_log_root_for_specification(specification_path=SPECIFICATION_PATH)}"
+    )
     print(
         "5. Inner model selection: "
         + _progress_status(
@@ -904,11 +914,14 @@ def run_pipeline(
         except RunLayoutError as error:
             raise Phase2PipelineError(str(error)) from error
         print(
-            f"Run {run_number}: Steps 5-7 read and write {run_root(run_number)}",
+            "Run "
+            f"{run_number}: Steps 5-7 read and write "
+            f"{run_root_for_specification(specification_path=SPECIFICATION_PATH)}",
             flush=True,
         )
         print(
-            f"TensorBoard logs: {tensorboard_log_root(run_number)}",
+            "TensorBoard logs: "
+            f"{tensorboard_log_root_for_specification(specification_path=SPECIFICATION_PATH)}",
             flush=True,
         )
     if force:
@@ -983,6 +996,15 @@ def main() -> None:
         help="Optional experiment-local Step 4 model registry.",
     )
     parser.add_argument(
+        "--run-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional root for Steps 5-7 and TensorBoard artifacts. Omit it "
+            "to use the standalone runs/run_<run_number> layout."
+        ),
+    )
+    parser.add_argument(
         "--status",
         action="store_true",
         help="Show current progress without running or modifying any step.",
@@ -1033,6 +1055,7 @@ def main() -> None:
             sequence_manifest_path=args.sequence_manifest,
             trajectory_manifest_path=args.trajectory_manifest,
             model_registry_path=args.model_registry,
+            run_root_path=args.run_root,
         )
         if args.status:
             print_status()

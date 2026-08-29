@@ -1,13 +1,14 @@
-"""Resolve the numbered run folder that Steps 5, 6 and 7 read and write.
+"""Resolve the run folder that Steps 5, 6 and 7 read and write.
 
-Every artifact those three steps produce lives under::
+Standalone Phase 2 runs store those artifacts under::
 
     2_model_architecture_study/runs/run_<n>/<step directory name>/
 
 where ``n`` is the ``run_number`` recorded in the architecture study settings.
-One folder therefore holds one complete run of the expensive part of Phase 2,
-which is what makes a finished run archivable and two runs comparable without
-either of them having to be moved out of the way first.
+An owning orchestrator may instead set ``PHASE2_RUN_ROOT`` so the same steps
+write beneath its own run directory. Pipeline experiments use this to keep all
+seven Phase 2 steps together under
+``pipeline_experiments/runs/<experiment>/phase2``.
 
 The run number is read, never written. Nothing in the pipeline advances it, so
 interrupting Phase 2 and resuming it later resolves to the same folder and the
@@ -15,16 +16,15 @@ resumed work joins the work that already finished. A run only ever changes when
 the operator edits the settings file, and that deliberately starts the new run
 from nothing rather than resuming the previous one.
 
-Steps 1 through 4 keep their fixed ``artifacts`` directories. Their outputs are
-the validated settings, the copied data adapters and the model registry, all of
-which are shared by every run and are reproduced identically from the same
-inputs, so giving each run its own copy would duplicate large datasets for no
-traceability gain.
+The override is scoped to the runner process and inherited by its workers.
+Without it, the established standalone layout and resume behavior are
+unchanged.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +48,11 @@ STEP_7_DIRECTORY_NAME = "7_architecture_comparison"
 # monitoring package, so a run's curves are archived, copied and deleted with
 # the results they describe instead of outliving them in a shared directory.
 TENSORBOARD_DIRECTORY_NAME = "tensorboard_logs"
+
+# An orchestrator may own the run folder outside the standalone Phase 2 runs
+# directory. The override is process-local and inherited by study subprocesses;
+# omitting it preserves the numbered standalone layout above.
+RUN_ROOT_ENVIRONMENT_VARIABLE = "PHASE2_RUN_ROOT"
 
 
 class RunLayoutError(ValueError):
@@ -111,6 +116,19 @@ def run_root(run_number: int, runs_dir: Path = RUNS_DIR) -> Path:
     return runs_dir / f"run_{run_number}"
 
 
+def run_root_for_specification(
+    *,
+    specification_path: Path = SPECIFICATION_PATH,
+    runs_dir: Path = RUNS_DIR,
+) -> Path:
+    """Resolve the explicit orchestration root or the numbered default."""
+
+    override = os.environ.get(RUN_ROOT_ENVIRONMENT_VARIABLE, "").strip()
+    if override:
+        return Path(override).resolve()
+    return run_root(read_run_number(specification_path), runs_dir)
+
+
 def step_directory(
     step_directory_name: str,
     *,
@@ -148,9 +166,12 @@ def tensorboard_log_root_for_specification(
     the pipeline is actually writing.
     """
 
-    return tensorboard_log_root(
-        read_run_number(specification_path),
-        runs_dir,
+    return (
+        run_root_for_specification(
+            specification_path=specification_path,
+            runs_dir=runs_dir,
+        )
+        / TENSORBOARD_DIRECTORY_NAME
     )
 
 
@@ -167,8 +188,18 @@ def step_directory_for_specification(
     once and no step can silently write into a different run than it reads.
     """
 
-    return step_directory(
-        step_directory_name,
-        run_number=read_run_number(specification_path),
-        runs_dir=runs_dir,
+    if step_directory_name not in {
+        STEP_5_DIRECTORY_NAME,
+        STEP_6_DIRECTORY_NAME,
+        STEP_7_DIRECTORY_NAME,
+    }:
+        raise RunLayoutError(
+            f"Unknown per-run step directory {step_directory_name!r}"
+        )
+    return (
+        run_root_for_specification(
+            specification_path=specification_path,
+            runs_dir=runs_dir,
+        )
+        / step_directory_name
     )

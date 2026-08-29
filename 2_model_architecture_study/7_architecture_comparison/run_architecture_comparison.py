@@ -79,7 +79,12 @@ def main() -> None:
                 STEP_7_DIRECTORY_NAME,
                 specification_path=args.specification,
             )
-        manifest = save_comparison(tables, plan, output_dir)
+        manifest = save_comparison(
+            tables,
+            plan,
+            output_dir,
+            predictions=predictions,
+        )
     except (
         ValueError,
         OSError,

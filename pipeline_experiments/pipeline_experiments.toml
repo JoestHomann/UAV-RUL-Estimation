@@ -102,6 +102,7 @@ non_overprediction_coverage = 0.6
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
+phase_2_scope = "complete"
 phase_1_profile = "drift_ablation"
 phase_1_run_name = "PE_run_1"
 phase_1_mode = "rebuild"
@@ -129,30 +130,84 @@ phase_3_candidate_budget = 50
 phase_3_search_seed = 13
 phase_3_model_seed = 13
 
-# Examples for future runs. Copy one, rename the table, and change all run
-# identities plus the scientific choices that define the question. General
-# pipeline experiments use XGBoost plus ExtraTrees; CatBoost belongs in a
-# separate confirmation experiment when it answers a specific question.
-[experiments.PE_conservative_cap125]
-enabled = false
-from_stage = "phase1"
+# Target/scenario 2x2 matrix. PE_run_1 supplies the current-scenario/raw-target
+# cell. The three cells below stop after development-only Step 5 until one is
+# selected and its phase_2_scope is deliberately changed to "complete".
+[experiments.PE_2x2_current_cap125]
+enabled = true
+from_stage = "phase2"
 through_stage = "phase2"
+phase_2_scope = "selection_only"
 phase_1_profile = "drift_ablation"
-phase_1_run_name = "PE_conservative_cap125"
-phase_1_mode = "rebuild"
+phase_1_run_name = "PE_run_1"
+phase_1_mode = "reuse"
 prefix_variant = "current20"
-scenario_profile = "early_and_middle"
+scenario_profile = "current"
 phase_2_run_number = 7
-phase_2_settings_version = 14
+phase_2_settings_version = 13
 architectures = ["extra_trees", "xgboost"]
 feature_set = "screened_drift_pruned"
 candidate_budget = 50
 search_seed = 13
 retraining_seeds = [13, 37, 73]
 target_profile = "capped_125"
-prediction_profile = "conservative_110"
+prediction_profile = "symmetric"
 phase_3_enabled = false
 phase_3_run_number = 5
+phase_3_settings_version = 1
+phase_3_selected_model_family = "xgboost"
+phase_3_candidate_budget = 50
+phase_3_search_seed = 13
+phase_3_model_seed = 13
+
+[experiments.PE_2x2_early_raw]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "drift_ablation"
+phase_1_run_name = "PE_2x2_early_middle"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 8
+phase_2_settings_version = 14
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 50
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "raw"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+phase_3_run_number = 6
+phase_3_settings_version = 1
+phase_3_selected_model_family = "xgboost"
+phase_3_candidate_budget = 50
+phase_3_search_seed = 13
+phase_3_model_seed = 13
+
+[experiments.PE_2x2_early_cap125]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "drift_ablation"
+phase_1_run_name = "PE_2x2_early_middle"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 9
+phase_2_settings_version = 15
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 50
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+phase_3_run_number = 7
 phase_3_settings_version = 1
 phase_3_selected_model_family = "xgboost"
 phase_3_candidate_budget = 50

@@ -28,6 +28,10 @@ METRIC_LABELS = {
     "bias": "Bias (predicted - observed RUL)",
 }
 
+OFFSET_CYCLES = (0.0, 3.0, 6.0, 10.0)
+RUL_BAND_LABELS = ("0-25", "26-50", "51-100", "above_100")
+RUL_BAND_DISPLAY_LABELS = ("0-25", "26-50", "51-100", ">100")
+
 
 def _display_name(family: str) -> str:
     """Turn a registry key into a compact plot label."""
@@ -59,6 +63,17 @@ def _family_colors(families: tuple[str, ...]) -> dict[str, tuple[float, ...]]:
     return {family: palette(index % 10) for index, family in enumerate(families)}
 
 
+def _diagnostic_families(plan: ArchitectureComparisonPlan) -> tuple[str, ...]:
+    """Prefer fitted models when a baseline would flatten diagnostic scales."""
+
+    fitted = tuple(
+        family
+        for family in plan.enabled_families
+        if family not in {"mean_baseline", "cycle_only_baseline"}
+    )
+    return fitted or plan.enabled_families
+
+
 def _finish_figure(figure: plt.Figure, path: Path) -> Path:
     """Apply final spacing, save one PNG, and release its memory."""
 
@@ -78,7 +93,7 @@ def _overall_metrics_figure(
 
     families = plan.enabled_families
     labels = [_display_name(family) for family in families]
-    colors = _family_colors(families)
+    colors = _family_colors(plan.enabled_families)
     table = comparison.set_index("model_family").loc[list(families)]
     x_positions = np.arange(len(families))
     figure, axes = plt.subplots(2, 2, figsize=(16, 10))
@@ -443,14 +458,371 @@ def _r2_bar_figure(
     return _finish_figure(figure, output_path)
 
 
+def _seed_averaged_predictions(predictions: pd.DataFrame) -> pd.DataFrame:
+    """Average retained seeds for each model and locked endpoint."""
+
+    endpoint_columns = [
+        "outer_fold",
+        "scenario",
+        "sample_id",
+        "uav_id",
+        "cutoff",
+        "y_true",
+    ]
+    averaged = (
+        predictions.groupby(
+            ["model_family", *endpoint_columns],
+            as_index=False,
+            dropna=False,
+            sort=False,
+        )["y_pred"]
+        .mean()
+        .copy()
+    )
+    averaged["residual"] = averaged["y_pred"] - averaged["y_true"]
+    return averaged
+
+
+def _offset_diagnostics(
+    seed_averaged: pd.DataFrame,
+    prediction_minimum: float,
+) -> pd.DataFrame:
+    """Evaluate fixed, predeclared offsets without choosing a winner."""
+
+    records: list[dict[str, float | str]] = []
+    for family, rows in seed_averaged.groupby("model_family", sort=False):
+        observed = rows["y_true"].to_numpy(float)
+        predicted = rows["y_pred"].to_numpy(float)
+        denominator = float(np.sum(np.square(observed - np.mean(observed))))
+        for offset in OFFSET_CYCLES:
+            adjusted = np.maximum(predicted - offset, prediction_minimum)
+            residual = adjusted - observed
+            records.append(
+                {
+                    "model_family": family,
+                    "offset_cycles": offset,
+                    "r2": (
+                        float("nan")
+                        if denominator <= 0.0
+                        else 1.0
+                        - float(np.sum(np.square(residual))) / denominator
+                    ),
+                    "rmse": float(np.sqrt(np.mean(np.square(residual)))),
+                    "mae": float(np.mean(np.abs(residual))),
+                    "bias": float(np.mean(residual)),
+                    "overprediction_rate": float(np.mean(residual > 0.0)),
+                }
+            )
+    return pd.DataFrame.from_records(records)
+
+
+def _overprediction_tail_diagnostics(predictions: pd.DataFrame) -> pd.DataFrame:
+    """Summarize positive-residual tails overall and by true-RUL band."""
+
+    working = predictions.copy()
+    working["rul_band"] = pd.cut(
+        working["y_true"],
+        bins=[-np.inf, 25.0, 50.0, 100.0, np.inf],
+        labels=list(RUL_BAND_LABELS),
+    )
+    records: list[dict[str, float | int | str]] = []
+    for family, family_rows in working.groupby("model_family", sort=False):
+        groups = [("overall", family_rows)]
+        groups.extend(
+            (band, family_rows.loc[family_rows["rul_band"] == band])
+            for band in RUL_BAND_LABELS
+        )
+        for group_name, rows in groups:
+            positive = rows.loc[rows["residual"] > 0.0, "residual"]
+            records.append(
+                {
+                    "model_family": family,
+                    "group_value": group_name,
+                    "positive_count": int(len(positive)),
+                    "positive_p90": (
+                        float(positive.quantile(0.90)) if len(positive) else np.nan
+                    ),
+                    "positive_p95": (
+                        float(positive.quantile(0.95)) if len(positive) else np.nan
+                    ),
+                    "positive_maximum": (
+                        float(positive.max()) if len(positive) else np.nan
+                    ),
+                }
+            )
+    return pd.DataFrame.from_records(records)
+
+
+def _residual_ecdf_figure(
+    seed_averaged: pd.DataFrame,
+    plan: ArchitectureComparisonPlan,
+    output_path: Path,
+) -> Path:
+    """Show residual coverage and how fixed offsets move the safety threshold."""
+
+    families = plan.enabled_families
+    colors = _family_colors(families)
+    figure, axis = plt.subplots(figsize=(13, 7))
+    for family in families:
+        residuals = np.sort(
+            seed_averaged.loc[
+                seed_averaged["model_family"] == family,
+                "residual",
+            ].to_numpy(float)
+        )
+        coverage = np.arange(1, len(residuals) + 1, dtype=float) / len(residuals)
+        axis.plot(
+            residuals,
+            coverage,
+            color=colors[family],
+            linewidth=1.8,
+            label=_display_name(family),
+        )
+    for offset_index, offset in enumerate(OFFSET_CYCLES):
+        axis.axvline(
+            offset,
+            color="black" if offset == 0.0 else "#6b7280",
+            linewidth=1.2,
+            linestyle="-" if offset == 0.0 else "--",
+            alpha=0.8,
+        )
+        axis.text(
+            offset,
+            0.015 + 0.035 * offset_index,
+            f"{offset:g}",
+            rotation=90,
+            va="bottom",
+            ha="right",
+            fontsize=8,
+        )
+    axis.set_xlabel("Residual threshold (predicted - observed RUL cycles)")
+    axis.set_ylabel("Cumulative fraction at or below threshold")
+    axis.set_xscale("symlog", linthresh=15.0)
+    axis.set_ylim(0.0, 1.0)
+    axis.grid(alpha=0.25)
+    axis.legend(ncol=4, fontsize=9, loc="lower right")
+    axis.set_title(
+        "Seed-averaged residual distributions and candidate safety offsets\n"
+        "the ECDF value at an offset is the resulting non-overprediction rate"
+    )
+    return _finish_figure(figure, output_path)
+
+
+def _overprediction_metrics_figure(
+    grouped: pd.DataFrame,
+    plan: ArchitectureComparisonPlan,
+    output_path: Path,
+) -> Path:
+    """Show asymmetric error frequency and magnitude overall and by RUL band."""
+
+    families = plan.enabled_families
+    colors = _family_colors(families)
+    labels = [_display_name(family) for family in families]
+    positions = np.arange(len(families))
+    overall = (
+        grouped.loc[grouped["group_type"] == "overall"]
+        .set_index("model_family")
+        .loc[list(families)]
+    )
+    by_band = grouped.loc[grouped["group_type"] == "rul_band"]
+    figure, axes = plt.subplots(2, 2, figsize=(17, 11))
+
+    for axis, column, title in (
+        (axes[0, 0], "overprediction_rate_mean", "Overall overprediction rate"),
+        (
+            axes[0, 1],
+            "root_mean_squared_overprediction_mean",
+            "Overall RMS overprediction",
+        ),
+    ):
+        bars = axis.bar(
+            positions,
+            overall[column].to_numpy(float),
+            color=[colors[family] for family in families],
+            edgecolor="black",
+            linewidth=0.5,
+        )
+        axis.set_xticks(positions, labels, rotation=30, ha="right")
+        axis.set_title(title)
+        axis.grid(axis="y", alpha=0.25)
+        axis.bar_label(
+            bars,
+            fmt="%.3f" if column == "overprediction_rate_mean" else "%.1f",
+            padding=3,
+            fontsize=8,
+        )
+    axes[0, 0].set_ylabel("Fraction of predictions")
+    axes[0, 1].set_ylabel("RUL cycles")
+
+    for family in families:
+        rows = by_band.loc[by_band["model_family"] == family].sort_values(
+            "group_position",
+            kind="stable",
+        )
+        x_values = rows["group_position"].to_numpy(int)
+        axes[1, 0].plot(
+            x_values,
+            rows["overprediction_rate_mean"].to_numpy(float),
+            marker="o",
+            color=colors[family],
+            label=_display_name(family),
+        )
+        axes[1, 1].plot(
+            x_values,
+            rows["root_mean_squared_overprediction_mean"].to_numpy(float),
+            marker="o",
+            color=colors[family],
+            label=_display_name(family),
+        )
+    band_positions = np.arange(len(RUL_BAND_LABELS))
+    for axis in axes[1]:
+        axis.set_xticks(band_positions, list(RUL_BAND_DISPLAY_LABELS))
+        axis.grid(alpha=0.25)
+        axis.set_xlabel("True RUL band")
+    axes[1, 0].set_title("Overprediction rate by true-RUL band")
+    axes[1, 0].set_ylabel("Fraction of predictions")
+    axes[1, 1].set_title("RMS overprediction by true-RUL band")
+    axes[1, 1].set_ylabel("RUL cycles")
+    axes[1, 0].legend(ncol=4, fontsize=9, loc="best")
+    figure.suptitle(
+        "Asymmetric locked-evaluation diagnostics\n"
+        "positive residuals mean predicted RUL exceeds observed RUL",
+        fontsize=14,
+    )
+    return _finish_figure(figure, output_path)
+
+
+def _offset_tradeoff_figure(
+    diagnostics: pd.DataFrame,
+    plan: ArchitectureComparisonPlan,
+    output_path: Path,
+) -> Path:
+    """Keep accuracy, bias, and safety visible across fixed offsets."""
+
+    families = _diagnostic_families(plan)
+    colors = _family_colors(plan.enabled_families)
+    figure, axes = plt.subplots(2, 2, figsize=(16, 10), sharex=True)
+    panels = (
+        ("r2", "R2"),
+        ("rmse", "RMSE (RUL cycles)"),
+        ("bias", "Bias (RUL cycles)"),
+        ("overprediction_rate", "Overprediction rate"),
+    )
+    for family in families:
+        rows = diagnostics.loc[diagnostics["model_family"] == family].sort_values(
+            "offset_cycles"
+        )
+        for axis, (column, label) in zip(axes.flat, panels, strict=True):
+            axis.plot(
+                rows["offset_cycles"],
+                rows[column],
+                marker="o",
+                color=colors[family],
+                label=_display_name(family),
+            )
+            axis.set_ylabel(label)
+            axis.grid(alpha=0.25)
+    axes[1, 0].axhline(0.0, color="#6b7280", linewidth=1.0, linestyle="--")
+    for axis in axes[1]:
+        axis.set_xlabel("RUL cycles subtracted from prediction")
+    axes[0, 0].legend(ncol=4, fontsize=9, loc="best")
+    figure.suptitle(
+        "Accuracy-safety tradeoff for fixed prediction offsets\n"
+        "diagnostic only: offsets are predeclared and no best value is selected",
+        fontsize=14,
+    )
+    return _finish_figure(figure, output_path)
+
+
+def _positive_tail_figure(
+    tails: pd.DataFrame,
+    plan: ArchitectureComparisonPlan,
+    output_path: Path,
+) -> Path:
+    """Show positive-residual P90, P95, and maximum values by family."""
+
+    families = plan.enabled_families
+    colors = _family_colors(families)
+    labels = [_display_name(family) for family in families]
+    overall = (
+        tails.loc[tails["group_value"] == "overall"]
+        .set_index("model_family")
+        .loc[list(families)]
+    )
+    positions = np.arange(len(families))
+    figure, axes = plt.subplots(1, 3, figsize=(19, 6), sharex=True)
+    for axis, column, title in zip(
+        axes,
+        ("positive_p90", "positive_p95", "positive_maximum"),
+        ("P90", "P95", "Maximum"),
+        strict=True,
+    ):
+        bars = axis.bar(
+            positions,
+            overall[column].to_numpy(float),
+            color=[colors[family] for family in families],
+            edgecolor="black",
+            linewidth=0.5,
+        )
+        axis.set_xticks(positions, labels, rotation=30, ha="right")
+        axis.set_title(title)
+        axis.set_ylabel("Positive residual (RUL cycles)")
+        axis.grid(axis="y", alpha=0.25)
+        axis.bar_label(bars, fmt="%.1f", padding=3, fontsize=8)
+    figure.suptitle(
+        "Positive-residual tail magnitude\n"
+        "percentiles are conditional on predictions that overestimate RUL",
+        fontsize=14,
+    )
+    return _finish_figure(figure, output_path)
+
+
+def _prediction_offset_scatter_figure(
+    seed_averaged: pd.DataFrame,
+    family: str,
+    prediction_minimum: float,
+    output_path: Path,
+) -> Path:
+    """Compare observed/predicted alignment before and after a six-cycle offset."""
+
+    rows = seed_averaged.loc[seed_averaged["model_family"] == family]
+    observed = rows["y_true"].to_numpy(float)
+    original = rows["y_pred"].to_numpy(float)
+    adjusted = np.maximum(original - 6.0, prediction_minimum)
+    lower = float(min(np.min(observed), np.min(adjusted), np.min(original)))
+    upper = float(max(np.max(observed), np.max(adjusted), np.max(original)))
+    figure, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+    for axis, predicted, title in (
+        (axes[0], original, "Unadjusted"),
+        (axes[1], adjusted, "Minus 6 RUL cycles"),
+    ):
+        axis.scatter(observed, predicted, s=12, alpha=0.25, color="#2563eb")
+        axis.plot([lower, upper], [lower, upper], color="black", linestyle="--")
+        axis.set_title(title)
+        axis.set_xlabel("Observed RUL")
+        axis.grid(alpha=0.20)
+    axes[0].set_ylabel("Predicted RUL")
+    figure.suptitle(
+        f"{_display_name(family)} prediction alignment\n"
+        "the fixed offset is diagnostic and is not selected from this figure",
+        fontsize=14,
+    )
+    return _finish_figure(figure, output_path)
+
+
 def create_comparison_figures(
     tables: "ComparisonTables",
     plan: ArchitectureComparisonPlan,
     figure_dir: Path,
+    predictions: pd.DataFrame,
 ) -> list[Path]:
     """Create all figures promised by the architecture-study documentation."""
 
     figure_dir.mkdir(parents=True, exist_ok=True)
+    seed_averaged = _seed_averaged_predictions(predictions)
+    prediction_minimum = float(plan.settings["evaluation"]["prediction_minimum"])
+    offset_diagnostics = _offset_diagnostics(seed_averaged, prediction_minimum)
+    tail_diagnostics = _overprediction_tail_diagnostics(predictions)
     paths = [
         _overall_metrics_figure(
             tables.architecture_comparison,
@@ -506,5 +878,34 @@ def create_comparison_figures(
             plan,
             figure_dir / "r2_comparison.png",
         ),
+        _residual_ecdf_figure(
+            seed_averaged,
+            plan,
+            figure_dir / "residual_ecdf_with_offsets.png",
+        ),
+        _overprediction_metrics_figure(
+            tables.grouped_architecture_metrics,
+            plan,
+            figure_dir / "overprediction_diagnostics.png",
+        ),
+        _offset_tradeoff_figure(
+            offset_diagnostics,
+            plan,
+            figure_dir / "offset_tradeoff.png",
+        ),
+        _positive_tail_figure(
+            tail_diagnostics,
+            plan,
+            figure_dir / "positive_residual_tails.png",
+        ),
     ]
+    paths.extend(
+        _prediction_offset_scatter_figure(
+            seed_averaged,
+            family,
+            prediction_minimum,
+            figure_dir / f"prediction_scatter_{family}.png",
+        )
+        for family in plan.enabled_families
+    )
     return paths

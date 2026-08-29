@@ -64,6 +64,9 @@ Phase 3 run number.
 Run numbers are phase-local. The default settings read Phase 2 Run 3 from
 `2_model_architecture_study/runs/run_3/` and write Phase 3 Run 1 under
 `3_final_model_training_and_inference/runs/run_1/`.
+Pipeline experiments additionally generate `phase_2_run_root`, pointing Phase 3
+at `pipeline_experiments/runs/<experiment>/phase2/`. Standalone Phase 3 TOML
+files may omit it and retain the numbered Phase 2 default.
 
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the

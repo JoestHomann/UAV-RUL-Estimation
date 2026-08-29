@@ -15,6 +15,12 @@ if str(STEP_DIR) not in sys.path:
 
 from build_phase_3_report import (  # noqa: E402
     _display_name,
+    _prepare_development_oof,
+    _development_offset_tradeoff,
+    _development_overprediction_diagnostics,
+    _development_prediction_scatter,
+    _development_positive_tails,
+    _development_residual_ecdf,
     _fold_heatmap,
     _input_alternative_performance,
     _input_choices,
@@ -149,12 +155,65 @@ def _verify_sequence_choices() -> None:
     )
 
 
+def _verify_development_safety_plots() -> int:
+    observed = np.asarray([10.0, 20.0, 40.0, 80.0, 120.0] * 5)
+    predicted = observed + np.asarray([4.0, -3.0, 7.0, -8.0, 12.0] * 5)
+    oof = pd.DataFrame(
+        {
+            "candidate_number": [7] * len(observed),
+            "outer_fold": np.repeat(np.arange(5), 5),
+            "uav_id": [f"uav_{index}" for index in range(len(observed))],
+            "scenario": np.tile(np.arange(5), 5),
+            "cutoff": np.tile([20, 40, 60, 80, 100], 5),
+            "observed_rul": observed,
+            "predicted_rul": predicted,
+            "residual": predicted - observed,
+        }
+    )
+    output = STEP_DIR / ".verification_safety_outputs"
+    output.mkdir(exist_ok=False)
+    paths: list[Path] = []
+    try:
+        prepared = _prepare_development_oof(oof, 7)
+        paths = [
+            _development_residual_ecdf(prepared, "xgboost", output / "a.png"),
+            _development_overprediction_diagnostics(
+                prepared,
+                "xgboost",
+                output / "b.png",
+            ),
+            _development_offset_tradeoff(
+                prepared,
+                "xgboost",
+                0.0,
+                output / "c.png",
+            ),
+            _development_positive_tails(prepared, "xgboost", output / "d.png"),
+            _development_prediction_scatter(
+                prepared,
+                "xgboost",
+                0.0,
+                output / "e.png",
+            ),
+        ]
+        _require(
+            all(path.is_file() and path.stat().st_size > 0 for path in paths),
+            "A development OOF safety plot was not written",
+        )
+        return len(paths)
+    finally:
+        for path in paths:
+            path.unlink(missing_ok=True)
+        output.rmdir()
+
+
 def main() -> None:
     try:
         for family in FAMILIES:
             _require(bool(_display_name(family)), f"Family {family} has no label")
         plot_count = _verify_baseline_plots()
         _verify_sequence_choices()
+        safety_plot_count = _verify_development_safety_plots()
     except (RuntimeError, OSError, ValueError) as error:
         print(f"Phase 3 reporting verification failed:\n{error}", file=sys.stderr)
         raise SystemExit(1) from error
@@ -162,6 +221,7 @@ def main() -> None:
     print(f"Registered families checked: {len(FAMILIES)}")
     print(f"Single-candidate baseline plots checked: {plot_count}")
     print("Sequence lookback alternatives checked: 3")
+    print(f"Development OOF safety plots checked: {safety_plot_count}")
 
 
 if __name__ == "__main__":

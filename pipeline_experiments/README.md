@@ -22,22 +22,69 @@ Each experiment can set `from_stage` and `through_stage` in the TOML. These
 values are used when the command does not provide the corresponding CLI
 option; explicit CLI options override the catalog for one invocation.
 
+## Target/scenario 2x2 experiment
+
+The catalog contains a predeclared four-cell comparison of current versus
+early/middle validation scenarios and raw versus cap-125 fitting targets.
+`PE_run_1` supplies the completed current/raw control. Run the other three
+development selections in this order:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_2x2_current_cap125
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_2x2_early_raw
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_2x2_early_cap125
+```
+
+The early/raw run builds the shared early/middle Phase 1 artifacts; the
+early/capped run reuses them. All three new cells declare
+`phase_2_scope = "selection_only"`, which stops after Step 5 and cannot launch
+locked evaluation or architecture comparison.
+
+Compare the selected development candidates without reading Step 6:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\compare_experiments.py `
+  --scope selection `
+  --run PE_run_1 `
+  --run PE_2x2_current_cap125 `
+  --run PE_2x2_early_raw `
+  --run PE_2x2_early_cap125
+```
+
+This writes `pipeline_experiments/selection_experiment_comparison.csv`. After
+recording the development-only decision, change only the winning experiment to
+`phase_2_scope = "complete"` and rerun it. The manager preserves Step 5,
+performs Steps 6-7 once, and writes the locked comparison in the same experiment
+folder. The non-winning cells remain selection-only.
+
 Phase 1 creates a named run under
 `1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 reads the dedicated
 `pipeline_experiments/phase_2_settings.toml`, binds the selected experiment and
 Phase 1 interface, and writes its resolved settings under
 `pipeline_experiments/runs/<experiment>/phase2/`, while Steps 5-7 use the
-configured numbered Phase 2 run folder. Phase 3 uses the configured numbered
-Phase 3 run folder. All generated manifests retain the exact paths used by
-that experiment. Phase 2 Steps 5 and 6 use the standard parallel orchestrator;
+same experiment-owned Phase 2 folder. The Phase 2 run number remains recorded
+as scientific metadata but no longer selects a standalone Phase 2 directory.
+Phase 3 uses the configured numbered Phase 3 run folder. All generated
+manifests retain the exact paths used by that experiment. Phase 2 Steps 5 and
+6 use the standard parallel orchestrator;
 `max_workers` controls the number of independent family/outer-fold subprocesses
 that can run concurrently.
+
+Step 7 automatically generates asymmetric safety diagnostics in the
+experiment-owned `phase2/7_architecture_comparison/figures/` directory. These
+include residual ECDFs with fixed offset thresholds, overprediction rate and
+RMS magnitude by true-RUL band, fixed-offset accuracy/safety tradeoffs,
+positive-residual P90/P95/maximum tails, and per-family prediction alignment
+before and after the six-cycle diagnostic offset. Offset plots are descriptive:
+they do not select or apply an offset to a trained model.
 
 The launcher resumes Phase 2 and Phase 3 checkpoints. A partial Phase 1 or
 Phase 2 run can be continued by running the same command again; an interrupted
 stage is recorded as `interrupted` until it is resumed. Use new
 `phase_1_run_name`, `phase_2_run_number`, and `phase_3_run_number` values for a
-new scientific experiment. `--force` is intended for rerunning the selected
+new scientific experiment. The experiment name owns its complete artifact
+directory; the Phase 2 run number is retained for manifest identity and Phase
+3 traceability. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
 
 ## Configuration ownership
@@ -59,6 +106,8 @@ then edit the question-specific fields:
   construction policy;
 - `architectures`, `feature_set`, `candidate_budget`, and seeds choose the
   Phase 2 study;
+- `phase_2_scope = "selection_only"` stops at development selection, while
+  `"complete"` permits the locked evaluation and comparison;
 - `target_profile` and `prediction_profile` choose raw/capped targets and
   symmetric/conservative fitting;
 - the Phase 3 fields enable optional final selection, training, inference,
@@ -77,7 +126,7 @@ interpretation straightforward.
 After one or more Phase 2 studies finish:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\compare_experiments.py
+.venv\Scripts\python.exe pipeline_experiments\compare_experiments.py --scope locked
 ```
 
 This writes `experiment_comparison.csv` from the locked, offline comparison

@@ -19,9 +19,9 @@ REPOSITORY_ROOT = MANAGER_DIR.parent
 DEFAULT_CONFIG_PATH = MANAGER_DIR / "pipeline_experiments.toml"
 RUNS_DIR = MANAGER_DIR / "runs"
 PHASE_1_ROOT = REPOSITORY_ROOT / "1_dataset_construction"
-PHASE_2_ROOT = REPOSITORY_ROOT / "2_model_architecture_study"
 PHASE_3_ROOT = REPOSITORY_ROOT / "3_final_model_training_and_inference"
 STAGES = ("phase1", "phase2", "phase3")
+PHASE_2_SCOPES = ("selection_only", "complete")
 
 
 class ExperimentManagerError(ValueError):
@@ -101,6 +101,18 @@ def _configured_max_workers(config: dict[str, Any]) -> int | str:
             "execution.max_workers must be a positive integer or 'auto'"
         )
     return value
+
+
+def _phase2_scope(experiment: dict[str, Any]) -> str:
+    """Return the requested Phase 2 protocol boundary."""
+
+    scope = experiment.get("phase_2_scope", "complete")
+    if scope not in PHASE_2_SCOPES:
+        allowed = ", ".join(PHASE_2_SCOPES)
+        raise ExperimentManagerError(
+            f"phase_2_scope must be one of: {allowed}"
+        )
+    return str(scope)
 
 
 def _run_dir(name: str) -> Path:
@@ -287,6 +299,41 @@ def _phase2_settings(
             if "feature_columns" in target:
                 target["feature_columns"] = feature_columns
 
+    scenario_name = experiment.get("scenario_profile")
+    scenario_profiles = config.get("scenario_profiles")
+    if (
+        not isinstance(scenario_name, str)
+        or not isinstance(scenario_profiles, dict)
+        or not isinstance(scenario_profiles.get(scenario_name), dict)
+    ):
+        raise ExperimentManagerError(
+            f"Unknown scenario_profile: {scenario_name!r}"
+        )
+    scenario_config = _read_json(
+        _repo_path(
+            artifacts["scenario_config"],
+            description="Phase 1 scenario config",
+        ),
+        "Phase 1 scenario config",
+    )
+    expected_scenario = scenario_profiles[scenario_name]
+    for key in (
+        "assignment",
+        "development_scenarios",
+        "locked_scenarios",
+        "seed",
+        "minimum_rul",
+        "maximum_rul",
+    ):
+        expected_value = expected_scenario.get(key)
+        if scenario_config.get(key) != expected_value:
+            raise ExperimentManagerError(
+                f"Phase 1 scenario config does not match "
+                f"scenario_profiles.{scenario_name}.{key}: "
+                f"observed {scenario_config.get(key)!r}, "
+                f"expected {expected_value!r}"
+            )
+
     outer = pd.read_csv(_repo_path(artifacts["outer_folds"], description="outer folds"))
     inner = pd.read_csv(_repo_path(artifacts["inner_folds"], description="inner folds"))
     development = pd.read_csv(
@@ -365,10 +412,6 @@ def _phase2_paths(name: str) -> dict[str, Path]:
     }
 
 
-def _phase2_run_root(experiment: dict[str, Any]) -> Path:
-    return PHASE_2_ROOT / "runs" / f"run_{int(experiment['phase_2_run_number'])}"
-
-
 def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -> None:
     paths = _paths(config)
     interface_path, interface = _load_interface(experiment)
@@ -413,10 +456,11 @@ def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -
         label=f"{name}: Phase 2 Step 4 model registry",
     )
 
-    run_root = _phase2_run_root(experiment)
-    step5 = run_root / "5_inner_model_selection"
+    scope = _phase2_scope(experiment)
+    run_root = phase2["root"]
     step6 = run_root / "6_locked_outer_evaluation"
     step7 = run_root / "7_architecture_comparison"
+    through_step = "5" if scope == "selection_only" else "6"
     _run_command(
         [
             sys.executable,
@@ -426,7 +470,7 @@ def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -
             "--from-step",
             "5",
             "--through-step",
-            "6",
+            through_step,
             "--tabular-manifest",
             str(phase2["tabular_manifest"]),
             "--sequence-manifest",
@@ -435,9 +479,22 @@ def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -
             str(phase2["trajectory_manifest"]),
             "--model-registry",
             str(phase2["registry"]),
+            "--run-root",
+            str(run_root),
         ],
-        label=f"{name}: Phase 2 Steps 5-6 parallel selection and evaluation",
+        label=(
+            f"{name}: Phase 2 Step 5 development selection"
+            if scope == "selection_only"
+            else f"{name}: Phase 2 Steps 5-6 selection and locked evaluation"
+        ),
     )
+    if scope == "selection_only":
+        print(
+            f"{name}: selection_only gate reached; locked Steps 6-7 were not run",
+            flush=True,
+        )
+        return
+
     _run_command(
         [
             sys.executable,
@@ -466,6 +523,7 @@ def _phase3_settings(name: str, config: dict[str, Any], experiment: dict[str, An
         "run_number": int(experiment["phase_3_run_number"]),
         "phase_2_run_number": int(experiment["phase_2_run_number"]),
         "selected_model_family": selected,
+        "phase_2_run_root": _repo_relative(phase2["root"]),
         "phase_2_specification": _repo_relative(phase2["specification"]),
         "phase_2_model_registry": _repo_relative(phase2["registry"]),
         "tabular_manifest": _repo_relative(phase2["tabular_manifest"]),
@@ -522,7 +580,11 @@ def _stage_complete(name: str, experiment: dict[str, Any], stage: str) -> bool:
     if stage == "phase1":
         return _phase1_interface_path(experiment).is_file()
     if stage == "phase2":
-        path = _phase2_run_root(experiment) / "7_architecture_comparison" / "comparison_manifest.json"
+        root = _phase2_paths(name)["root"]
+        if _phase2_scope(experiment) == "selection_only":
+            path = root / "5_inner_model_selection" / "selection_manifest.json"
+        else:
+            path = root / "7_architecture_comparison" / "comparison_manifest.json"
     else:
         path = PHASE_3_ROOT / "runs" / f"run_{int(experiment['phase_3_run_number'])}" / "7_post_run_reporting" / "report_manifest.json"
     return path.is_file()
@@ -588,7 +650,10 @@ def print_status(config: dict[str, Any]) -> None:
             f"{stage}={state.get('stages', {}).get(stage, 'not_started')}"
             for stage in STAGES
         ]
-        print(f"{name}: " + ", ".join(stages))
+        print(
+            f"{name}: phase2_scope={_phase2_scope(experiment)}, "
+            + ", ".join(stages)
+        )
 
 
 def main() -> None:

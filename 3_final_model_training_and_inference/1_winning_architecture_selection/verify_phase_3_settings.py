@@ -23,6 +23,7 @@ from phase_3_common import (  # noqa: E402
     PHASE_2_SPECIFICATION_PATH,
     Phase3Error,
     phase_2_manifest_paths,
+    phase_2_run_root,
     read_json,
     repository_relative,
     configured_repository_path,
@@ -52,6 +53,7 @@ class Phase3Settings(StrictModel):
     run_number: int = Field(gt=0)
     phase_2_run_number: int = Field(gt=0)
     selected_model_family: str = Field(min_length=1)
+    phase_2_run_root: str | None = None
     phase_2_specification: str | None = None
     phase_2_model_registry: str | None = None
     tabular_manifest: str | None = None
@@ -77,6 +79,7 @@ class Phase2Verification:
     phase_2_specification: dict[str, Any]
     model_registry: dict[str, Any]
     manifests: dict[str, dict[str, Any]]
+    manifest_paths: dict[str, Path]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,7 +90,7 @@ class Phase2Verification:
             "representation": self.representation,
             "manifests": {
                 name: repository_relative(path)
-                for name, path in phase_2_manifest_paths(self.run_number).items()
+                for name, path in self.manifest_paths.items()
             },
         }
 
@@ -146,7 +149,16 @@ def _manifest_settings_version(
 def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
     """Require a complete selected family without opening locked predictions."""
 
-    manifest_files = phase_2_manifest_paths(settings.phase_2_run_number)
+    settings_payload = settings.model_dump(mode="json")
+    phase_2_root = configured_repository_path(
+        settings_payload,
+        "phase_2_run_root",
+        phase_2_run_root(settings.phase_2_run_number),
+    )
+    manifest_files = phase_2_manifest_paths(
+        settings.phase_2_run_number,
+        run_root=phase_2_root,
+    )
     manifests = {
         name: read_json(path, f"Phase 2 {name} manifest")
         for name, path in manifest_files.items()
@@ -156,7 +168,6 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         settings.phase_2_run_number,
     )
 
-    settings_payload = settings.model_dump(mode="json")
     specification_path = configured_repository_path(
         settings_payload,
         "phase_2_specification",
@@ -243,6 +254,7 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         phase_2_specification=specification,
         model_registry=registry,
         manifests=manifests,
+        manifest_paths=manifest_files,
     )
 
 
