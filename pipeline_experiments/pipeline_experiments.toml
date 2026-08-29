@@ -10,6 +10,11 @@
 
 settings_version = 1
 
+[execution]
+# Global limit for concurrent Phase 2 family/outer-fold study subprocesses.
+# Use "auto" to let the Phase 2 orchestrator use every available CPU core.
+max_workers = 4
+
 [paths]
 train_csv = "data/train.csv"
 test_csv = "data/test.csv"
@@ -113,7 +118,6 @@ feature_set = "screened_drift_pruned"
 candidate_budget = 50
 search_seed = 13
 retraining_seeds = [13, 37, 73]
-max_workers = 4
 target_profile = "raw"
 prediction_profile = "symmetric"
 phase_3_enabled = false
@@ -142,7 +146,6 @@ feature_set = "screened_drift_pruned"
 candidate_budget = 50
 search_seed = 13
 retraining_seeds = [13, 37, 73]
-max_workers = 4
 target_profile = "capped_125"
 prediction_profile = "conservative_110"
 phase_3_enabled = false

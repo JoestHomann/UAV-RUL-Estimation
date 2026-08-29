@@ -31,11 +31,13 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertIn("drift_ablation", self.config["profiles"])
         self.assertIn("current", self.config["scenario_profiles"])
         self.assertIn("dense_stride_5", self.config["prefix_variants"])
+        self.assertEqual(run_experiments._configured_max_workers(self.config), 4)
 
     def test_ready_experiment_uses_distinct_run_identities(self) -> None:
         experiment = run_experiments._experiment(self.config, "PE_run_1")
         self.assertEqual(experiment["phase_1_run_name"], "PE_run_1")
         self.assertEqual(experiment["phase_2_run_number"], 6)
+        self.assertNotIn("max_workers", experiment)
         self.assertFalse(experiment["phase_3_enabled"])
 
     def test_stage_order_is_explicit(self) -> None:

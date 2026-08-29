@@ -87,6 +87,22 @@ def _experiment(config: dict[str, Any], name: str) -> dict[str, Any]:
     return experiment
 
 
+def _configured_max_workers(config: dict[str, Any]) -> int | str:
+    """Read the global execution worker limit from the experiment catalog."""
+
+    execution = config.get("execution")
+    if not isinstance(execution, dict):
+        raise ExperimentManagerError("The catalog needs an [execution] table")
+    value = execution.get("max_workers")
+    if value == "auto":
+        return value
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ExperimentManagerError(
+            "execution.max_workers must be a positive integer or 'auto'"
+        )
+    return value
+
+
 def _run_dir(name: str) -> Path:
     return RUNS_DIR / name
 
@@ -174,11 +190,11 @@ def _phase2_settings(
     try:
         settings["settings_version"] = int(experiment["phase_2_settings_version"])
         settings["run_number"] = int(experiment["phase_2_run_number"])
-        settings["execution"]["max_workers"] = int(experiment.get("max_workers", 1))
     except (KeyError, TypeError, ValueError) as error:
         raise ExperimentManagerError(
-            "phase_2_settings_version, phase_2_run_number, and max_workers must be integers"
+            "phase_2_settings_version and phase_2_run_number must be integers"
         ) from error
+    settings["execution"]["max_workers"] = _configured_max_workers(config)
     settings["study"]["enabled"] = {
         family: family in models for family in settings["architectures"]
     }

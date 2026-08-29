@@ -48,11 +48,14 @@ then edit the question-specific fields:
   construction policy;
 - `architectures`, `feature_set`, `candidate_budget`, and seeds choose the
   Phase 2 study;
-- `max_workers` controls parallel Step 5 and Step 6 study workers;
 - `target_profile` and `prediction_profile` choose raw/capped targets and
   symmetric/conservative fitting;
 - the Phase 3 fields enable optional final selection, training, inference,
   submission verification, and model-agnostic reporting.
+
+The global `[execution].max_workers` setting controls parallel Step 5 and Step
+6 study workers for every experiment. Set it to a positive integer or to
+`"auto"`; it is an execution setting, not a scientific model setting.
 
 The manager does not create an implicit Cartesian product. Every block is one
 named scientific question, which keeps leaderboard submissions and result
