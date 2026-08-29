@@ -10,7 +10,7 @@
   "inner_fold_checked": 0,
   "outer_fold_checked": 0,
   "reference_trajectories_checked": 60,
-  "settings_version": 10,
+  "settings_version": 11,
   "status": "passed",
   "test_queries_checked": 100,
   "training_queries_checked": 1200,

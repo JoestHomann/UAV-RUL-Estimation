@@ -2,10 +2,10 @@
   "phase_1_verification": {
     "artifacts": {
       "development_features": {
-        "columns": 614,
-        "feature_columns": 606,
+        "columns": 1296,
+        "feature_columns": 1288,
         "format": "csv",
-        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
         "rows": 500
       },
       "development_scenarios": {
@@ -19,8 +19,8 @@
         "columns": 9,
         "feature_columns": 0,
         "format": "csv",
-        "path": "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv",
-        "rows": 606
+        "path": "1_dataset_construction/runs/FE_run_2/current20/6_feature_sets/artifacts/feature_catalog.csv",
+        "rows": 1288
       },
       "fold_config": {
         "columns": null,
@@ -37,10 +37,10 @@
         "rows": 400
       },
       "locked_features": {
-        "columns": 614,
-        "feature_columns": 606,
+        "columns": 1296,
+        "feature_columns": 1288,
         "format": "csv",
-        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
         "rows": 2000
       },
       "locked_scenarios": {
@@ -68,7 +68,7 @@
         "columns": null,
         "feature_columns": null,
         "format": "json",
-        "path": "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
         "rows": null
       },
       "scenario_config": {
@@ -79,43 +79,43 @@
         "rows": null
       },
       "test_features": {
-        "columns": 609,
-        "feature_columns": 606,
+        "columns": 1291,
+        "feature_columns": 1288,
         "format": "csv",
-        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
         "rows": 100
       },
       "training_features": {
-        "columns": 612,
-        "feature_columns": 606,
+        "columns": 1294,
+        "feature_columns": 1288,
         "format": "csv",
-        "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
         "rows": 2000
       },
       "training_prefix_config": {
         "columns": null,
         "feature_columns": null,
         "format": "json",
-        "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefix_config.json",
         "rows": null
       },
       "training_prefixes": {
         "columns": 6,
         "feature_columns": 0,
         "format": "csv",
-        "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefixes.csv",
         "rows": 2000
       },
       "verification_report": {
         "columns": null,
         "feature_columns": null,
         "format": "json",
-        "path": "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json",
+        "path": "1_dataset_construction/runs/FE_run_2/current20/10_automated_leakage_checks/artifacts/verification_report.json",
         "rows": null
       }
     },
     "checked_artifacts": 16,
-    "phase_1_assertions": 10,
+    "phase_1_assertions": 11,
     "status": "passed"
   },
   "settings": {
@@ -123,9 +123,7 @@
       "catboost": {
         "early_stopping_patience": 35,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -194,9 +192,7 @@
       "extra_trees": {
         "early_stopping_patience": null,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -303,9 +299,7 @@
       "mlp": {
         "early_stopping_patience": null,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -417,9 +411,7 @@
       "random_forest": {
         "early_stopping_patience": null,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -465,9 +457,7 @@
       "rbf_svr": {
         "early_stopping_patience": null,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -496,10 +486,7 @@
       "regularized_linear": {
         "early_stopping_patience": null,
         "feature_sets": [
-          "age_only",
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -770,9 +757,7 @@
       "xgboost": {
         "early_stopping_patience": 35,
         "feature_sets": [
-          "last_values",
-          "screened",
-          "all_nonconstant"
+          "screened_drift_pruned"
         ],
         "lookbacks": [],
         "representation": "tabular",
@@ -858,9 +843,9 @@
     "phase_1": {
       "artifacts": {
         "development_features": {
-          "feature_columns": 606,
+          "feature_columns": 1288,
           "format": "csv",
-          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
           "required_columns": [
             "sample_id",
             "scenario",
@@ -874,7 +859,7 @@
           "required_json_keys": [],
           "required_json_values": {},
           "rows": 500,
-          "total_columns": 614
+          "total_columns": 1296
         },
         "development_scenarios": {
           "feature_columns": null,
@@ -898,7 +883,7 @@
         "feature_catalog": {
           "feature_columns": null,
           "format": "csv",
-          "path": "1_dataset_construction/6_feature_sets/artifacts/feature_catalog.csv",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/6_feature_sets/artifacts/feature_catalog.csv",
           "required_columns": [
             "feature_name",
             "channel",
@@ -906,13 +891,13 @@
             "statistic",
             "window",
             "age_only",
-            "last_values",
-            "screened",
-            "all_nonconstant"
+            "screened_v1",
+            "screened_drift_pruned",
+            "screened_drift_replaced"
           ],
           "required_json_keys": [],
           "required_json_values": {},
-          "rows": 606,
+          "rows": 1288,
           "total_columns": 9
         },
         "fold_config": {
@@ -953,9 +938,9 @@
           "total_columns": 7
         },
         "locked_features": {
-          "feature_columns": 606,
+          "feature_columns": 1288,
           "format": "csv",
-          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz",
           "required_columns": [
             "sample_id",
             "scenario",
@@ -969,7 +954,7 @@
           "required_json_keys": [],
           "required_json_values": {},
           "rows": 2000,
-          "total_columns": 614
+          "total_columns": 1296
         },
         "locked_scenarios": {
           "feature_columns": null,
@@ -1025,7 +1010,7 @@
         "preprocessing_config": {
           "feature_columns": null,
           "format": "json",
-          "path": "1_dataset_construction/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json",
           "required_columns": [],
           "required_json_keys": [
             "feature_counts",
@@ -1060,9 +1045,9 @@
           "total_columns": null
         },
         "test_features": {
-          "feature_columns": 606,
+          "feature_columns": 1288,
           "format": "csv",
-          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/test_features.csv.gz",
           "required_columns": [
             "sample_id",
             "uav_id",
@@ -1071,12 +1056,12 @@
           "required_json_keys": [],
           "required_json_values": {},
           "rows": 100,
-          "total_columns": 609
+          "total_columns": 1291
         },
         "training_features": {
-          "feature_columns": 606,
+          "feature_columns": 1288,
           "format": "csv",
-          "path": "1_dataset_construction/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/training_features.csv.gz",
           "required_columns": [
             "sample_id",
             "uav_id",
@@ -1088,12 +1073,12 @@
           "required_json_keys": [],
           "required_json_values": {},
           "rows": 2000,
-          "total_columns": 612
+          "total_columns": 1294
         },
         "training_prefix_config": {
           "feature_columns": null,
           "format": "json",
-          "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefix_config.json",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefix_config.json",
           "required_columns": [],
           "required_json_keys": [
             "cutoff_source",
@@ -1111,7 +1096,7 @@
         "training_prefixes": {
           "feature_columns": null,
           "format": "csv",
-          "path": "1_dataset_construction/4_training_prefixes/artifacts/training_prefixes.csv",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefixes.csv",
           "required_columns": [
             "sample_id",
             "uav_id",
@@ -1128,7 +1113,7 @@
         "verification_report": {
           "feature_columns": null,
           "format": "json",
-          "path": "1_dataset_construction/10_automated_leakage_checks/artifacts/verification_report.json",
+          "path": "1_dataset_construction/runs/FE_run_2/current20/10_automated_leakage_checks/artifacts/verification_report.json",
           "required_columns": [],
           "required_json_keys": [
             "status",
@@ -1148,16 +1133,18 @@
       "expected_development_scenarios": 5,
       "expected_feature_sets": {
         "age_only": 2,
-        "all_nonconstant": 606,
-        "last_values": 24,
-        "screened": 310
+        "screened_drift_pruned": 298,
+        "screened_drift_replaced": 342,
+        "screened_v1": 310
       },
-      "expected_generated_features": 606,
+      "expected_generated_features": 1288,
       "expected_inner_folds_per_outer_fold": 4,
       "expected_locked_scenarios": 20,
       "expected_outer_folds": 5,
       "expected_prefixes_per_training_uav": 20,
-      "expected_training_uavs": 100
+      "expected_training_uavs": 100,
+      "maximum_prefixes_per_training_uav": null,
+      "minimum_prefixes_per_training_uav": null
     },
     "preprocessing": {
       "scaled_tabular_architectures": [
@@ -1208,13 +1195,13 @@
       ],
       "tabular_feature_sets": [
         "age_only",
-        "last_values",
-        "screened",
-        "all_nonconstant"
+        "screened_v1",
+        "screened_drift_pruned",
+        "screened_drift_replaced"
       ]
     },
-    "run_number": 4,
-    "settings_version": 10,
+    "run_number": 5,
+    "settings_version": 11,
     "study": {
       "architectures_to_run": [
         "mean_baseline",

@@ -46,7 +46,7 @@
     "scale": "IQR divided by 1.349",
     "side_features_scaled": false
   },
-  "settings_version": 10,
+  "settings_version": 11,
   "side_features": [
     "flight_cycle",
     "log1p_flight_cycle"
