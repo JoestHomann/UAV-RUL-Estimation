@@ -30,6 +30,13 @@ SIGNAL_COMPRESSION_STRATEGIES = (
     "individual_plus_median",
     "individual_plus_pca",
 )
+FEATURE_CATALOG_METADATA_COLUMNS = (
+    "feature_name",
+    "channel",
+    "channel_role",
+    "statistic",
+    "window",
+)
 
 
 class ExperimentManagerError(ValueError):
@@ -225,6 +232,24 @@ def _csv_observation(path: Path) -> tuple[int, int, int]:
     return len(table), len(table.columns), feature_columns
 
 
+def _update_feature_catalog_contract(
+    phase1: dict[str, Any],
+    expected_sets: dict[str, Any],
+) -> None:
+    """Bind the template artifact contract to this Phase 1 feature catalog."""
+
+    try:
+        catalog = phase1["artifacts"]["feature_catalog"]
+    except (KeyError, TypeError) as error:
+        raise ExperimentManagerError(
+            "Pipeline Phase 2 settings have no feature_catalog artifact contract"
+        ) from error
+    catalog["required_columns"] = [
+        *FEATURE_CATALOG_METADATA_COLUMNS,
+        *expected_sets,
+    ]
+
+
 def _phase2_settings(
     config: dict[str, Any],
     experiment: dict[str, Any],
@@ -342,6 +367,7 @@ def _phase2_settings(
     phase1 = settings["phase_1"]
     phase1["expected_feature_sets"] = copy.deepcopy(expected_sets)
     phase1["expected_generated_features"] = int(interface["expected_generated_features"])
+    _update_feature_catalog_contract(phase1, expected_sets)
     for key in (
         "expected_prefixes_per_training_uav",
         "minimum_prefixes_per_training_uav",

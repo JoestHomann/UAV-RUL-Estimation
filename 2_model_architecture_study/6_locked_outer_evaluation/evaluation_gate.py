@@ -85,6 +85,17 @@ EARLY_STOPPED_FAMILIES = {
 }
 
 
+# These fold-fitted transform controls were added after some development-only
+# studies had completed. Their historical behavior was exactly ``"none"``.
+# Step 6 may therefore restore an omitted key only when the current experiment
+# also fixes that key to the same no-op value. Tuned or active transforms remain
+# subject to the strict schema check below.
+LEGACY_NOOP_HYPERPARAMETERS = {
+    "fault_mode_strategy": "none",
+    "signal_compression_strategy": "none",
+}
+
+
 class LockedEvaluationGateError(ValueError):
     """Explain why locked outer evaluation must not begin yet."""
 
@@ -274,6 +285,10 @@ def _parse_selected_row(
         raise LockedEvaluationGateError(
             f"Selected mean inner RMSE is invalid for {family!r}, fold {outer_fold}"
         )
+    hyperparameters = _restore_legacy_noop_hyperparameters(
+        hyperparameters,
+        architecture["search"],
+    )
     _validate_hyperparameter_values(family, hyperparameters, architecture["search"])
     expected_prefix = f"{family}__outer_{outer_fold:02d}__candidate_"
     configuration_id = str(row["configuration_id"])
@@ -335,6 +350,22 @@ def _validate_hyperparameter_values(
             raise LockedEvaluationGateError(
                 f"Selected value {value!r} for {family}.{name} is outside the settings"
             )
+
+
+def _restore_legacy_noop_hyperparameters(
+    hyperparameters: dict[str, Any],
+    search: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Restore omitted transform keys only when their fixed behavior is unchanged."""
+
+    restored = dict(hyperparameters)
+    for name, no_op_value in LEGACY_NOOP_HYPERPARAMETERS.items():
+        if name in restored:
+            continue
+        definition = search.get(name)
+        if definition == {"kind": "fixed", "value": no_op_value}:
+            restored[name] = no_op_value
+    return restored
 
 
 def _manifest_artifact_path(

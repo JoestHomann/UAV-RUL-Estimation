@@ -99,6 +99,32 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             "pca_only",
         )
 
+    def test_feature_catalog_contract_uses_experiment_feature_sets(self) -> None:
+        phase1 = {
+            "artifacts": {
+                "feature_catalog": {
+                    "required_columns": ["age_only", "screened_drift_pruned"]
+                }
+            }
+        }
+        expected_sets = {
+            "normalization_raw": 310,
+            "normalization_robust": 310,
+            "normalization_combined": 618,
+        }
+        run_experiments._update_feature_catalog_contract(phase1, expected_sets)
+        self.assertEqual(
+            phase1["artifacts"]["feature_catalog"]["required_columns"],
+            [
+                "feature_name",
+                "channel",
+                "channel_role",
+                "statistic",
+                "window",
+                *expected_sets,
+            ],
+        )
+
     def test_ready_experiment_uses_distinct_run_identities(self) -> None:
         experiment = run_experiments._experiment(self.config, "PE_run_1")
         self.assertEqual(experiment["phase_1_run_name"], "PE_run_1")
@@ -130,7 +156,16 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         for name in cells.keys() - {"PE_run_1"}:
             experiment = run_experiments._experiment(self.config, name)
             self.assertEqual(experiment["architectures"], ["extra_trees", "xgboost"])
+        for name in ("PE_2x2_current_cap125", "PE_2x2_early_raw"):
+            experiment = run_experiments._experiment(self.config, name)
             self.assertEqual(experiment["phase_2_scope"], "selection_only")
+        self.assertEqual(
+            run_experiments._experiment(
+                self.config,
+                "PE_2x2_early_cap125",
+            )["phase_2_scope"],
+            "complete",
+        )
         self.assertEqual(
             run_experiments._experiment(self.config, "PE_run_1")["phase_2_scope"],
             "complete",
