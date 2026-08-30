@@ -17,7 +17,7 @@ the hidden Kaggle targets or establish the best safety-performance tradeoff.
 Update 2026-08-30: the registered pipeline experiments are complete through
 the selected target/scenario policy's locked Phase 2 evaluation. Early/middle
 scenarios with a cap-125 fitting target reached locked `R2 = 0.8810` and
-`RMSE = 11.3693` with XGBoost. Phase 3 Run 7 has started; its Kaggle result is
+`RMSE = 11.3693` with XGBoost. Phase 3 Run 4 is configured; its Kaggle result is
 pending. Signal-family, failure-cycle, normalization, fault-mode, compression,
 and dense-prefix experiments are summarized below and recorded in
 [`pipeline_experiments.md`](pipeline_experiments.md).
@@ -304,7 +304,7 @@ The following sections preserve the protocol that motivated implementation.
 The cap-125 2x2 matrix and the experiments summarized above are complete.
 Still pending are cap sensitivity at 110, 140, and 150; asymmetric and quantile
 loss experiments; development-only safety calibration; and Kaggle confirmation
-of the frozen Phase 3 Run 7 submission.
+of the frozen Phase 3 Run 4 submission.
 
 ### Phase 1: validation and prefix construction
 

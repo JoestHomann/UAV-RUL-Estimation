@@ -114,7 +114,7 @@ folder. The non-winning cells remain selection-only.
 
 Current status: `PE_2x2_early_cap125` was the sole selected cell. Its locked
 Steps 6-7 are complete, it now has `phase_2_scope = "complete"`, and Phase 3
-Run 7 is enabled with XGBoost. The two losing cells remain selection-only.
+Run 4 is enabled with XGBoost. The two losing cells remain selection-only.
 The default Phase 3 TOML now contains the selected experiment's artifact paths,
 so the primary direct command is:
 

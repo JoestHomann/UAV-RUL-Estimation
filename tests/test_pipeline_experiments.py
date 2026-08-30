@@ -173,6 +173,13 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             )["phase_3_enabled"]
         )
         self.assertEqual(
+            run_experiments._experiment(
+                self.config,
+                "PE_2x2_early_cap125",
+            )["phase_3_run_number"],
+            4,
+        )
+        self.assertEqual(
             run_experiments._experiment(self.config, "PE_run_1")["phase_2_scope"],
             "complete",
         )

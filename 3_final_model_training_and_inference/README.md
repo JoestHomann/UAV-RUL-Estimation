@@ -62,8 +62,8 @@ The current TOML must exactly match the settings resolved by Step 1. Once Step
 Phase 3 run number.
 
 Run numbers are phase-local. The current default TOML reads the completed
-`PE_2x2_early_cap125` Phase 2 artifacts and writes Phase 3 Run 7 under
-`3_final_model_training_and_inference/runs/run_7/`. Its repository-relative
+`PE_2x2_early_cap125` Phase 2 artifacts and writes Phase 3 Run 4 under
+`3_final_model_training_and_inference/runs/run_4/`. Its repository-relative
 artifact paths make the no-argument entry point sufficient. A future standalone
 Phase 3 TOML may omit those optional paths and use the numbered Phase 2 default.
 

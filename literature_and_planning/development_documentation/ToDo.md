@@ -15,3 +15,6 @@
 - RNN architecture? Better Transformer architecture? For architecture study
 - Increase or decrease capacity of the models? Reduce under- or overfitting?
 - Why is the banana curved, not straight? LG Joest
+
+
+-> Rerun pipeline experiments with temporal model e.g. LSTM / TCN as XGBoost and ExtraTrees directly use bootstrapping of the feature set to learn from all feature but then average out the learning, which limits performance if we actually know the best feature set. Those models might not sure the actual improve through choosing a different feature set because of this averaging

@@ -43,7 +43,7 @@ experiment is later changed to `"complete"` and evaluated in Steps 6-7.
 | `PE_run_1` | Current | Raw | Baseline task and architecture performance | Complete through Step 7 |
 | `PE_2x2_current_cap125` | Current | Cap 125 | Target-cap effect without changing validation scenarios | Step 5 complete; rejected |
 | `PE_2x2_early_raw` | Early/middle | Raw | Scenario-construction effect without changing the target | Step 5 complete; rejected |
-| `PE_2x2_early_cap125` | Early/middle | Cap 125 | Interaction between bounded scenarios and capped fitting | Selected; locked Steps 6-7 complete; Phase 3 Run 7 started |
+| `PE_2x2_early_cap125` | Early/middle | Cap 125 | Interaction between bounded scenarios and capped fitting | Selected; locked Steps 6-7 complete; Phase 3 Run 4 configured |
 
 ### PE_run_1: current scenarios, raw target
 
@@ -129,7 +129,7 @@ scenarios and three retraining seeds, the results were:
 No paired XGBoost-versus-ExtraTrees interval excluded zero. XGBoost remains the
 declared Phase 3 family because it has the nominally better R2/RMSE and is much
 faster and smaller, not because the locked comparison established statistical
-superiority. Phase 3 Run 7 inherits cap 125 and the symmetric prediction policy;
+superiority. Phase 3 Run 4 inherits cap 125 and the symmetric prediction policy;
 its final report and Kaggle score are pending.
 
 The overall negative bias does not establish safety. For XGBoost at true RUL
