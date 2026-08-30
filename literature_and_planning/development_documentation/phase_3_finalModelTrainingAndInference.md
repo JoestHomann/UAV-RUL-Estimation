@@ -134,6 +134,10 @@ The allowed values are:
   pipeline experiments generate this field so Phase 3 reads the experiment's
   own `phase2/` directory, while standalone runs omit it and use the numbered
   Phase 2 directory;
+- optional `phase_2_specification`, `phase_2_model_registry`,
+  `tabular_manifest`, `sequence_manifest`, and `trajectory_manifest`:
+  repository-relative artifact paths used when the source is owned by a
+  pipeline experiment rather than the standalone numbered Phase 2 layout;
 - `selected_model_family`: a family with complete tuning, locked evaluation,
   and comparison results in the referenced Phase 2 run;
 - `candidate_budget`: a positive integer, initially `25`;

@@ -170,6 +170,21 @@ def _stable_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def _scenario_label(value: Any) -> str:
+    """Preserve numeric and named scenario identifiers as non-empty text."""
+
+    if value is None or pd.isna(value):
+        raise FinalConfigurationSearchError(
+            "Development validation metadata contain a missing scenario"
+        )
+    label = str(value).strip()
+    if not label:
+        raise FinalConfigurationSearchError(
+            "Development validation metadata contain an empty scenario"
+        )
+    return label
+
+
 class FinalSearchSplitRepository:
     """Cache only training-prefix and development-scenario fold views."""
 
@@ -622,7 +637,9 @@ class FinalConfigurationSearchRunner:
                                 "outer_fold": outer_fold,
                                 "validation_row": validation_row,
                                 "uav_id": str(metadata.loc[validation_row, "uav_id"]),
-                                "scenario": int(metadata.loc[validation_row, "scenario"]),
+                                "scenario": _scenario_label(
+                                    metadata.loc[validation_row, "scenario"]
+                                ),
                                 "cutoff": float(metadata.loc[validation_row, "cutoff"]),
                                 "observed_rul": float(target),
                                 "predicted_rul": float(prediction),

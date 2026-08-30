@@ -61,12 +61,11 @@ The current TOML must exactly match the settings resolved by Step 1. Once Step
 2 has written any output, a settings change requires a new settings version and
 Phase 3 run number.
 
-Run numbers are phase-local. The default settings read Phase 2 Run 3 from
-`2_model_architecture_study/runs/run_3/` and write Phase 3 Run 1 under
-`3_final_model_training_and_inference/runs/run_1/`.
-Pipeline experiments additionally generate `phase_2_run_root`, pointing Phase 3
-at `pipeline_experiments/runs/<experiment>/phase2/`. Standalone Phase 3 TOML
-files may omit it and retain the numbered Phase 2 default.
+Run numbers are phase-local. The current default TOML reads the completed
+`PE_2x2_early_cap125` Phase 2 artifacts and writes Phase 3 Run 7 under
+`3_final_model_training_and_inference/runs/run_7/`. Its repository-relative
+artifact paths make the no-argument entry point sufficient. A future standalone
+Phase 3 TOML may omit those optional paths and use the numbered Phase 2 default.
 
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the

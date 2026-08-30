@@ -91,9 +91,9 @@ development selections in this order:
 ```
 
 The early/raw run builds the shared early/middle Phase 1 artifacts; the
-early/capped run reuses them. All three new cells declare
-`phase_2_scope = "selection_only"`, which stops after Step 5 and cannot launch
-locked evaluation or architecture comparison.
+early/capped run reuses them. All three new cells initially used
+`phase_2_scope = "selection_only"`, which stopped after Step 5 and prevented
+locked evaluation during development selection.
 
 Compare the selected development candidates without reading Step 6:
 
@@ -111,6 +111,26 @@ recording the development-only decision, change only the winning experiment to
 `phase_2_scope = "complete"` and rerun it. The manager preserves Step 5,
 performs Steps 6-7 once, and writes the locked comparison in the same experiment
 folder. The non-winning cells remain selection-only.
+
+Current status: `PE_2x2_early_cap125` was the sole selected cell. Its locked
+Steps 6-7 are complete, it now has `phase_2_scope = "complete"`, and Phase 3
+Run 7 is enabled with XGBoost. The two losing cells remain selection-only.
+The default Phase 3 TOML now contains the selected experiment's artifact paths,
+so the primary direct command is:
+
+```powershell
+.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
+```
+
+The experiment manager remains available when catalog-level status tracking is
+desired:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py `
+  --run PE_2x2_early_cap125 `
+  --from-stage phase3 `
+  --through-stage phase3
+```
 
 Phase 1 creates a named run under
 `1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 reads the dedicated

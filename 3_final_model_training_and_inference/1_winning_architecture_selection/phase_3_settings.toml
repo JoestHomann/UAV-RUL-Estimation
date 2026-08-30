@@ -1,10 +1,19 @@
-# Increment both values when settings change after Step 2 has produced output.
-settings_version = 3
-run_number = 3
+# Increment the version when changing this run after Step 2 has produced output.
+settings_version = 1
+run_number = 4
 
-# Completed Phase 2 source run and manually selected winning family.
-phase_2_run_number = 5
+# Completed pipeline-experiment Phase 2 source and selected winning family.
+phase_2_run_number = 9
 selected_model_family = "xgboost"
+
+# Experiment-owned Phase 2 artifacts. Keeping these paths here makes
+# run_phase_3.py directly executable without a separate --settings argument.
+phase_2_run_root = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2"
+phase_2_specification = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
+phase_2_model_registry = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2/4_model_adapters/artifacts/model_registry.json"
+tabular_manifest = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+sequence_manifest = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
+trajectory_manifest = "pipeline_experiments/runs/PE_2x2_early_cap125/phase2/3_trajectory_data_adapter/artifacts/trajectory_dataset_manifest.json"
 
 [final_search]
 candidate_budget = 50

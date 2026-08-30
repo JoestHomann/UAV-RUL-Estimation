@@ -14,6 +14,14 @@ unavoidable, underestimating RUL is preferable to overestimating it. The current
 evidence makes the score objective plausible, but does not yet demonstrate it on
 the hidden Kaggle targets or establish the best safety-performance tradeoff.
 
+Update 2026-08-30: the registered pipeline experiments are complete through
+the selected target/scenario policy's locked Phase 2 evaluation. Early/middle
+scenarios with a cap-125 fitting target reached locked `R2 = 0.8810` and
+`RMSE = 11.3693` with XGBoost. Phase 3 Run 7 has started; its Kaggle result is
+pending. Signal-family, failure-cycle, normalization, fault-mode, compression,
+and dense-prefix experiments are summarized below and recorded in
+[`pipeline_experiments.md`](pipeline_experiments.md).
+
 ## Observed leaderboard and validation gap
 
 The first three Kaggle submissions produced the following public scores:
@@ -90,10 +98,12 @@ exact long-horizon RUL target is least identifiable.
 
 ## Flaw 2: the raw target assumes exact early-life predictability
 
-The XGBoost adapter currently obtains the unmodified target through
-`target_values(training_data)` in
-[`xgboost.py`](../../2_model_architecture_study/4_model_adapters/models/tabular/xgboost.py).
-No piecewise target transformation is available in the experiment contract.
+The original XGBoost pipeline obtained the unmodified target through
+`target_values(training_data)`. The experiment contract and shared adapters now
+support raw, piecewise-capped, and failure-cycle targets. The controlled 2x2
+experiment confirmed that cap 125 is useful only together with the bounded
+early/middle scenario profile; applying the cap to the original broad scenarios
+worsened both model families substantially.
 
 A common C-MAPSS formulation treats early healthy life as a constant-RUL
 plateau and predicts the subsequent degradation region. A representative
@@ -213,6 +223,12 @@ Dense-prefix experiments must preserve equal total UAV influence. Otherwise,
 long-lived UAVs would receive more aggregate training weight solely because
 they contribute more endpoints.
 
+The registered stride-5 experiment preserved equal UAV weight and nevertheless
+reduced R2 by 0.0338 for XGBoost and 0.0362 for ExtraTrees, losing every fold
+for both models. Dense tabular prefixes are therefore rejected. This result does
+not settle whether dense sequence windows could help a neural model, because
+that architecture-specific experiment has not been run.
+
 ## Exploratory capped-target evidence
 
 Exploratory in-memory experiments were run using the existing grouped folds and
@@ -259,7 +275,36 @@ to estimate whether the gain is robust.
 Simple seed and parameter averaging did not improve the best capped XGBoost
 result. More ensembling should therefore not be the first priority.
 
-## Required controlled experiments
+## Controlled experiment outcomes
+
+All results in this table are development-only paired-fold comparisons unless
+the row explicitly says locked. Positive treatment effects had to repeat across
+both XGBoost and ExtraTrees to justify retention.
+
+| Experiment | Result | Decision |
+| --- | --- | --- |
+| Target/scenario 2x2 | Early/middle plus cap 125 produced development XGBoost `R2 = 0.8661`; current plus cap 125 failed | Select the combined early/middle and cap-125 policy |
+| Locked confirmation | XGBoost `R2 = 0.8810`, RMSE `11.3693`; ExtraTrees `R2 = 0.8786`, RMSE `11.4868` | Advance XGBoost to Phase 3 for efficiency and nominal accuracy |
+| Signal families | All families improved R2 by 0.1731 XGBoost and 0.1764 ExtraTrees, winning 5/5 folds | Retain all signal families; channel 07 alone is unsupported |
+| Failure-cycle target | R2 fell by 0.4002 XGBoost and 0.5073 ExtraTrees | Reject |
+| Baseline normalization | Combined features were mixed and negligible; robust-only worsened both models | Retain raw features |
+| Fold-fitted fault modes | Indicator and experts did not improve both models consistently | Retain one global model |
+| Signal compression | Compression-only lost about 0.09-0.11 R2; added indices were neutral | Retain individual signal features |
+| Dense stride 5 | R2 fell by about 0.034-0.036 and both models lost every fold | Retain `current20` |
+
+The locked cap-125 result improves overall bias but does not meet the safety
+objective near failure. In the true-RUL 0-25 band, XGBoost bias is `+2.2731`,
+overprediction rate is `67.65%`, and RMS overprediction is `4.9345`. The
+overall R2 confidence interval is 0.8577 to 0.9026, so a reliable R2 of at least
+0.9 has not yet been demonstrated.
+
+## Controlled experiment protocol and remaining work
+
+The following sections preserve the protocol that motivated implementation.
+The cap-125 2x2 matrix and the experiments summarized above are complete.
+Still pending are cap sensitivity at 110, 140, and 150; asymmetric and quantile
+loss experiments; development-only safety calibration; and Kaggle confirmation
+of the frozen Phase 3 Run 7 submission.
 
 ### Phase 1: validation and prefix construction
 
@@ -275,6 +320,11 @@ Add an experimental validation profile without replacing the current baseline:
    folds and equal total weight per UAV.
 7. Extend Step 8 with one-sided overprediction and underprediction metrics,
    including grouped reports by fold, scenario, cutoff band, and true-RUL band.
+
+Items 1-3 and 5-7 are implemented for the registered profiles. Dense stride 5
+was implemented and rejected for the tabular models. Item 4 is only partly
+complete: cap 125 has been tested, while sensitivity to 110, 140, and 150
+remains open.
 
 The matching constraint and model-target cap must remain separate settings. The
 first controls which validation endpoints exist; the second controls what the
@@ -303,21 +353,20 @@ The fields above describe the experimental dimensions. Settings that do not
 apply to the selected loss or calibration mode should be validated as inactive
 rather than silently affecting training.
 
-Run a focused study with at least the following configurations:
+The focused study status is:
 
-- unchanged raw-target control;
-- caps at 110, 125, 140, and 150;
-- XGBoost as the primary tabular family and ExtraTrees as the independent
-  tree-family control;
-- CatBoost only in a separate confirmation experiment after the cheaper
-  families support a specific pipeline change;
-- symmetric RMSE as the conservatism control;
-- asymmetric overprediction weights of 1.5, 2.0, and 3.0;
-- lower-quantile objectives at selected quantiles between 0.30 and 0.45;
-- out-of-fold calibrated offsets or lower bounds at several coverage levels;
-- dense-prefix sequence models only after their data adapter is updated;
-- raw-RUL metrics for final comparability, plus one-sided error metrics by
-  cutoff and RUL band.
+- complete: unchanged raw-target control;
+- partial: cap 125 complete; caps 110, 140, and 150 pending;
+- complete: XGBoost with ExtraTrees as an independent tree-family control;
+- not justified: CatBoost confirmation, because the cheaper families did not
+  support normalization, fault modes, compression, dense prefixes, or the
+  failure-cycle target;
+- complete: symmetric RMSE conservatism control;
+- pending: asymmetric overprediction weights of 1.5, 2.0, and 3.0;
+- pending: lower-quantile objectives between 0.30 and 0.45;
+- pending: out-of-fold calibrated offsets or lower bounds;
+- pending: dense-prefix sequence models, if sequence work resumes; and
+- complete: raw-RUL and one-sided grouped metrics for final comparability.
 
 The cap and scenario profile must be selected with development folds only.
 Locked scenarios must remain closed until one complete policy is selected.
@@ -353,19 +402,19 @@ adjustment from being applied only to the CSV and becoming irreproducible.
 
 ## Secondary improvement experiments
 
-After the target and validation experiments are complete, the most promising
-additional work is:
+The signal-family experiment supports degradation-onset, change-point, and
+directional health features, with all families together giving the strongest
+development result. Compression did not replace those individual features.
+Fold-fitted fault-mode indicators and experts were tested and rejected, so the
+global model remains the default. Dense stride-5 tabular training was also
+rejected.
 
-- dense sliding-window or dense-prefix training for sequence models;
-- degradation onset and change-point features;
-- health-index features that summarize monotonic degradation;
-- unsupervised fault-mode clustering followed by mode-aware models or features;
-- residual analysis by inferred fault mode, RUL band, cutoff band, and UAV.
+The remaining secondary work is narrower:
 
-FD003 contains two fault modes, so a single global regression surface may be
-averaging distinct degradation paths. This should be investigated only with
-training data and grouped validation; test clusters must not be interpreted
-using hidden outcomes.
+- conservative asymmetric or quantile objectives and out-of-fold calibration;
+- cap sensitivity at 110, 140, and 150;
+- residual diagnosis by RUL and cutoff band using development predictions; and
+- dense sequence-window training only if neural sequence work resumes.
 
 ## Non-solutions and non-causes
 
@@ -400,10 +449,13 @@ predeclared experiment shows all of the following:
 - reproducible Phase 2 and Phase 3 artifacts; and
 - no use of original or competition test targets.
 
-The current best diagnostic result, pooled `R2 = 0.89473`, is close enough to
-the `0.9` objective to justify implementing this experiment before another
-ordinary architecture run. It is evidence for a direction, not a promise of a
-`0.9` public score.
+The controlled locked result is XGBoost `R2 = 0.8810` with a 95% UAV-bootstrap
+interval of 0.8577 to 0.9026. Accuracy, fold stability, scenario stability, and
+reproducible artifacts support one frozen Phase 3 submission. The cap-sensitivity
+criterion is not yet met, near-failure bias remains positive, and hidden-test
+alignment remains unknown. The policy is therefore an evidence-backed
+competition candidate, not a demonstrated permanent replacement or a promise
+of a 0.9 public score.
 
 The conservatism objective introduces a genuine tradeoff with leaderboard `R2`.
 The project should therefore seek a model on the measured Pareto frontier, not
