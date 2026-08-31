@@ -61,11 +61,15 @@ The current TOML must exactly match the settings resolved by Step 1. Once Step
 2 has written any output, a settings change requires a new settings version and
 Phase 3 run number.
 
-Run numbers are phase-local. The current default TOML reads the completed
-`PE_2x2_early_cap125` Phase 2 artifacts and writes Phase 3 Run 4 under
-`3_final_model_training_and_inference/runs/run_4/`. Its repository-relative
-artifact paths make the no-argument entry point sufficient. A future standalone
-Phase 3 TOML may omit those optional paths and use the numbered Phase 2 default.
+Run numbers are phase-local. The current default TOML reads the locked-confirmed
+`PE3_final_ensemble` policy and its development-only `PE3_features_drift`
+component source, then writes Phase 3 Run 5 under
+`3_final_model_training_and_inference/runs/run_5/`. The promoted policy keeps
+the 50/50 blend and residual calibrator frozen. Step 2 searches the complete
+`5 ExtraTrees x 5 XGBoost` grid of development-selected component
+configurations, for 25 candidates total. Its repository-relative artifact
+paths make the no-argument entry point sufficient. A future standalone Phase 3
+TOML may omit those optional paths and use the numbered Phase 2 default.
 
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the

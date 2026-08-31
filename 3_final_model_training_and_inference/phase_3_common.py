@@ -256,7 +256,13 @@ def require_current_settings(settings_path: Path) -> int:
                 current = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError, json.JSONDecodeError) as error:
         raise Phase3Error(f"Cannot read Phase 3 settings {settings_path}: {error}") from error
-    resolved = load_resolved_phase_3_settings(run_number)
+    resolved_payload = read_json(
+        resolved_settings_path(run_number),
+        "resolved Phase 3 settings",
+    )
+    resolved = resolved_payload.get("source_settings", resolved_payload.get("settings"))
+    if not isinstance(resolved, dict):
+        raise Phase3Error("Resolved Phase 3 settings have no settings object")
     if current != resolved:
         raise Phase3Error(
             "Current Phase 3 settings differ from this run's resolved settings; "

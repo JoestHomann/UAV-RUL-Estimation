@@ -32,6 +32,7 @@ from phase_3_common import (  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = STEP_DIR / "phase_3_settings.toml"
 MAX_SEED = 2**32 - 1
+PROMOTED_ENSEMBLE_FAMILY = "calibrated_tree_blend"
 
 
 class SettingsError(Phase3Error):
@@ -59,6 +60,8 @@ class Phase3Settings(StrictModel):
     tabular_manifest: str | None = None
     sequence_manifest: str | None = None
     trajectory_manifest: str | None = None
+    promotion_contract: str | None = None
+    promotion_manifest: str | None = None
     final_search: FinalSearchSettings
 
     @model_validator(mode="after")
@@ -67,6 +70,12 @@ class Phase3Settings(StrictModel):
             raise ValueError(
                 "selected_model_family must use the normalized registry name"
             )
+        if self.selected_model_family == PROMOTED_ENSEMBLE_FAMILY:
+            if self.promotion_contract is None or self.promotion_manifest is None:
+                raise ValueError(
+                    "calibrated_tree_blend requires promotion_contract and "
+                    "promotion_manifest"
+                )
         return self
 
 
@@ -155,6 +164,9 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         "phase_2_run_root",
         phase_2_run_root(settings.phase_2_run_number),
     )
+    if settings.selected_model_family == PROMOTED_ENSEMBLE_FAMILY:
+        return _verify_promoted_ensemble_reference(settings, phase_2_root)
+
     manifest_files = phase_2_manifest_paths(
         settings.phase_2_run_number,
         run_root=phase_2_root,
@@ -255,6 +267,110 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         model_registry=registry,
         manifests=manifests,
         manifest_paths=manifest_files,
+    )
+
+
+def _verify_promoted_ensemble_reference(
+    settings: Phase3Settings,
+    phase_2_root: Path,
+) -> Phase2Verification:
+    """Validate the frozen PE_run_3 policy without requiring a Step 7 ranking."""
+
+    payload = settings.model_dump(mode="json")
+    selection_path = (
+        phase_2_root / "5_inner_model_selection" / "selection_manifest.json"
+    )
+    promotion_contract_path = configured_repository_path(
+        payload,
+        "promotion_contract",
+        Path("promotion_contract.json"),
+    )
+    promotion_manifest_path = configured_repository_path(
+        payload,
+        "promotion_manifest",
+        Path("locked_confirmation_manifest.json"),
+    )
+    selection = read_json(selection_path, "Phase 2 selection manifest")
+    contract = read_json(promotion_contract_path, "promoted ensemble contract")
+    promotion = read_json(promotion_manifest_path, "promoted ensemble manifest")
+    if selection.get("status") != "complete":
+        raise SettingsError("Promoted ensemble source selection is incomplete")
+    if promotion.get("status") != "complete" or promotion.get("phase_3_created") is not False:
+        raise SettingsError("Promoted ensemble locked confirmation is not complete")
+    if promotion.get("policy") != "ensemble:blend_xgb_0.50__calibrated":
+        raise SettingsError("Promotion manifest identifies another policy")
+    if contract.get("selected_candidate") != promotion.get("policy"):
+        raise SettingsError("Promotion contract and confirmation policy disagree")
+    if contract.get("component_families") != ["extra_trees", "xgboost"]:
+        raise SettingsError("Promoted ensemble components are not frozen as expected")
+    if contract.get("locked_results_used_for_selection") is not False:
+        raise SettingsError("Promoted ensemble contract used locked results for selection")
+
+    component_manifest_value = promotion.get("component_locked_manifest")
+    if not isinstance(component_manifest_value, str) or not component_manifest_value:
+        raise SettingsError("Promotion manifest has no component locked manifest")
+    component_manifest_path = configured_repository_path(
+        {"component_manifest": component_manifest_value},
+        "component_manifest",
+        Path("locked_evaluation_manifest.json"),
+    )
+    component_manifest = read_json(
+        component_manifest_path,
+        "promoted component locked manifest",
+    )
+    if component_manifest.get("status") != "complete":
+        raise SettingsError("Promoted component locked evaluation is incomplete")
+
+    specification_path = configured_repository_path(
+        payload,
+        "phase_2_specification",
+        PHASE_2_SPECIFICATION_PATH,
+    )
+    specification = read_json(specification_path, "Phase 2 experiment specification")
+    phase_2_settings = specification.get("settings")
+    if not isinstance(phase_2_settings, dict):
+        raise SettingsError("Phase 2 experiment specification has no settings object")
+    if phase_2_settings.get("run_number") != settings.phase_2_run_number:
+        raise SettingsError("Promoted source specification identifies another run")
+    settings_version = int(phase_2_settings["settings_version"])
+    if selection.get("settings_version") != settings_version:
+        raise SettingsError("Promoted source selection uses another settings version")
+    if component_manifest.get("settings_version") != settings_version:
+        raise SettingsError("Promoted component evaluation uses another settings version")
+
+    registry_path = configured_repository_path(
+        payload,
+        "phase_2_model_registry",
+        PHASE_2_MODEL_REGISTRY_PATH,
+    )
+    registry = read_json(registry_path, "Phase 2 model registry")
+    families = registry.get("families")
+    if registry.get("settings_version") != settings_version or not isinstance(families, dict):
+        raise SettingsError("Promoted source model registry is incompatible")
+    for family in ("extra_trees", "xgboost"):
+        details = families.get(family)
+        if not isinstance(details, dict) or details.get("enabled") is not True:
+            raise SettingsError(f"Promoted component {family!r} is unavailable")
+
+    return Phase2Verification(
+        settings_version=settings_version,
+        run_number=settings.phase_2_run_number,
+        selected_family=PROMOTED_ENSEMBLE_FAMILY,
+        representation="tabular",
+        phase_2_specification=specification,
+        model_registry=registry,
+        manifests={
+            "selection": selection,
+            "promotion_contract": contract,
+            "promotion": promotion,
+            "component_locked_evaluation": component_manifest,
+        },
+        manifest_paths={
+            "selection": selection_path,
+            "promotion_contract": promotion_contract_path,
+            "promotion": promotion_manifest_path,
+            "component_locked_evaluation": component_manifest_path,
+        },
     )
 
 

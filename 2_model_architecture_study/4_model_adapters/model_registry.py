@@ -23,6 +23,7 @@ from models.neural.sensor_graph_tcn import SensorGraphTCNAdapter
 from models.neural.tcn import TCNAdapter
 from models.neural.transformer import TransformerAdapter
 from models.tabular.catboost import CatBoostAdapter
+from models.tabular.calibrated_tree_blend import CalibratedTreeBlendAdapter
 from models.tabular.extra_trees import ExtraTreesAdapter
 from models.tabular.random_forest import RandomForestAdapter
 from models.tabular.rbf_svr import RBFSVRAdapter
@@ -63,7 +64,10 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "transformer": TransformerAdapter,
     "rbf_svr": RBFSVRAdapter,
     "trajectory_dtw_knn": TrajectoryDTWKNNAdapter,
+    "calibrated_tree_blend": CalibratedTreeBlendAdapter,
 }
+
+OPTIONAL_ADAPTER_FAMILIES = {"calibrated_tree_blend"}
 
 
 # Exact parameter-name checks catch misspelled or incomplete resolved candidates
@@ -167,6 +171,13 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "warping_window",
         "distance_power",
     },
+    "calibrated_tree_blend": {
+        "extra_trees_configuration_index",
+        "xgboost_configuration_index",
+        "component_configurations_path",
+        "residual_calibrator_path",
+        "xgboost_weight",
+    },
 }
 
 
@@ -191,7 +202,11 @@ def load_experiment_specification(
         raise ModelAdapterError(
             f"Experiment specification is missing required field {error}"
         ) from error
-    if set(architectures) != set(ADAPTER_CLASSES):
+    required_families = set(ADAPTER_CLASSES) - OPTIONAL_ADAPTER_FAMILIES
+    if not (
+        required_families.issubset(architectures)
+        and set(architectures).issubset(ADAPTER_CLASSES)
+    ):
         raise ModelAdapterError(
             "Settings architecture names do not match implemented adapter names"
         )
@@ -283,7 +298,9 @@ class ModelAdapterFactory:
         }
         adapter_class = ADAPTER_CLASSES[family]
         adapter: ModelAdapter
-        if family in {"xgboost", "catboost"}:
+        if family == "calibrated_tree_blend":
+            adapter = adapter_class(**common_arguments)
+        elif family in {"xgboost", "catboost"}:
             adapter = adapter_class(
                 **common_arguments,
                 early_stopping_patience=architecture["early_stopping_patience"],

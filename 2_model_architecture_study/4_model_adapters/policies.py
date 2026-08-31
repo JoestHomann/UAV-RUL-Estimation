@@ -183,6 +183,7 @@ TARGET_CAPABLE_FAMILIES = {
     "lstm",
     "transformer",
     "rbf_svr",
+    "calibrated_tree_blend",
 }
 
 LOSS_CAPABILITIES = {
