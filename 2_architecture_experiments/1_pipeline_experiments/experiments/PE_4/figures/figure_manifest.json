@@ -1,0 +1,23 @@
+{
+  "figures": [
+    {
+      "file": "figures/calibration_policy_metrics.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/reporting/figures/calibration_policy_metrics.png"
+    },
+    {
+      "file": "figures/calibration_tradeoff.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/reporting/figures/calibration_tradeoff.png"
+    },
+    {
+      "file": "figures/conditional_correction_curves.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/reporting/figures/conditional_correction_curves.png"
+    },
+    {
+      "file": "figures/selected_safety_by_rul_band.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/reporting/figures/selected_safety_by_rul_band.png"
+    }
+  ],
+  "pipeline_experiment": null,
+  "pipeline_run": "PE_4",
+  "status": "complete"
+}

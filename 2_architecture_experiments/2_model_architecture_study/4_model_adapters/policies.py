@@ -84,6 +84,16 @@ class PredictionPolicy:
     calibration: str = "none"
     safety_offset: float = 0.0
     non_overprediction_coverage: float = 0.5
+    calibration_prediction_bin_edges: tuple[float, ...] = (
+        0.0,
+        25.0,
+        50.0,
+        75.0,
+        100.0,
+        125.0,
+        150.0,
+    )
+    calibration_minimum_bin_rows: int = 10
 
     @classmethod
     def from_settings(cls, value: dict[str, Any]) -> "PredictionPolicy":
@@ -96,6 +106,16 @@ class PredictionPolicy:
             safety_offset=float(value.get("safety_offset")),
             non_overprediction_coverage=float(
                 value.get("non_overprediction_coverage")
+            ),
+            calibration_prediction_bin_edges=tuple(
+                float(edge)
+                for edge in value.get(
+                    "calibration_prediction_bin_edges",
+                    [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0],
+                )
+            ),
+            calibration_minimum_bin_rows=int(
+                value.get("calibration_minimum_bin_rows", 10)
             ),
         )
         if policy.loss not in {
@@ -118,12 +138,32 @@ class PredictionPolicy:
             raise PolicyError("Severity scale must be positive")
         if not 0.0 < policy.quantile <= 0.5:
             raise PolicyError("Conservative quantile must be in (0, 0.5]")
-        if policy.calibration not in {"none", "fixed_offset"}:
+        if policy.calibration not in {
+            "none",
+            "fixed_offset",
+            "conditional_quantile",
+        }:
             raise PolicyError(f"Unknown calibration policy {policy.calibration!r}")
         if policy.safety_offset < 0.0:
             raise PolicyError("Safety offset cannot be negative")
         if not 0.0 < policy.non_overprediction_coverage < 1.0:
             raise PolicyError("Calibration coverage must be between zero and one")
+        edges = policy.calibration_prediction_bin_edges
+        if len(edges) < 3 or any(not np.isfinite(edge) for edge in edges):
+            raise PolicyError("Calibration bin edges must contain at least three finite values")
+        if any(upper <= lower for lower, upper in zip(edges[:-1], edges[1:], strict=True)):
+            raise PolicyError("Calibration bin edges must be strictly increasing")
+        if policy.calibration_minimum_bin_rows <= 0:
+            raise PolicyError("Calibration minimum bin rows must be positive")
+        if policy.calibration == "conditional_quantile":
+            if policy.safety_offset != 0.0:
+                raise PolicyError(
+                    "Conditional-quantile calibration requires safety_offset = 0"
+                )
+            if policy.non_overprediction_coverage < 0.5:
+                raise PolicyError(
+                    "Conditional-quantile calibration coverage must be at least 0.5"
+                )
         return policy
 
     def adjust_predictions(
@@ -165,7 +205,167 @@ class PredictionPolicy:
             "calibration": self.calibration,
             "safety_offset": self.safety_offset,
             "non_overprediction_coverage": self.non_overprediction_coverage,
+            "calibration_prediction_bin_edges": list(
+                self.calibration_prediction_bin_edges
+            ),
+            "calibration_minimum_bin_rows": self.calibration_minimum_bin_rows,
         }
+
+
+@dataclass(frozen=True)
+class ConditionalQuantileCalibrator:
+    """Store one subtraction-only correction curve fitted from OOF residuals."""
+
+    quantile: float
+    prediction_bin_edges: tuple[float, ...]
+    minimum_bin_rows: int
+    corrections: tuple[float, ...]
+    training_rows_by_bin: tuple[int, ...]
+
+    @classmethod
+    def fit(
+        cls,
+        targets: NDArray[np.float64],
+        predictions: NDArray[np.float64],
+        policy: PredictionPolicy,
+    ) -> "ConditionalQuantileCalibrator":
+        if policy.calibration != "conditional_quantile":
+            raise PolicyError("Conditional calibrator requires conditional_quantile mode")
+        observed = np.asarray(targets, dtype=np.float64).reshape(-1)
+        predicted = np.asarray(predictions, dtype=np.float64).reshape(-1)
+        if observed.shape != predicted.shape or observed.size == 0:
+            raise PolicyError("Calibration targets and predictions must align")
+        if not np.isfinite(observed).all() or not np.isfinite(predicted).all():
+            raise PolicyError("Calibration targets and predictions must be finite")
+
+        edges = np.asarray(policy.calibration_prediction_bin_edges, dtype=np.float64)
+        residuals = predicted - observed
+        corrections: list[float] = []
+        counts: list[int] = []
+        for lower, upper in zip(edges[:-1], edges[1:], strict=True):
+            mask = (predicted >= lower) & (predicted < upper)
+            values = residuals[mask]
+            counts.append(int(values.size))
+            correction = (
+                float(np.quantile(values, policy.non_overprediction_coverage))
+                if values.size >= policy.calibration_minimum_bin_rows
+                else 0.0
+            )
+            corrections.append(max(0.0, correction))
+        return cls(
+            quantile=policy.non_overprediction_coverage,
+            prediction_bin_edges=policy.calibration_prediction_bin_edges,
+            minimum_bin_rows=policy.calibration_minimum_bin_rows,
+            corrections=tuple(corrections),
+            training_rows_by_bin=tuple(counts),
+        )
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ConditionalQuantileCalibrator":
+        try:
+            calibrator = cls(
+                quantile=float(value["quantile"]),
+                prediction_bin_edges=tuple(
+                    float(edge) for edge in value["prediction_bin_edges"]
+                ),
+                minimum_bin_rows=int(value["minimum_bin_rows"]),
+                corrections=tuple(float(item) for item in value["corrections"]),
+                training_rows_by_bin=tuple(
+                    int(item) for item in value["training_rows_by_bin"]
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise PolicyError("Invalid conditional calibrator artifact") from error
+        expected = len(calibrator.prediction_bin_edges) - 1
+        if (
+            expected < 2
+            or len(calibrator.corrections) != expected
+            or len(calibrator.training_rows_by_bin) != expected
+            or not 0.5 <= calibrator.quantile < 1.0
+            or calibrator.minimum_bin_rows <= 0
+            or any(
+                upper <= lower
+                for lower, upper in zip(
+                    calibrator.prediction_bin_edges[:-1],
+                    calibrator.prediction_bin_edges[1:],
+                    strict=True,
+                )
+            )
+            or any(
+                not np.isfinite(value) or value < 0.0
+                for value in calibrator.corrections
+            )
+            or any(value < 0 for value in calibrator.training_rows_by_bin)
+        ):
+            raise PolicyError("Conditional calibrator dimensions are inconsistent")
+        return calibrator
+
+    def apply(
+        self,
+        predictions: NDArray[np.float64],
+        *,
+        prediction_minimum: float = 0.0,
+    ) -> NDArray[np.float64]:
+        values = np.asarray(predictions, dtype=np.float64).reshape(-1)
+        if not np.isfinite(values).all():
+            raise PolicyError("Predictions supplied to calibration must be finite")
+        edges = np.asarray(self.prediction_bin_edges, dtype=np.float64)
+        centers = (edges[:-1] + edges[1:]) / 2.0
+        corrections = np.asarray(self.corrections, dtype=np.float64)
+        adjustment = np.interp(
+            values,
+            centers,
+            corrections,
+            left=float(corrections[0]),
+            right=float(corrections[-1]),
+        )
+        return np.maximum(values - adjustment, float(prediction_minimum))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "calibrator_version": 1,
+            "mode": "conditional_quantile",
+            "quantile": self.quantile,
+            "prediction_bin_edges": list(self.prediction_bin_edges),
+            "minimum_bin_rows": self.minimum_bin_rows,
+            "corrections": list(self.corrections),
+            "training_rows_by_bin": list(self.training_rows_by_bin),
+            "correction_is_nonnegative": True,
+            "calibration_can_increase_prediction": False,
+        }
+
+
+def cross_fit_conditional_calibration(
+    targets: NDArray[np.float64],
+    predictions: NDArray[np.float64],
+    fold_labels: NDArray[Any],
+    policy: PredictionPolicy,
+    *,
+    prediction_minimum: float = 0.0,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Calibrate each validation fold using residuals from all other folds."""
+
+    observed = np.asarray(targets, dtype=np.float64).reshape(-1)
+    raw = np.asarray(predictions, dtype=np.float64).reshape(-1)
+    folds = np.asarray(fold_labels).reshape(-1)
+    if observed.shape != raw.shape or observed.shape != folds.shape:
+        raise PolicyError("Cross-fit calibration arrays must align")
+    unique_folds = np.unique(folds)
+    if unique_folds.size < 2:
+        raise PolicyError("Cross-fit calibration requires at least two folds")
+    calibrated = np.empty_like(raw)
+    for fold in unique_folds:
+        validation = folds == fold
+        calibrator = ConditionalQuantileCalibrator.fit(
+            observed[~validation],
+            raw[~validation],
+            policy,
+        )
+        calibrated[validation] = calibrator.apply(
+            raw[validation],
+            prediction_minimum=prediction_minimum,
+        )
+    return calibrated, raw - calibrated
 
 
 TARGET_CAPABLE_FAMILIES = {

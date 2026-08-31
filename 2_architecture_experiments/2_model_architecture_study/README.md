@@ -71,6 +71,21 @@ Step 7 additionally saves "architecture_study_settings.csv" beside its result
 tables, so a finished run records the configuration that produced it even after
 the settings file has moved on.
 
+### Conditional conservative calibration
+
+Phase 2 Run 6 enables `prediction_policy.calibration =
+"conditional_quantile"` with residual quantile `0.55`. For every candidate,
+Step 5 fits the prediction-dependent correction for each validation fold using
+only the other inner folds. Candidate metrics therefore describe calibrated
+predictions without letting a row influence its own correction. Step 6 fits
+one curve from the selected candidate's complete Step 5 OOF residuals and
+applies it to locked predictions. Prediction tables retain the uncalibrated
+value and subtracted adjustment alongside the final prediction.
+
+The configurable fields are `non_overprediction_coverage`,
+`calibration_prediction_bin_edges`, and `calibration_minimum_bin_rows`.
+Setting `calibration = "none"` restores uncalibrated behavior.
+
 Use "--through-step" to stop after a chosen step. For example, this prepares
 the settings, both data adapters, and model registry without starting training:
 

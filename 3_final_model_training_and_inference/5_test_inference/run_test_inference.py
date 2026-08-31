@@ -27,6 +27,7 @@ for dependency_dir in (
         sys.path.insert(0, str(dependency_dir))
 
 from base import load_model_adapter  # noqa: E402
+from policies import ConditionalQuantileCalibrator, PolicyError  # noqa: E402
 from phase_3_common import (  # noqa: E402
     Phase3Error,
     complete_manifest,
@@ -83,6 +84,19 @@ def generate_predictions(run_number: int) -> tuple[pd.DataFrame, dict[str, Any]]
         )
 
     predictions = model.predict(test_data)
+    calibrator_payload = contract.get("conditional_calibrator")
+    calibration_applied = calibrator_payload is not None
+    if calibration_applied:
+        if not isinstance(calibrator_payload, dict):
+            raise TestInferenceError("Frozen conditional calibrator is invalid")
+        try:
+            calibrator = ConditionalQuantileCalibrator.from_dict(calibrator_payload)
+            predictions = calibrator.apply(
+                predictions,
+                prediction_minimum=float(contract["prediction_minimum"]),
+            )
+        except PolicyError as error:
+            raise TestInferenceError(f"Cannot apply frozen calibrator: {error}") from error
     if len(predictions) != expected_rows or not np.isfinite(predictions).all():
         raise TestInferenceError("Test predictions are missing or non-finite")
     minimum = float(contract["prediction_minimum"])
@@ -121,6 +135,7 @@ def run_inference(run_number: int, *, force: bool = False) -> dict[str, Any]:
             raise TestInferenceError(f"Phase 3 Step {prerequisite} is not complete")
 
     table, contract = generate_predictions(run_number)
+    calibration_applied = contract.get("conditional_calibrator") is not None
     write_csv(
         table,
         contract["test_contract"]["prediction_columns"],
@@ -139,6 +154,7 @@ def run_inference(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "test_uav_ids": table["uav_id"].astype(str).tolist(),
         "prediction_minimum": float(table["RUL"].min()),
         "prediction_maximum": float(table["RUL"].max()),
+        "conditional_calibration_applied": calibration_applied,
         "test_data_loaded": True,
         "test_target_loaded": False,
         "test_metrics_calculated": False,

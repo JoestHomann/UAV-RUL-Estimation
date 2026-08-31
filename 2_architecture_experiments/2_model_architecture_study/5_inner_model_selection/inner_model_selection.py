@@ -76,6 +76,10 @@ from tensorboard_monitoring import (  # noqa: E402
 )
 
 from candidate_space import CandidateSpace, ResolvedCandidate  # noqa: E402
+from policies import (  # noqa: E402
+    PredictionPolicy,
+    cross_fit_conditional_calibration,
+)
 
 
 RUNNER_VERSION = 1
@@ -168,6 +172,8 @@ PREDICTION_COLUMNS = [
     "scenario",
     "cutoff",
     "observed_rul",
+    "uncalibrated_predicted_rul",
+    "calibration_adjustment",
     "predicted_rul",
     "residual",
 ]
@@ -670,6 +676,12 @@ class InnerModelSelectionRunner:
             self.specification_path
         )
         self.settings = self.specification["settings"]
+        self.prediction_policy = PredictionPolicy.from_settings(
+            self.settings["prediction_policy"]
+        )
+        self.prediction_minimum = float(
+            self.settings["evaluation"]["prediction_minimum"]
+        )
         self.architectures = self.settings["architectures"]
         self.candidate_space = CandidateSpace(self.architectures)
         self.factory = ModelAdapterFactory(self.specification_path)
@@ -988,6 +1000,8 @@ class InnerModelSelectionRunner:
                                 "scenario": str(row["scenario"]),
                                 "cutoff": float(row["cutoff"]),
                                 "observed_rul": float(observed),
+                                "uncalibrated_predicted_rul": float(predicted),
+                                "calibration_adjustment": 0.0,
                                 "predicted_rul": float(predicted),
                                 "residual": float(predicted - observed),
                             }
@@ -1049,6 +1063,8 @@ class InnerModelSelectionRunner:
             )
             del model
             gc.collect()
+
+        self._apply_fold_fitted_calibration(fold_records, prediction_records)
 
         rmse_values = np.asarray(
             [record["rmse"] for record in fold_records],
@@ -1129,6 +1145,71 @@ class InnerModelSelectionRunner:
             hyperparameters=candidate.hyperparameters,
         )
         return candidate_record, fold_records, prediction_records
+
+    def _apply_fold_fitted_calibration(
+        self,
+        fold_records: list[dict[str, Any]],
+        prediction_records: list[dict[str, Any]],
+    ) -> None:
+        """Apply the conditional curve without exposing a fold to its residuals."""
+
+        if self.prediction_policy.calibration != "conditional_quantile":
+            return
+        targets = np.asarray(
+            [record["observed_rul"] for record in prediction_records],
+            dtype=np.float64,
+        )
+        raw_predictions = np.asarray(
+            [record["uncalibrated_predicted_rul"] for record in prediction_records],
+            dtype=np.float64,
+        )
+        folds = np.asarray(
+            [record["inner_fold"] for record in prediction_records]
+        )
+        calibrated, adjustments = cross_fit_conditional_calibration(
+            targets,
+            raw_predictions,
+            folds,
+            self.prediction_policy,
+            prediction_minimum=self.prediction_minimum,
+        )
+        for record, prediction, adjustment in zip(
+            prediction_records,
+            calibrated,
+            adjustments,
+            strict=True,
+        ):
+            record["calibration_adjustment"] = float(adjustment)
+            record["predicted_rul"] = float(prediction)
+            record["residual"] = float(prediction - record["observed_rul"])
+
+        metric_names = (
+            "rmse",
+            "r2",
+            "mae",
+            "bias",
+            "overprediction_rate",
+            "mean_overprediction",
+            "root_mean_squared_overprediction",
+            "overprediction_q90",
+            "overprediction_q95",
+            "maximum_overprediction",
+            "underprediction_rate",
+            "mean_underprediction",
+            "root_mean_squared_underprediction",
+        )
+        for fold_record in fold_records:
+            fold = fold_record["inner_fold"]
+            rows = [
+                record
+                for record in prediction_records
+                if record["inner_fold"] == fold
+            ]
+            metrics = calculate_regression_metrics(
+                np.asarray([record["observed_rul"] for record in rows], dtype=float),
+                np.asarray([record["predicted_rul"] for record in rows], dtype=float),
+            )
+            fold_record.update({name: metrics[name] for name in metric_names})
 
     @staticmethod
     def _retraining_iterations(

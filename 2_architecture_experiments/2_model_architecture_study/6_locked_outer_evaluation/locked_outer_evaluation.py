@@ -37,10 +37,15 @@ for dependency_dir in DEPENDENCY_DIRS:
 
 from base import ModelAdapter, target_values  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
+from policies import (  # noqa: E402
+    ConditionalQuantileCalibrator,
+    PredictionPolicy,
+)
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
 from run_layout import (  # noqa: E402
+    STEP_5_DIRECTORY_NAME,
     STEP_6_DIRECTORY_NAME,
     run_number_from_settings,
     step_directory_for_specification,
@@ -59,7 +64,7 @@ from evaluation_gate import (  # noqa: E402
 )
 
 
-RUNNER_VERSION = 1
+RUNNER_VERSION = 2
 
 PREDICTION_COLUMNS = [
     "settings_version",
@@ -76,6 +81,8 @@ PREDICTION_COLUMNS = [
     "feature_set",
     "lookback",
     "y_true",
+    "uncalibrated_y_pred",
+    "calibration_adjustment",
     "y_pred",
     "residual",
 ]
@@ -313,6 +320,19 @@ class LockedOuterEvaluationRunner:
         self.output_dir = output_dir.resolve()
         self.factory = ModelAdapterFactory(specification_path)
         self.settings = self.plan.settings
+        self.prediction_policy = PredictionPolicy.from_settings(
+            self.settings["prediction_policy"]
+        )
+        self.prediction_minimum = float(
+            self.settings["evaluation"]["prediction_minimum"]
+        )
+        self.step_5_dir = step_directory_for_specification(
+            STEP_5_DIRECTORY_NAME,
+            specification_path=Path(specification_path),
+        )
+        self._calibrator_cache: dict[
+            tuple[str, int], ConditionalQuantileCalibrator | None
+        ] = {}
         self.settings_version = int(self.settings["settings_version"])
         # Read from the same resolved settings the output folder came from, so
         # the manifest can never disagree with the run it was written into.
@@ -486,12 +506,22 @@ class LockedOuterEvaluationRunner:
                         )
 
                     prediction_started = perf_counter()
-                    predicted_rul = model.predict(split.validation)
+                    uncalibrated_rul = model.predict(split.validation)
+                    calibrator = self._conditional_calibrator(selected)
+                    predicted_rul = (
+                        calibrator.apply(
+                            uncalibrated_rul,
+                            prediction_minimum=self.prediction_minimum,
+                        )
+                        if calibrator is not None
+                        else uncalibrated_rul
+                    )
                     inference_seconds = float(perf_counter() - prediction_started)
                     predictions = self._prediction_table(
                         split.validation,
                         selected,
                         seed,
+                        uncalibrated_rul,
                         predicted_rul,
                     )
 
@@ -526,6 +556,9 @@ class LockedOuterEvaluationRunner:
                         ),
                         "serialized_model_bytes": serialized_bytes,
                         "prediction_rows": len(predictions),
+                        "prediction_calibration": (
+                            calibrator.to_dict() if calibrator is not None else None
+                        ),
                         "model_path": writer.model_path.relative_to(
                             self.output_dir
                         ).as_posix(),
@@ -547,6 +580,56 @@ class LockedOuterEvaluationRunner:
 
         self.consolidate_artifacts()
         return run_record
+
+    def _conditional_calibrator(
+        self,
+        selected: SelectedConfiguration,
+    ) -> ConditionalQuantileCalibrator | None:
+        """Fit the locked-run curve from Step 5 OOF development residuals."""
+
+        key = (selected.model_family, selected.outer_fold)
+        if key in self._calibrator_cache:
+            return self._calibrator_cache[key]
+        if self.prediction_policy.calibration != "conditional_quantile":
+            self._calibrator_cache[key] = None
+            return None
+
+        path = (
+            self.step_5_dir
+            / "studies"
+            / f"{selected.model_family}__outer_{selected.outer_fold:02d}"
+            "__selected_predictions.csv.gz"
+        )
+        try:
+            table = pd.read_csv(path)
+        except (OSError, pd.errors.ParserError) as error:
+            raise LockedOuterEvaluationError(
+                f"Cannot read Step 5 calibration predictions {path}: {error}"
+            ) from error
+        required = {
+            "configuration_id",
+            "observed_rul",
+            "uncalibrated_predicted_rul",
+        }
+        missing = sorted(required - set(table.columns))
+        if missing:
+            raise LockedOuterEvaluationError(
+                f"Step 5 calibration predictions are missing columns {missing}"
+            )
+        table = table.loc[
+            table["configuration_id"].astype(str).eq(selected.configuration_id)
+        ]
+        if table.empty:
+            raise LockedOuterEvaluationError(
+                "Step 5 has no OOF predictions for the selected configuration"
+            )
+        calibrator = ConditionalQuantileCalibrator.fit(
+            table["observed_rul"].to_numpy(dtype=float),
+            table["uncalibrated_predicted_rul"].to_numpy(dtype=float),
+            self.prediction_policy,
+        )
+        self._calibrator_cache[key] = calibrator
+        return calibrator
 
     def _locked_split(self, selected: SelectedConfiguration) -> Any:
         """Load the one locked split matching the selected representation."""
@@ -718,6 +801,7 @@ class LockedOuterEvaluationRunner:
         validation: Any,
         selected: SelectedConfiguration,
         seed: int,
+        uncalibrated_rul: np.ndarray,
         predicted_rul: np.ndarray,
     ) -> pd.DataFrame:
         """Create and validate the common locked prediction schema."""
@@ -737,8 +821,14 @@ class LockedOuterEvaluationRunner:
                 f"Locked prediction metadata is missing columns {missing}"
             )
         observed_rul = target_values(validation)
+        uncalibrated = np.asarray(uncalibrated_rul, dtype=np.float64).reshape(-1)
         predicted = np.asarray(predicted_rul, dtype=np.float64).reshape(-1)
-        if len(predicted) != len(validation) or not np.isfinite(predicted).all():
+        if (
+            len(uncalibrated) != len(validation)
+            or len(predicted) != len(validation)
+            or not np.isfinite(uncalibrated).all()
+            or not np.isfinite(predicted).all()
+        ):
             raise LockedOuterEvaluationError(
                 "Locked predictions have an invalid length or non-finite values"
             )
@@ -751,6 +841,8 @@ class LockedOuterEvaluationRunner:
         table["feature_set"] = selected.feature_set
         table["lookback"] = selected.lookback
         table["y_true"] = observed_rul
+        table["uncalibrated_y_pred"] = uncalibrated
+        table["calibration_adjustment"] = uncalibrated - predicted
         table["y_pred"] = predicted
         table["residual"] = predicted - observed_rul
         table = table.loc[:, PREDICTION_COLUMNS]

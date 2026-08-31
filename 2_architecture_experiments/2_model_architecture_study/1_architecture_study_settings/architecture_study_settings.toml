@@ -8,11 +8,11 @@
 # address, normally http://localhost:6006
 
 # Revision number of this configuration, incremented by hand on any change.
-settings_version = 12    # Options: any positive integer
+settings_version = 14    # Options: any positive integer
 
 # Which "runs/run_<n>/" folder Steps 5-7 use; hand-edited only, so an
 # interrupted run resumes into the folder it started in.
-run_number = 5    # Options: any positive integer
+run_number = 6    # Options: any positive integer
 
 [execution]
 # Step 5/6 studies run at once, each a subprocess; the one performance-only
@@ -47,29 +47,29 @@ optional_architectures = ["rbf_svr", "trajectory_dtw_knn"]    # Options: any dec
 # The single on/off switch per architecture; false drops it from the run and
 # nothing else changes. Every name in the three [study] lists appears once here.
 # Options: true, false.
-mean_baseline = true
+mean_baseline = false
 cycle_only_baseline = false
 regularized_linear = false
-random_forest = true
+random_forest = false
 extra_trees = true
-hist_gradient_boosting = false
+hist_gradient_boosting = true
 xgboost = true
 catboost = false
 mlp = false
-tcn = true
-multiscale_cnn = true
-sensor_graph_tcn = true
+tcn = false
+multiscale_cnn = false
+sensor_graph_tcn = false
 lstm = false
 transformer = false
 rbf_svr = false
-trajectory_dtw_knn = true
+trajectory_dtw_knn = false
 # Saving every architecture's results and never declaring a winner are fixed
 # pipeline behaviors with nothing to configure.
 
 [tuning]
 # Candidate configurations Optuna tries per tunable family; the two baselines
 # have nothing to tune and always use one.
-candidate_budget_per_architecture = 50    # Options: any positive integer
+candidate_budget_per_architecture = 25    # Options: any positive integer
 # Seed making candidate generation repeatable.
 search_seed = 13    # Options: any integer
 # Seeds quantifying run-to-run variation, one retraining run each for the
@@ -111,20 +111,22 @@ bootstrap_repetitions = 1000    # Options: any positive integer
 bootstrap_seed = 20260814    # Options: any integer
 
 [target]
-# Raw RUL remains the evaluation target. This section controls only the target
-# supplied while fitting a model.
-mode = "raw"    # Options: "raw", "piecewise_cap", "failure_cycle"
-# maximum_rul is required for piecewise_cap and omitted for other modes.
+# Run 6 uses the PE_3 winning capped target while retaining raw RUL for all
+# evaluation metrics.
+mode = "piecewise_cap"    # Options: "raw", "piecewise_cap", "failure_cycle"
+maximum_rul = 125.0
 
 [prediction_policy]
-# Conservative fitting and prediction settings. The neutral values below
-# reproduce all existing runs.
+# Fold-fitted q=0.55 calibration subtracts a prediction-dependent correction
+# learned only from other development folds.
 loss = "symmetric_rmse"    # Options: "symmetric_rmse", "asymmetric_mse", "quantile"
 overprediction_weight = 1.0    # Above 1 only for asymmetric_mse
 quantile = 0.5    # Below 0.5 only for quantile loss
-calibration = "none"    # Options: "none", "fixed_offset"
+calibration = "conditional_quantile"    # Options: "none", "fixed_offset", "conditional_quantile"
 safety_offset = 0.0    # Positive only for fixed_offset calibration
-non_overprediction_coverage = 0.5    # Recorded calibration target
+non_overprediction_coverage = 0.55    # Residual quantile used by conditional calibration
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10
 
 [representations]
 # Feature sets available to tabular architectures; each architecture's own

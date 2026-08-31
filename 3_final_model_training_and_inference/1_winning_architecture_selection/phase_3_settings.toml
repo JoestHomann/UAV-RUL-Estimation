@@ -1,6 +1,6 @@
 # Increment the version when changing this run after Step 2 has produced output.
 settings_version = 1
-run_number = 5
+run_number = 6
 
 # Locked-confirmed PE_3 run_1 policy and its development-only component source.
 phase_2_run_number = 31
@@ -21,3 +21,10 @@ promotion_manifest = "2_architecture_experiments/1_pipeline_experiments/experime
 candidate_budget = 25
 search_seed = 13
 model_seed = 13
+
+[prediction_calibration]
+calibration = "conditional_quantile"
+safety_offset = 0.0
+non_overprediction_coverage = 0.55
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10

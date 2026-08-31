@@ -280,18 +280,22 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
             "target",
             {"mode": "raw", "maximum_rul": None},
         ),
-        "prediction_policy": phase_2_settings.get(
+        "prediction_policy": configuration.get(
             "prediction_policy",
-            {
-                "loss": "symmetric_rmse",
-                "overprediction_weight": 1.0,
-                "quantile": 0.5,
-                "severity_scale": 10.0,
-                "calibration": "none",
-                "safety_offset": 0.0,
-                "non_overprediction_coverage": 0.5,
-            },
+            phase_2_settings.get(
+                "prediction_policy",
+                {
+                    "loss": "symmetric_rmse",
+                    "overprediction_weight": 1.0,
+                    "quantile": 0.5,
+                    "severity_scale": 10.0,
+                    "calibration": "none",
+                    "safety_offset": 0.0,
+                    "non_overprediction_coverage": 0.5,
+                },
+            ),
         ),
+        "conditional_calibrator": configuration.get("conditional_calibrator"),
         "preprocessing": {
             "algorithm": (
                 "robust_channel_scaler"

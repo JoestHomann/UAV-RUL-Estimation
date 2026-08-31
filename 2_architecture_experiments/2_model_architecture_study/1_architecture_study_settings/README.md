@@ -22,6 +22,19 @@ Scientific settings cannot be overridden from the command line. The optional `--
 
 This settings file is intentionally not frozen by code. When its values change, increment `settings_version` manually and regenerate all dependent Phase 2 artifacts.
 
+`prediction_policy.calibration = "conditional_quantile"` enables the
+subtraction-only conservative policy validated by PE4. The configured residual
+quantile, prediction-bin edges, and minimum rows are fitted independently
+inside each validation boundary; the TOML never stores learned corrections.
+Fresh Phase 2 Run 6 is a focused development comparison of ExtraTrees,
+HistGradientBoosting, and XGBoost using the capped-125 target,
+`screened_drift_pruned` features, 25 candidates per family/fold, and `q=0.55`.
+Run it through development selection only with:
+
+```powershell
+& .\.venv\Scripts\python.exe .\2_architecture_experiments\2_model_architecture_study\run_phase_2.py --through-step 5
+```
+
 Tabular feature-set names are validated against the selected Phase 1 catalog
 and are not restricted to the four legacy literals. The declared
 `representations.tabular_feature_sets` and `phase_1.expected_feature_sets` keys

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 import tomllib
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -49,6 +49,28 @@ class FinalSearchSettings(StrictModel):
     model_seed: int = Field(ge=0, le=MAX_SEED)
 
 
+class PredictionCalibrationSettings(StrictModel):
+    """Override post-model calibration for the new Phase 3 run."""
+
+    calibration: Literal["none", "conditional_quantile"]
+    safety_offset: float = Field(default=0.0, ge=0.0)
+    non_overprediction_coverage: float = Field(gt=0.0, lt=1.0)
+    calibration_prediction_bin_edges: list[float] = Field(min_length=3)
+    calibration_minimum_bin_rows: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_conditional_policy(self) -> "PredictionCalibrationSettings":
+        if self.calibration == "conditional_quantile":
+            if self.safety_offset != 0.0:
+                raise ValueError("conditional calibration requires safety_offset = 0")
+            if self.non_overprediction_coverage < 0.5:
+                raise ValueError("conditional calibration coverage must be at least 0.5")
+        edges = self.calibration_prediction_bin_edges
+        if any(upper <= lower for lower, upper in zip(edges[:-1], edges[1:], strict=True)):
+            raise ValueError("calibration prediction bin edges must be strictly increasing")
+        return self
+
+
 class Phase3Settings(StrictModel):
     settings_version: int = Field(gt=0)
     run_number: int = Field(gt=0)
@@ -63,6 +85,7 @@ class Phase3Settings(StrictModel):
     promotion_contract: str | None = None
     promotion_manifest: str | None = None
     final_search: FinalSearchSettings
+    prediction_calibration: PredictionCalibrationSettings | None = None
 
     @model_validator(mode="after")
     def family_name_is_normalized(self) -> "Phase3Settings":

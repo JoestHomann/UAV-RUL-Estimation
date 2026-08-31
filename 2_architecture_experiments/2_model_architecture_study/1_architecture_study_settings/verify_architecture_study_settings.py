@@ -481,9 +481,14 @@ class PredictionPolicySpecification(StrictModel):
     overprediction_weight: float = Field(ge=1.0)
     quantile: float = Field(gt=0.0, le=0.5)
     severity_scale: float = Field(default=10.0, gt=0.0)
-    calibration: Literal["none", "fixed_offset"]
+    calibration: Literal["none", "fixed_offset", "conditional_quantile"]
     safety_offset: float = Field(ge=0.0)
     non_overprediction_coverage: float = Field(gt=0.0, lt=1.0)
+    calibration_prediction_bin_edges: list[float] = Field(
+        default_factory=lambda: [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0],
+        min_length=3,
+    )
+    calibration_minimum_bin_rows: PositiveInt = 10
 
     @model_validator(mode="after")
     def inactive_values_are_neutral(self) -> PredictionPolicySpecification:
@@ -511,6 +516,18 @@ class PredictionPolicySpecification(StrictModel):
             raise ValueError("calibration = 'none' requires safety_offset = 0.0")
         if self.calibration == "fixed_offset" and self.safety_offset <= 0.0:
             raise ValueError("fixed_offset calibration requires a positive offset")
+        if self.calibration == "conditional_quantile":
+            if self.safety_offset != 0.0:
+                raise ValueError(
+                    "conditional_quantile calibration requires safety_offset = 0"
+                )
+            if self.non_overprediction_coverage < 0.5:
+                raise ValueError(
+                    "conditional_quantile coverage must be at least 0.5"
+                )
+        edges = self.calibration_prediction_bin_edges
+        if any(upper <= lower for lower, upper in zip(edges[:-1], edges[1:], strict=True)):
+            raise ValueError("calibration prediction bin edges must be strictly increasing")
         return self
 
 

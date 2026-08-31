@@ -144,6 +144,9 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "deterministic_order_verified": True,
         "regenerated_prediction_equivalence": True,
         "prediction_comparison_representation": "canonical_csv_round_trip",
+        "conditional_calibration_applied": (
+            contract.get("conditional_calibrator") is not None
+        ),
         "test_metrics_calculated": False,
         "artifacts": {"submission": "artifacts/submission.csv"},
     }

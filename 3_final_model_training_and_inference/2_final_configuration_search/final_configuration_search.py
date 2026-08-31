@@ -40,6 +40,11 @@ for dependency_dir in DEPENDENCY_DIRS:
 from base import target_values  # noqa: E402
 from candidate_space import CandidateSpace, ResolvedCandidate  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
+from policies import (  # noqa: E402
+    ConditionalQuantileCalibrator,
+    PredictionPolicy,
+    cross_fit_conditional_calibration,
+)
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 from trajectory_data_adapter import TrajectoryDataAdapter  # noqa: E402
@@ -65,7 +70,7 @@ from phase_3_common import (  # noqa: E402
 from phase_3_run_layout import tensorboard_log_root  # noqa: E402
 
 
-SEARCH_VERSION = 2
+SEARCH_VERSION = 3
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
     "catboost",
@@ -157,6 +162,8 @@ OOF_COLUMNS = [
     "scenario",
     "cutoff",
     "observed_rul",
+    "uncalibrated_predicted_rul",
+    "calibration_adjustment",
     "predicted_rul",
     "residual",
 ]
@@ -385,6 +392,14 @@ class FinalConfigurationSearchRunner:
             "Phase 2 experiment specification",
         )
         self.phase_2_settings = self.phase_2_specification["settings"]
+        prediction_settings = dict(self.phase_2_settings["prediction_policy"])
+        calibration_override = self.settings.get("prediction_calibration")
+        if isinstance(calibration_override, dict):
+            prediction_settings.update(calibration_override)
+        self.prediction_policy = PredictionPolicy.from_settings(prediction_settings)
+        self.prediction_minimum = float(
+            self.phase_2_settings["evaluation"]["prediction_minimum"]
+        )
         self.architectures = self.phase_2_settings["architectures"]
         self.candidate_space = CandidateSpace(self.architectures)
         self.maximum_budget = int(self.settings["final_search"]["candidate_budget"])
@@ -642,6 +657,8 @@ class FinalConfigurationSearchRunner:
                                 ),
                                 "cutoff": float(metadata.loc[validation_row, "cutoff"]),
                                 "observed_rul": float(target),
+                                "uncalibrated_predicted_rul": float(prediction),
+                                "calibration_adjustment": 0.0,
                                 "predicted_rul": float(prediction),
                                 "residual": float(prediction - target),
                             }
@@ -701,6 +718,8 @@ class FinalConfigurationSearchRunner:
             del model
             gc.collect()
 
+        self._apply_fold_fitted_calibration(fold_records, oof_records)
+
         def values(name: str) -> np.ndarray:
             return np.asarray([record[name] for record in fold_records], dtype=float)
 
@@ -757,6 +776,64 @@ class FinalConfigurationSearchRunner:
         )
         return candidate_record, fold_records, oof_records
 
+    def _apply_fold_fitted_calibration(
+        self,
+        fold_records: list[dict[str, Any]],
+        oof_records: list[dict[str, Any]],
+    ) -> None:
+        """Score conditional calibration with every outer fold held out."""
+
+        if self.prediction_policy.calibration != "conditional_quantile":
+            return
+        targets = np.asarray(
+            [record["observed_rul"] for record in oof_records], dtype=float
+        )
+        raw_predictions = np.asarray(
+            [record["uncalibrated_predicted_rul"] for record in oof_records],
+            dtype=float,
+        )
+        folds = np.asarray([record["outer_fold"] for record in oof_records])
+        calibrated, adjustments = cross_fit_conditional_calibration(
+            targets,
+            raw_predictions,
+            folds,
+            self.prediction_policy,
+            prediction_minimum=self.prediction_minimum,
+        )
+        for record, prediction, adjustment in zip(
+            oof_records,
+            calibrated,
+            adjustments,
+            strict=True,
+        ):
+            record["calibration_adjustment"] = float(adjustment)
+            record["predicted_rul"] = float(prediction)
+            record["residual"] = float(prediction - record["observed_rul"])
+
+        metric_names = (
+            "rmse",
+            "r2",
+            "mae",
+            "bias",
+            "overprediction_rate",
+            "mean_overprediction",
+            "root_mean_squared_overprediction",
+            "overprediction_q90",
+            "overprediction_q95",
+            "maximum_overprediction",
+            "underprediction_rate",
+            "mean_underprediction",
+            "root_mean_squared_underprediction",
+        )
+        for fold_record in fold_records:
+            fold = fold_record["outer_fold"]
+            rows = [record for record in oof_records if record["outer_fold"] == fold]
+            metrics = calculate_regression_metrics(
+                np.asarray([record["observed_rul"] for record in rows], dtype=float),
+                np.asarray([record["predicted_rul"] for record in rows], dtype=float),
+            )
+            fold_record.update({name: metrics[name] for name in metric_names})
+
     def _finish(self, study: Study, folds: tuple[int, ...]) -> dict[str, Any]:
         candidates, fold_records, oof_records = self._records(study)
         if len(candidates) != self.candidate_budget:
@@ -790,6 +867,23 @@ class FinalConfigurationSearchRunner:
             self.artifact_dir / "final_search_oof_predictions.csv",
         )
         configuration = json.loads(str(selected["configuration_json"]))
+        selected_oof = [
+            record
+            for record in oof_records
+            if record["configuration_id"] == selected["configuration_id"]
+        ]
+        conditional_calibrator = None
+        if self.prediction_policy.calibration == "conditional_quantile":
+            conditional_calibrator = ConditionalQuantileCalibrator.fit(
+                np.asarray(
+                    [record["observed_rul"] for record in selected_oof], dtype=float
+                ),
+                np.asarray(
+                    [record["uncalibrated_predicted_rul"] for record in selected_oof],
+                    dtype=float,
+                ),
+                self.prediction_policy,
+            ).to_dict()
         selected_payload = {
             "selection_version": 1,
             "settings_version": self.settings_version,
@@ -816,6 +910,8 @@ class FinalConfigurationSearchRunner:
             "prediction_minimum": float(
                 self.phase_2_settings["evaluation"]["prediction_minimum"]
             ),
+            "prediction_policy": self.prediction_policy.to_dict(),
+            "conditional_calibrator": conditional_calibrator,
             "selection_metric": "mean_fold_rmse",
             "selection_direction": "minimize",
             "tie_breaker": "candidate_number",

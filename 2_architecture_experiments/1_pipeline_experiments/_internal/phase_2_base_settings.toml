@@ -126,6 +126,8 @@ quantile = 0.5    # Below 0.5 only for quantile loss
 calibration = "none"    # Options: "none", "fixed_offset"
 safety_offset = 0.0    # Positive only for fixed_offset calibration
 non_overprediction_coverage = 0.5    # Recorded calibration target
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10
 
 [representations]
 # Feature sets available to tabular architectures; each architecture's own

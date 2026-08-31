@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -19,6 +20,19 @@ from experiment_paths import pipeline_owner, pipeline_run_name, run_directory
 SCRIPT_DIR = Path(__file__).resolve().parent
 ARCHITECTURE_EXPERIMENTS_ROOT = SCRIPT_DIR.parent
 REPOSITORY_ROOT = ARCHITECTURE_EXPERIMENTS_ROOT.parent
+MODEL_ADAPTER_DIR = (
+    ARCHITECTURE_EXPERIMENTS_ROOT
+    / "2_model_architecture_study"
+    / "4_model_adapters"
+)
+if str(MODEL_ADAPTER_DIR) not in sys.path:
+    sys.path.insert(0, str(MODEL_ADAPTER_DIR))
+
+from policies import (  # noqa: E402
+    ConditionalQuantileCalibrator,
+    PredictionPolicy,
+)
+
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pipeline_experiments.toml"
 REQUIRED_OOF_COLUMNS = {
     "candidate_number",
@@ -134,15 +148,29 @@ def fit_correction_curve(
 ) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
     """Estimate nonnegative residual quantiles in prediction-RUL bins."""
 
-    corrections: list[float] = []
-    counts: list[int] = []
-    for lower, upper in zip(edges[:-1], edges[1:], strict=True):
-        in_bin = (predictions >= lower) & (predictions < upper)
-        values = residuals[in_bin]
-        counts.append(int(len(values)))
-        correction = float(np.quantile(values, quantile)) if len(values) >= minimum_rows else 0.0
-        corrections.append(max(0.0, correction))
-    return np.asarray(corrections), np.asarray(counts, dtype=np.int64)
+    policy = PredictionPolicy.from_settings(
+        {
+            "loss": "symmetric_rmse",
+            "overprediction_weight": 1.0,
+            "quantile": 0.5,
+            "severity_scale": 10.0,
+            "calibration": "conditional_quantile",
+            "safety_offset": 0.0,
+            "non_overprediction_coverage": quantile,
+            "calibration_prediction_bin_edges": edges.tolist(),
+            "calibration_minimum_bin_rows": minimum_rows,
+        }
+    )
+    predicted = np.asarray(predictions, dtype=np.float64)
+    calibrator = ConditionalQuantileCalibrator.fit(
+        predicted - np.asarray(residuals, dtype=np.float64),
+        predicted,
+        policy,
+    )
+    return (
+        np.asarray(calibrator.corrections, dtype=np.float64),
+        np.asarray(calibrator.training_rows_by_bin, dtype=np.int64),
+    )
 
 
 def apply_correction_curve(
@@ -152,15 +180,14 @@ def apply_correction_curve(
 ) -> NDArray[np.float64]:
     """Interpolate a smooth subtraction-only correction over predicted RUL."""
 
-    centers = (edges[:-1] + edges[1:]) / 2.0
-    adjustment = np.interp(
-        predictions,
-        centers,
-        corrections,
-        left=float(corrections[0]),
-        right=float(corrections[-1]),
+    calibrator = ConditionalQuantileCalibrator(
+        quantile=0.5,
+        prediction_bin_edges=tuple(float(edge) for edge in edges),
+        minimum_bin_rows=1,
+        corrections=tuple(float(value) for value in corrections),
+        training_rows_by_bin=tuple(0 for _ in corrections),
     )
-    return np.maximum(predictions - np.maximum(adjustment, 0.0), 0.0)
+    return calibrator.apply(predictions, prediction_minimum=0.0)
 
 
 def _metrics(targets: NDArray[np.float64], predictions: NDArray[np.float64]) -> dict[str, float]:

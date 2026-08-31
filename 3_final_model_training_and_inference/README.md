@@ -63,13 +63,20 @@ Phase 3 run number.
 
 Run numbers are phase-local. The current default TOML reads the locked-confirmed
 `PE3_final_ensemble` policy and its development-only `PE3_features_drift`
-component source, then writes Phase 3 Run 5 under
-`3_final_model_training_and_inference/runs/run_5/`. The promoted policy keeps
+component source, then writes Phase 3 Run 6 under
+`3_final_model_training_and_inference/runs/run_6/`. The promoted policy keeps
 the 50/50 blend and residual calibrator frozen. Step 2 searches the complete
 `5 ExtraTrees x 5 XGBoost` grid of development-selected component
 configurations, for 25 candidates total. Its repository-relative artifact
 paths make the no-argument entry point sufficient. A future standalone Phase 3
 TOML may omit those optional paths and use the numbered Phase 2 default.
+
+Run 6 additionally enables the PE4 `q=0.55` conditional conservative
+calibration. Step 2 evaluates it cross-fold and fits the final correction curve
+only from the selected candidate's complete development OOF residuals. Step 3
+freezes that curve in the training contract, and Steps 5-6 apply and regenerate
+the same subtraction-only transformation. Test labels are never loaded, and
+both the policy parameters and learned curve remain inspectable JSON data.
 
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the

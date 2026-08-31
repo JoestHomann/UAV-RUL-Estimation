@@ -39,7 +39,13 @@ from models.tabular.extra_trees import ExtraTreesAdapter  # noqa: E402
 from models.tabular.hist_gradient_boosting import (  # noqa: E402
     HistGradientBoostingAdapter,
 )
-from policies import PolicyError, PredictionPolicy, TargetPolicy  # noqa: E402
+from policies import (  # noqa: E402
+    ConditionalQuantileCalibrator,
+    PolicyError,
+    PredictionPolicy,
+    TargetPolicy,
+    cross_fit_conditional_calibration,
+)
 from tabular_data_adapter import TabularDataset  # noqa: E402
 from models.tabular.xgboost import (  # noqa: E402
     SeverityAsymmetricObjective,
@@ -110,6 +116,59 @@ class TargetPolicyTests(unittest.TestCase):
         )
         np.testing.assert_allclose(gradient, [-10.0, 0.0, 50.0])
         np.testing.assert_allclose(hessian, [2.0, 2.0, 8.0])
+
+    def test_conditional_quantile_calibration_is_cross_fitted_and_subtractive(
+        self,
+    ) -> None:
+        policy = PredictionPolicy.from_settings(
+            {
+                "loss": "symmetric_rmse",
+                "overprediction_weight": 1.0,
+                "quantile": 0.5,
+                "severity_scale": 10.0,
+                "calibration": "conditional_quantile",
+                "safety_offset": 0.0,
+                "non_overprediction_coverage": 0.55,
+                "calibration_prediction_bin_edges": [0.0, 50.0, 100.0],
+                "calibration_minimum_bin_rows": 2,
+            }
+        )
+        targets = np.asarray([20.0, 30.0, 20.0, 30.0, 70.0, 80.0, 70.0, 80.0])
+        predictions = targets + np.asarray([8.0, 8.0, 2.0, 2.0, 6.0, 6.0, 4.0, 4.0])
+        folds = np.asarray([0, 0, 1, 1, 0, 0, 1, 1])
+        calibrated, adjustments = cross_fit_conditional_calibration(
+            targets,
+            predictions,
+            folds,
+            policy,
+        )
+        self.assertTrue(np.all(calibrated <= predictions))
+        self.assertTrue(np.all(adjustments >= 0.0))
+        # Fold 0 sees only fold 1 residuals, so its correction is smaller.
+        self.assertLess(adjustments[0], adjustments[2])
+
+    def test_conditional_calibrator_round_trip_preserves_predictions(self) -> None:
+        policy = PredictionPolicy.from_settings(
+            {
+                "loss": "symmetric_rmse",
+                "overprediction_weight": 1.0,
+                "quantile": 0.5,
+                "severity_scale": 10.0,
+                "calibration": "conditional_quantile",
+                "safety_offset": 0.0,
+                "non_overprediction_coverage": 0.55,
+                "calibration_prediction_bin_edges": [0.0, 50.0, 100.0],
+                "calibration_minimum_bin_rows": 2,
+            }
+        )
+        targets = np.asarray([10.0, 20.0, 60.0, 70.0])
+        predictions = np.asarray([15.0, 24.0, 68.0, 76.0])
+        calibrator = ConditionalQuantileCalibrator.fit(targets, predictions, policy)
+        restored = ConditionalQuantileCalibrator.from_dict(calibrator.to_dict())
+        np.testing.assert_allclose(
+            restored.apply(predictions),
+            calibrator.apply(predictions),
+        )
 
 
 class FoldFittedTransformTests(unittest.TestCase):

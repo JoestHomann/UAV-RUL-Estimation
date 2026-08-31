@@ -131,6 +131,17 @@ calibration = "none"
 safety_offset = 0.0
 non_overprediction_coverage = 0.5
 
+[prediction_profiles.conditional_q55]
+loss = "symmetric_rmse"
+overprediction_weight = 1.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "conditional_quantile"
+safety_offset = 0.0
+non_overprediction_coverage = 0.55
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10
+
 [prediction_profiles.conservative_110]
 loss = "asymmetric_mse"
 overprediction_weight = 2.0
