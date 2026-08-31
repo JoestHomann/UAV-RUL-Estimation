@@ -27,6 +27,7 @@ MODULE_SPEC.loader.exec_module(run_experiments)
 
 import report_ensemble_calibration
 import promote_calibrated_ensemble
+import conditional_safety_calibration
 
 
 class PipelineExperimentCatalogTests(unittest.TestCase):
@@ -43,6 +44,49 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertIn("current", self.config["scenario_profiles"])
         self.assertIn("dense_stride_5", self.config["prefix_variants"])
         self.assertEqual(run_experiments._configured_max_workers(self.config), 6)
+
+    def test_each_pipeline_run_has_one_definition_and_one_entry_point(self) -> None:
+        definitions_root = REPOSITORY_ROOT / "pipeline_experiments" / "definitions"
+        expected_steps = {1: 1, 2: 7, 3: 1, 4: 1}
+        for run_number, step_count in expected_steps.items():
+            run_name = f"PE_run_{run_number}"
+            run_dir = definitions_root / run_name
+            toml_files = list(run_dir.glob("*.toml"))
+            launchers = list(run_dir.glob("run_*.py"))
+            self.assertEqual(toml_files, [run_dir / f"{run_name}.toml"])
+            self.assertEqual(launchers, [run_dir / f"run_{run_name}.py"])
+            config = run_experiments._read_config(toml_files[0])
+            definition = config["run_definitions"][run_name]
+            self.assertEqual(len(definition["steps"]), step_count)
+            for step in definition["steps"]:
+                self.assertEqual(
+                    step["script"],
+                    "pipeline_experiments/run_experiments.py",
+                )
+                self.assertTrue(
+                    (REPOSITORY_ROOT / step["script"]).is_file(),
+                    step["script"],
+                )
+                chain = config["script_chains"][step["script_chain"]]
+                self.assertGreater(len(chain["scripts"]), 0)
+                for script in chain["scripts"]:
+                    self.assertTrue((REPOSITORY_ROOT / script).is_file(), script)
+
+    def test_compatibility_catalog_composes_all_run_definitions(self) -> None:
+        self.assertEqual(
+            set(self.config["run_definitions"]),
+            {"PE_run_1", "PE_run_2", "PE_run_3", "PE_run_4"},
+        )
+        self.assertEqual(len(run_experiments._experiments(self.config)), 36)
+        self.assertIn(
+            "PE_target_scenario_2x2",
+            run_experiments._experiment_groups(self.config),
+        )
+        target_group = run_experiments._experiment_group(
+            self.config,
+            "PE_target_scenario_2x2",
+        )
+        self.assertEqual(target_group["model_families"], ["extra_trees", "xgboost"])
 
     def test_signal_family_ablation_is_an_explicit_development_group(self) -> None:
         group = run_experiments._experiment_group(
@@ -120,6 +164,42 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         promotion = run_experiments._promotions(self.config)["PE3_final_ensemble"]
         self.assertEqual(promotion["workflow"], "PE_run_3")
         self.assertEqual(promotion["ensemble_group"], "PE3_ensemble_calibration")
+
+    def test_pe_run_4_declares_all_conditional_calibration_quantiles(self) -> None:
+        workflow = run_experiments._conditional_calibration_workflows(self.config)[
+            "PE_run_4"
+        ]
+        self.assertEqual(workflow["source_phase_3_run"], 5)
+        self.assertEqual(workflow["quantiles"], [0.50, 0.55, 0.60, 0.65, 0.70])
+        self.assertEqual(workflow["r2_tolerance"], 0.005)
+        self.assertEqual(
+            workflow["prediction_bin_edges"],
+            [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0],
+        )
+
+    def test_conditional_calibration_is_cross_fitted_and_subtraction_only(self) -> None:
+        rows = []
+        for fold in range(3):
+            for index, prediction in enumerate(range(10, 130, 10)):
+                rows.append(
+                    {
+                        "outer_fold": fold,
+                        "predicted_rul": float(prediction),
+                        "observed_rul": float(prediction - 2 - fold),
+                    }
+                )
+        table = pd.DataFrame.from_records(rows)
+        original = table["predicted_rul"].to_numpy(dtype=float)
+        calibrated, curves = conditional_safety_calibration.cross_fit_policy(
+            table,
+            quantile=0.70,
+            edges=pd.Series([0, 25, 50, 75, 100, 125, 150]).to_numpy(dtype=float),
+            minimum_rows=2,
+        )
+        self.assertTrue((calibrated <= original).all())
+        self.assertTrue((calibrated >= 0.0).all())
+        self.assertEqual({record["outer_fold"] for record in curves}, {0, 1, 2})
+        self.assertTrue(all(record["correction"] >= 0.0 for record in curves))
 
     def test_pe_run_3_severity_cells_vary_only_prediction_profile(self) -> None:
         group = run_experiments._experiment_group(self.config, "PE3_severity_loss")
@@ -261,6 +341,28 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         search = settings["architectures"]["catboost"]["search"]
         self.assertEqual(search["maximum_trees"]["value"], 1000)
         self.assertEqual(search["depth"]["values"], [4, 6, 8])
+
+    def test_hist_gradient_boosting_search_is_available_but_disabled(self) -> None:
+        settings_path = (
+            REPOSITORY_ROOT
+            / "pipeline_experiments"
+            / "phase_2_settings.toml"
+        )
+        with settings_path.open("rb") as settings_file:
+            settings = tomllib.load(settings_file)
+        self.assertFalse(settings["study"]["enabled"]["hist_gradient_boosting"])
+        search = settings["architectures"]["hist_gradient_boosting"]["search"]
+        self.assertEqual(
+            set(search),
+            {
+                "max_iter",
+                "learning_rate",
+                "max_leaf_nodes",
+                "max_depth",
+                "min_samples_leaf",
+                "l2_regularization",
+            },
+        )
 
     def test_pipeline_phase2_settings_are_independent(self) -> None:
         paths = run_experiments._paths(self.config)

@@ -1,0 +1,334 @@
+# Reproducible definition and automatic winner-propagating plan for PE_run_3.
+include = ["../_shared.toml"]
+
+[run_definitions.PE_run_3]
+title = "Feature, target-cap, ensemble, and safety optimization"
+description = "Execute the staged workflow, propagate development winners, and run its locked confirmation gate."
+
+[[run_definitions.PE_run_3.steps]]
+name = "automatic_performance_workflow"
+script = "pipeline_experiments/run_experiments.py"
+arguments = ["--run", "PE_run_3"]
+script_chain = "automatic_performance_workflow"
+
+[script_chains.automatic_performance_workflow]
+scripts = [
+    "1_dataset_construction/run_all.py",
+    "2_model_architecture_study/1_architecture_study_settings/build_architecture_study_settings.py",
+    "2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py",
+    "2_model_architecture_study/3_sequence_data_adapter/build_sequence_data_adapter.py",
+    "2_model_architecture_study/3_trajectory_data_adapter/build_trajectory_data_adapter.py",
+    "2_model_architecture_study/4_model_adapters/build_model_registry.py",
+    "2_model_architecture_study/run_phase_2.py",
+    "pipeline_experiments/report_experiment_group.py",
+    "pipeline_experiments/report_ensemble_calibration.py",
+    "pipeline_experiments/promote_calibrated_ensemble.py",
+    "2_model_architecture_study/6_locked_outer_evaluation/run_locked_outer_evaluation.py",
+]
+
+[experiment_groups.PE3_feature_union]
+pipeline_run = "PE_run_3"
+control = "PE3_features_drift"
+experiments = [
+    "PE3_features_drift",
+    "PE3_features_signal",
+    "PE3_features_union",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE3_cap_sensitivity]
+pipeline_run = "PE_run_3"
+control = "PE3_cap_125"
+experiments = ["PE3_cap_125", "PE3_cap_110", "PE3_cap_140", "PE3_cap_150"]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE3_ensemble_calibration]
+pipeline_run = "PE_run_3"
+control = "PE3_features_union"
+experiments = ["PE3_features_union"]
+reporter = "pipeline_experiments/report_ensemble_calibration.py"
+blend_weights = [0.25, 0.50, 0.75]
+calibration_degree = 2
+calibration_ridge_alpha = 10.0
+
+[experiment_groups.PE3_severity_loss]
+pipeline_run = "PE_run_3"
+control = "PE3_safety_symmetric"
+experiments = [
+    "PE3_safety_symmetric",
+    "PE3_safety_severity_1_5",
+    "PE3_safety_severity_2_0",
+    "PE3_safety_severity_3_0",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_workflows.PE_run_3]
+feature_group = "PE3_feature_union"
+cap_group = "PE3_cap_sensitivity"
+ensemble_group = "PE3_ensemble_calibration"
+safety_group = "PE3_severity_loss"
+promotion = "PE3_final_ensemble"
+# Final safety candidates may lose at most this absolute development R2 relative
+# to the best observed candidate before one-sided error metrics decide.
+safety_r2_tolerance = 0.005
+
+# PE_run_4 learns a subtraction-only correction as a function of predicted RUL.
+# Every quantile is evaluated with outer-fold cross-fitting on Run 5 development
+# predictions. The selected curve is then fitted to all development OOF rows and
+# applied to the already verified, unlabeled Run 5 submission predictions.
+
+[promotions.PE3_final_ensemble]
+workflow = "PE_run_3"
+ensemble_group = "PE3_ensemble_calibration"
+
+# CatBoost was removed after the initial Run 6 attempt was stopped because its
+# CPU search dominated this pipeline experiment. Completed checkpoints for the
+# remaining families can resume without rerunning their finished folds.
+
+[experiments.PE3_features_drift]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 31
+phase_2_settings_version = 37
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_features_signal]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 32
+phase_2_settings_version = 38
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_features_union]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 33
+phase_2_settings_version = 39
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# PE_run_3 Stage B: vary only the fitting-target cap while preserving the same
+# early/middle scenarios, folds, features, models, seeds, and candidate budget.
+
+[experiments.PE3_cap_125]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 34
+phase_2_settings_version = 40
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_110]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 35
+phase_2_settings_version = 41
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_110"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_140]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 36
+phase_2_settings_version = 42
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_140"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_150]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 37
+phase_2_settings_version = 43
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_150"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# PE_run_3 Stage D: keep the accuracy configuration fixed and vary only the
+# XGBoost loss. No scalar safety offset is mixed into these cells.
+
+[experiments.PE3_safety_symmetric]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 38
+phase_2_settings_version = 44
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_1_5]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 39
+phase_2_settings_version = 45
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_1_5"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_2_0]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 40
+phase_2_settings_version = 46
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_2_0"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_3_0]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 41
+phase_2_settings_version = 47
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_3_0"
+phase_3_enabled = false

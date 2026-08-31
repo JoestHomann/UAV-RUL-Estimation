@@ -10,13 +10,14 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tomllib
 from typing import Any
 
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from experiment_config import ExperimentConfigError, read_experiment_config
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
@@ -553,8 +554,7 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     try:
-        with args.config.resolve().open("rb") as stream:
-            config = tomllib.load(stream)
+        config = read_experiment_config(args.config.resolve())
         configured = config.get("execution", {}).get("max_workers", 1)
         if args.max_workers is not None:
             workers = args.max_workers
@@ -565,7 +565,13 @@ def main() -> None:
         if workers < 1:
             raise PromotionError("max_workers must be positive")
         run_promotion(config, args.promotion, force=args.force, max_workers=workers)
-    except (PromotionError, OSError, ValueError, pd.errors.ParserError) as error:
+    except (
+        PromotionError,
+        ExperimentConfigError,
+        OSError,
+        ValueError,
+        pd.errors.ParserError,
+    ) as error:
         print(f"Calibrated ensemble promotion stopped:\n{error}", file=sys.stderr)
         raise SystemExit(1) from error
 

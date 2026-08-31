@@ -1,14 +1,28 @@
 # Pipeline Experiments
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 ## Purpose
 
 `pipeline_experiments` contains controlled experiments that change assumptions
 across Phase 1 and Phase 2. Each pipeline run owns one directory. Its named
 sub-experiments own resolved settings, checkpoints, and results below
-`pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. The catalog is defined in
-[`pipeline_experiments.toml`](../../pipeline_experiments/pipeline_experiments.toml).
+`pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. Each numbered run
+has one source TOML and one execution entry point under
+[`definitions/PE_run_X`](../../pipeline_experiments/definitions/). The top-level
+[`pipeline_experiments.toml`](../../pipeline_experiments/pipeline_experiments.toml)
+only composes those definitions for compatibility tools.
+
+| Run | Definition | Single entry point |
+| --- | --- | --- |
+| `PE_run_1` | `definitions/PE_run_1/PE_run_1.toml` | `definitions/PE_run_1/run_PE_run_1.py` |
+| `PE_run_2` | `definitions/PE_run_2/PE_run_2.toml` | `definitions/PE_run_2/run_PE_run_2.py` |
+| `PE_run_3` | `definitions/PE_run_3/PE_run_3.toml` | `definitions/PE_run_3/run_PE_run_3.py` |
+| `PE_run_4` | `definitions/PE_run_4/PE_run_4.toml` | `definitions/PE_run_4/run_PE_run_4.py` |
+
+Every launcher prints its exact script plan before execution. Use
+`--list-steps` to review without running and `--step <name>` to rerun one
+declared sub-experiment group.
 
 The current experiment sets test whether validation/target assumptions explain
 the offline-to-Kaggle gap and whether identified telemetry degradation families
@@ -193,8 +207,8 @@ calculated from rows at or before the prefix cutoff.
 Run with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\run_experiments.py `
-  --group PE_signal_family_ablation
+.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py `
+  --step signal_family_ablation
 ```
 
 Results are written to
@@ -223,7 +237,7 @@ frozen; Phase 3 remains closed until the confirmation is reviewed.
 | `PE3_cap_sensitivity` | Caps 110, 125, 140, 150 | Determine whether 125 is robust or an arbitrary match to the development endpoint range | Cap 125 retained |
 | `PE3_ensemble_calibration` | XGBoost; ExtraTrees; fixed blends; cross-fitted residual functions | Test complementary tree errors and replace a constant safety offset with a learned, leakage-controlled correction | Calibrated 50/50 blend selected: development R2 0.87955, RMSE 11.5080 |
 | `PE3_severity_loss` | Symmetric; severity weights 1.5, 2.0, 3.0 | Penalize large overpredictions increasingly strongly while retaining ordinary squared loss for underprediction | Weight 2.0 was safest among loss variants, but R2 0.86802 fell outside the final 0.005 tolerance |
-| `PE3_final_ensemble` | Frozen calibrated 50/50 blend | Confirm the complete selected policy once on locked scenarios before Phase 3 | Pending locked confirmation |
+| `PE3_final_ensemble` | Frozen calibrated 50/50 blend | Confirm the complete selected policy once on locked scenarios before Phase 3 | Locked R2 0.89972 and RMSE 10.4383; promoted to Phase 3 Run 5 |
 
 The union is the logical OR of `screened_drift_pruned` and
 `signal_all_families`; duplicate features occur only once. The cap cells keep
@@ -244,7 +258,7 @@ predeclared R2/RMSE tolerance before considering safety improvements.
 Run the complete sequence with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_3
+.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_3\run_PE_run_3.py
 ```
 
 The launcher selects feature and cap winners by highest equal-weight mean
@@ -265,8 +279,47 @@ the existing Step 6 evaluator opens locked data. Locked XGBoost and ExtraTrees
 family/fold checkpoints are resumable and are combined without further tuning.
 The confirmation writes seed metrics, RUL-band safety metrics, predictions, and
 figures under `PE3_final_ensemble/`; all plots are also copied into
-`pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 may be created only
-after this result is reviewed.
+`pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 selected candidate
+10 of 25, reached development mean-fold R2 0.89422 and RMSE 10.5306, and
+produced a verified 100-row submission. Its public Kaggle R2 was 0.86525,
+improving on Run 4's 0.84513 while retaining a validation-to-leaderboard gap.
+
+## PE_run_4: Conditional Conservative Calibration
+
+PE_run_4 tests whether the remaining overprediction can be reduced without a
+global scalar offset. It starts from Phase 3 Run 5's selected development OOF
+predictions and estimates a correction as a function of predicted RUL. For each
+outer validation fold, the correction curve is fitted only on the other four
+folds. Each bin's correction is the nonnegative residual quantile, and inference
+uses `max(0, prediction - interpolated_correction)`, so calibration can never
+raise a prediction.
+
+The control and quantiles 0.50, 0.55, 0.60, 0.65, and 0.70 are predeclared in
+`definitions/PE_run_4/PE_run_4.toml`. Policies must finish within 0.005 mean-fold R2 of
+the best policy before RMS overprediction, overprediction rate, RMSE, and R2
+select the winner. No locked or test targets enter fitting or selection.
+
+| Policy | Mean-fold R2 | Mean-fold RMSE | Bias | Overprediction rate | RMS overprediction | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Control | 0.89422 | 10.5306 | +0.083 | 51.2% | 7.255 | Reference |
+| `q=0.50` | **0.89456** | 10.5354 | -0.802 | 46.2% | 6.817 | Best accuracy |
+| `q=0.55` | 0.89253 | 10.6430 | -1.329 | 43.0% | **6.567** | Selected within tolerance |
+| `q=0.60` | 0.88931 | 10.8144 | -1.997 | 40.8% | 6.236 | Outside tolerance |
+| `q=0.65` | 0.88106 | 11.2152 | -3.255 | 35.0% | 5.629 | Rejected accuracy loss |
+| `q=0.70` | 0.87070 | 11.6989 | -4.512 | 31.6% | 5.053 | Rejected accuracy loss |
+
+The selected `q=0.55` policy reduces the largest systematic excess in the
+26-75 RUL region. It is fitted once on all 500 development OOF rows and applied
+to the verified, unlabeled Run 5 submission predictions. The candidate
+submission, calibrator, cross-fitted predictions, numeric reports, and four
+figures are stored under `pipeline_experiments/runs/PE_run_4/`. Leaderboard
+confirmation remains pending.
+
+Run or reproduce the complete experiment with:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_4\run_PE_run_4.py
+```
 
 ## Degradation-Learning Experiment Register
 

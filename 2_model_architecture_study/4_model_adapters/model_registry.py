@@ -25,6 +25,7 @@ from models.neural.transformer import TransformerAdapter
 from models.tabular.catboost import CatBoostAdapter
 from models.tabular.calibrated_tree_blend import CalibratedTreeBlendAdapter
 from models.tabular.extra_trees import ExtraTreesAdapter
+from models.tabular.hist_gradient_boosting import HistGradientBoostingAdapter
 from models.tabular.random_forest import RandomForestAdapter
 from models.tabular.rbf_svr import RBFSVRAdapter
 from models.tabular.regularized_linear import RegularizedLinearAdapter
@@ -54,6 +55,7 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "regularized_linear": RegularizedLinearAdapter,
     "random_forest": RandomForestAdapter,
     "extra_trees": ExtraTreesAdapter,
+    "hist_gradient_boosting": HistGradientBoostingAdapter,
     "xgboost": XGBoostAdapter,
     "catboost": CatBoostAdapter,
     "mlp": MLPAdapter,
@@ -67,7 +69,10 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "calibrated_tree_blend": CalibratedTreeBlendAdapter,
 }
 
-OPTIONAL_ADAPTER_FAMILIES = {"calibrated_tree_blend"}
+OPTIONAL_ADAPTER_FAMILIES = {
+    "calibrated_tree_blend",
+    "hist_gradient_boosting",
+}
 
 
 # Exact parameter-name checks catch misspelled or incomplete resolved candidates
@@ -94,6 +99,14 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "max_features",
         "fault_mode_strategy",
         "signal_compression_strategy",
+    },
+    "hist_gradient_boosting": {
+        "max_iter",
+        "learning_rate",
+        "max_leaf_nodes",
+        "max_depth",
+        "min_samples_leaf",
+        "l2_regularization",
     },
     "xgboost": {
         "maximum_trees",

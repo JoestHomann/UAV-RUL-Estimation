@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-import tomllib
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -20,6 +19,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from experiment_config import ExperimentConfigError, read_experiment_config
 from experiment_paths import artifact_directory
 
 
@@ -42,12 +42,8 @@ class EnsembleReportError(ValueError):
 
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        if path.suffix.lower() == ".json":
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        else:
-            with path.open("rb") as stream:
-                payload = tomllib.load(stream)
-    except (OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
+        payload = read_experiment_config(path)
+    except ExperimentConfigError as error:
         raise EnsembleReportError(f"Cannot read experiment catalog: {error}") from error
     if not isinstance(payload, dict):
         raise EnsembleReportError("Experiment catalog must contain an object")

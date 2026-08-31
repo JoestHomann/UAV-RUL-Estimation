@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-import tomllib
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -17,6 +16,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from experiment_config import ExperimentConfigError, read_experiment_config
 from experiment_paths import artifact_directory
 
 
@@ -45,12 +45,8 @@ class AblationReportError(ValueError):
 
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        if path.suffix.lower() == ".json":
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        else:
-            with path.open("rb") as stream:
-                payload = tomllib.load(stream)
-    except (OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
+        payload = read_experiment_config(path)
+    except ExperimentConfigError as error:
         raise AblationReportError(f"Cannot read experiment catalog: {error}") from error
     if not isinstance(payload, dict):
         raise AblationReportError("Experiment catalog must contain an object")
@@ -99,6 +95,15 @@ def collect_results(
     control = group.get("control")
     if not isinstance(members, list) or control not in members:
         raise AblationReportError(f"Invalid experiment group {group_name!r}")
+    model_families = group.get("model_families")
+    if model_families is not None and (
+        not isinstance(model_families, list)
+        or not model_families
+        or not all(isinstance(item, str) and item for item in model_families)
+    ):
+        raise AblationReportError(
+            f"{group_name}.model_families must be a non-empty string list"
+        )
 
     frames: list[pd.DataFrame] = []
     for experiment_name in members:
@@ -117,6 +122,12 @@ def collect_results(
             / "candidate_results.csv"
         )
         selected = _selected_rows(path)
+        if model_families is not None:
+            selected = selected.loc[selected["model_family"].isin(model_families)].copy()
+            if selected.empty:
+                raise AblationReportError(
+                    f"{experiment_name} has no selected rows for {model_families}"
+                )
         observed_sets = set(selected["feature_set"].astype(str))
         if observed_sets != {feature_set}:
             raise AblationReportError(

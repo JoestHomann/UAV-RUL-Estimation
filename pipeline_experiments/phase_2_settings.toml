@@ -27,6 +27,7 @@ architectures_to_run = [    # Options: any declared architecture name
     "regularized_linear",
     "random_forest",
     "extra_trees",
+    "hist_gradient_boosting",
     "xgboost",
     "catboost",
     "mlp",
@@ -50,6 +51,7 @@ cycle_only_baseline = false
 regularized_linear = false
 random_forest = true
 extra_trees = true
+hist_gradient_boosting = false
 xgboost = true
 catboost = false
 mlp = false
@@ -171,7 +173,7 @@ sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]    # Options: an
 # Architectures receiving robust median/IQR scaled tabular inputs.
 scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]    # Options: any architecture names
 # Architectures receiving unscaled values, since split ordering needs no scaling.
-unscaled_tree_architectures = ["random_forest", "extra_trees", "xgboost", "catboost"]    # Options: any architecture names
+unscaled_tree_architectures = ["random_forest", "extra_trees", "hist_gradient_boosting", "xgboost", "catboost"]    # Options: any architecture names
 # Every fitted statistic comes only from the current fold's training UAVs;
 # validation UAVs are transformed but never influence a median or IQR.
 
@@ -308,6 +310,40 @@ value = "none"
 [architectures.extra_trees.search.signal_compression_strategy]
 kind = "fixed"
 value = "none"
+
+# Histogram-based boosting provides a fast, regularized tree challenger without
+# adding another third-party dependency.
+[architectures.hist_gradient_boosting]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["hist_gradient_boosting"]
+
+[architectures.hist_gradient_boosting.search.max_iter]
+kind = "categorical"
+values = [100, 200, 400, 800]
+
+[architectures.hist_gradient_boosting.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.2
+
+[architectures.hist_gradient_boosting.search.max_leaf_nodes]
+kind = "categorical"
+values = [7, 15, 31, 63]
+
+[architectures.hist_gradient_boosting.search.max_depth]
+kind = "categorical"
+values = ["none", 3, 5, 8]
+
+[architectures.hist_gradient_boosting.search.min_samples_leaf]
+kind = "categorical"
+values = [5, 10, 20, 40]
+
+[architectures.hist_gradient_boosting.search.l2_regularization]
+kind = "log_uniform"
+low = 1e-6
+high = 100.0
 
 # Gradient-boosted trees, the second nonlinear tabular reference.
 [architectures.xgboost]

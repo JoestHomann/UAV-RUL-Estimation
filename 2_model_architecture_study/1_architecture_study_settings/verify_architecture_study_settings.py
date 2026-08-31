@@ -67,6 +67,14 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "fault_mode_strategy",
         "signal_compression_strategy",
     },
+    "hist_gradient_boosting": {
+        "max_iter",
+        "learning_rate",
+        "max_leaf_nodes",
+        "max_depth",
+        "min_samples_leaf",
+        "l2_regularization",
+    },
     "xgboost": {
         "maximum_trees",
         "learning_rate",
@@ -151,6 +159,7 @@ EXPECTED_VARIANTS: dict[str, set[str]] = {
     "regularized_linear": {"ridge", "elastic_net"},
     "random_forest": {"random_forest"},
     "extra_trees": {"extra_trees"},
+    "hist_gradient_boosting": {"hist_gradient_boosting"},
     "xgboost": {"xgboost"},
     "catboost": {"catboost"},
     "mlp": {"mlp"},

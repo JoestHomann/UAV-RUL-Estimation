@@ -47,11 +47,11 @@ The settings use a manually maintained positive integer `settings_version`. When
 
 The initial model status is:
 
-- **Included and enabled:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, Extra Trees, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, and LSTM.
-- **Conditional and enabled:** small Transformer encoder.
-- **Optional and enabled:** RBF-SVR and trajectory DTW-kNN.
+- **Declared included families:** mean baseline, cycle-only baseline, the combined Ridge/Elastic Net family, Random Forest, Extra Trees, HistGradientBoosting, XGBoost, CatBoost, MLP, TCN, multi-scale CNN, sensor-graph TCN, and LSTM.
+- **Conditional family:** small Transformer encoder.
+- **Optional families:** RBF-SVR and trajectory DTW-kNN.
 
-Models outside the fifteen declared families remain deferred. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
+Models outside the sixteen declared families remain deferred. Individual run settings decide which declared families are enabled. HistGradientBoosting is disabled by default until a focused new-pipeline model refresh is declared; it uses weighted, unscaled engineered rows and tunes iterations, learning rate, leaf count/depth, minimum leaf size, and L2 regularization. Hyperparameter tuning occurs separately within every enabled architecture. The pipeline saves and plots all architecture results but does not rank them or select a winner; the final architecture decision is made manually.
 
 ## Tabular data adapter
 

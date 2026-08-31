@@ -174,6 +174,7 @@ TARGET_CAPABLE_FAMILIES = {
     "regularized_linear",
     "random_forest",
     "extra_trees",
+    "hist_gradient_boosting",
     "xgboost",
     "catboost",
     "mlp",

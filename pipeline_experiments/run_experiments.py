@@ -24,6 +24,7 @@ from experiment_paths import (
     gallery_directory,
     pipeline_run_name,
 )
+from experiment_config import ExperimentConfigError, read_experiment_config
 from promote_calibrated_ensemble import (
     PromotionError,
     run_promotion as run_calibrated_ensemble_promotion,
@@ -60,9 +61,8 @@ class ExperimentManagerError(ValueError):
 
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        with path.open("rb") as stream:
-            payload = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        payload = read_experiment_config(path)
+    except ExperimentConfigError as error:
         raise ExperimentManagerError(f"Cannot read experiment catalog: {error}") from error
     if not isinstance(payload, dict):
         raise ExperimentManagerError("Experiment catalog must be a TOML table")
@@ -98,9 +98,9 @@ def _paths(config: dict[str, Any]) -> dict[str, Path]:
 
 
 def _experiments(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    value = config.get("experiments")
-    if not isinstance(value, dict) or not value:
-        raise ExperimentManagerError("The catalog needs at least one [experiments.*] table")
+    value = config.get("experiments", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError("experiments must be a TOML table")
     result: dict[str, dict[str, Any]] = {}
     for name, experiment in value.items():
         if not isinstance(name, str) or not name or not isinstance(experiment, dict):
@@ -197,6 +197,72 @@ def _experiment_workflows(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
             )
         result[name] = workflow
     return result
+
+
+def _conditional_calibration_workflows(
+    config: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Validate post-Phase-3 development-only safety calibration workflows."""
+
+    value = config.get("conditional_calibration_workflows", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError(
+            "conditional_calibration_workflows must be a TOML table"
+        )
+    result: dict[str, dict[str, Any]] = {}
+    for name, workflow in value.items():
+        if not isinstance(name, str) or not name or not isinstance(workflow, dict):
+            raise ExperimentManagerError(
+                "Every conditional calibration workflow must be a named TOML table"
+            )
+        source_run = workflow.get("source_phase_3_run")
+        if isinstance(source_run, bool) or not isinstance(source_run, int) or source_run <= 0:
+            raise ExperimentManagerError(
+                f"conditional_calibration_workflows.{name}.source_phase_3_run "
+                "must be a positive integer"
+            )
+        quantiles = workflow.get("quantiles")
+        if (
+            not isinstance(quantiles, list)
+            or not quantiles
+            or any(
+                isinstance(item, bool)
+                or not isinstance(item, (int, float))
+                or not 0.5 <= float(item) < 1.0
+                for item in quantiles
+            )
+        ):
+            raise ExperimentManagerError(
+                f"conditional_calibration_workflows.{name}.quantiles must be in [0.5, 1.0)"
+            )
+        result[name] = workflow
+    return result
+
+
+def run_conditional_calibration_workflow(
+    name: str,
+    config_path: Path,
+    config: dict[str, Any],
+) -> None:
+    """Dispatch one cross-fitted conditional safety calibration run."""
+
+    if name not in _conditional_calibration_workflows(config):
+        available = ", ".join(sorted(_conditional_calibration_workflows(config)))
+        raise ExperimentManagerError(
+            f"Unknown conditional calibration workflow {name!r}; available: {available}"
+        )
+    _run_command(
+        [
+            sys.executable,
+            str(MANAGER_DIR / "conditional_safety_calibration.py"),
+            "--config",
+            str(config_path),
+            "--run",
+            name,
+        ],
+        label=f"{name}: conditional safety calibration",
+    )
+    _collect_figures(name)
 
 
 def _promotions(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -1514,6 +1580,10 @@ def print_status(config: dict[str, Any]) -> None:
         manifest = RUNS_DIR / name / "workflow" / "selection_manifest.json"
         status = "complete" if manifest.is_file() else "not_started"
         print(f"{name}: workflow={status}")
+    for name in sorted(_conditional_calibration_workflows(config)):
+        manifest = RUNS_DIR / name / "conditional_calibration_manifest.json"
+        status = "complete" if manifest.is_file() else "not_started"
+        print(f"{name}: conditional_calibration={status}")
     for name, promotion in sorted(_promotions(config).items()):
         manifest = (
             RUNS_DIR
@@ -1552,6 +1622,8 @@ def main() -> None:
                 print(f"{name}: group ({len(group['experiments'])} experiments)")
             for name in sorted(_experiment_workflows(config)):
                 print(f"{name}: automatic workflow")
+            for name in sorted(_conditional_calibration_workflows(config)):
+                print(f"{name}: conditional calibration workflow")
             for name, promotion in sorted(_promotions(config).items()):
                 print(f"{name}: locked promotion for {promotion['workflow']}")
             return
@@ -1583,6 +1655,18 @@ def main() -> None:
                 config_path,
                 config,
                 force=args.force,
+            )
+            return
+        if args.run_name in _conditional_calibration_workflows(config):
+            if args.from_stage is not None or args.through_stage is not None:
+                parser.error(
+                    "conditional calibration workflows do not accept "
+                    "--from-stage or --through-stage"
+                )
+            run_conditional_calibration_workflow(
+                args.run_name,
+                config_path,
+                config,
             )
             return
         if args.run_name in _promotions(config):

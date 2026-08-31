@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-import tomllib
 from typing import Any
 
 import pandas as pd
@@ -15,6 +14,7 @@ MANAGER_DIR = Path(__file__).resolve().parent
 if str(MANAGER_DIR) not in sys.path:
     sys.path.insert(0, str(MANAGER_DIR))
 
+from experiment_config import ExperimentConfigError, read_experiment_config
 from experiment_paths import artifact_directory
 
 
@@ -27,9 +27,8 @@ COMPARISON_SCOPES = ("selection", "locked")
 
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        with path.open("rb") as stream:
-            return tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        return read_experiment_config(path)
+    except ExperimentConfigError as error:
         raise ValueError(f"Cannot read experiment catalog: {error}") from error
 
 

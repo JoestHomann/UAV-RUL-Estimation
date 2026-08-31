@@ -23,6 +23,9 @@ from models.tabular.fold_fitted_transforms import (  # noqa: E402
     SignalCompressionTransformer,
 )
 from models.tabular.extra_trees import ExtraTreesAdapter  # noqa: E402
+from models.tabular.hist_gradient_boosting import (  # noqa: E402
+    HistGradientBoostingAdapter,
+)
 from policies import PolicyError, PredictionPolicy, TargetPolicy  # noqa: E402
 from tabular_data_adapter import TabularDataset  # noqa: E402
 from models.tabular.xgboost import (  # noqa: E402
@@ -194,6 +197,31 @@ class FoldFittedTransformTests(unittest.TestCase):
         )
         adapter.fit(dataset, None)
         np.testing.assert_allclose(adapter.predict(dataset), dataset.target)
+
+    def test_hist_gradient_boosting_fits_weighted_tabular_rows(self) -> None:
+        dataset = TabularDataset(
+            features=pd.DataFrame(self.values, columns=self.names),
+            metadata=self.metadata,
+            target=pd.Series(120.0 - self.metadata["cutoff"].to_numpy()),
+            sample_weights=pd.Series(np.linspace(0.5, 1.5, len(self.values))),
+        )
+        adapter = HistGradientBoostingAdapter(
+            hyperparameters={
+                "max_iter": 20,
+                "learning_rate": 0.1,
+                "max_leaf_nodes": 7,
+                "max_depth": 3,
+                "min_samples_leaf": 5,
+                "l2_regularization": 1.0,
+            },
+            seed=13,
+        )
+        summary = adapter.fit(dataset, dataset)
+        predictions = adapter.predict(dataset)
+        self.assertEqual(summary.model_family, "hist_gradient_boosting")
+        self.assertEqual(summary.epochs_or_iterations, 20)
+        self.assertEqual(len(predictions), len(dataset))
+        self.assertTrue(np.isfinite(predictions).all())
 
     def test_xgboost_executes_fold_fitted_experts(self) -> None:
         dataset = TabularDataset(
