@@ -41,7 +41,7 @@ ExtraTrees using the same folds, seeds, raw target, symmetric loss, and
 
 Every component has `phase_2_scope = "selection_only"`. After all six complete,
 the runner writes paired fold results, a summary, a figure, and a manifest to
-`pipeline_experiments/runs/PE_signal_family_ablation/reporting/`. Positive
+`pipeline_experiments/runs/PE_run_2/PE_signal_family_ablation/reporting/`. Positive
 `r2_improvement` and `rmse_improvement` favor the treatment. Retain a family
 only when gains repeat across folds and both model families.
 
@@ -73,9 +73,70 @@ XGBoost and ExtraTrees, a 25-candidate Step 5 search, and keeps locked Steps
 
 After a group finishes, its `reporting/` folder contains
 `paired_fold_results.csv`, `paired_summary.csv`,
-`paired_comparison.png`, and `report_manifest.json`. The fault-mode expert and
-dense-prefix cells perform more fitting work than their controls and should be
-expected to run longer.
+`paired_comparison.png`, and `report_manifest.json`. Every experiment and group
+also contributes to the flat `runs/<pipeline_run>/figures/` gallery. Its
+`figure_manifest.json` records each plot's canonical source; detailed data and
+canonical outputs remain in their sub-experiment and stage folders. The
+fault-mode expert and dense-prefix cells perform more fitting work than their
+controls and should be expected to run longer.
+
+## PE_run_3 performance experiments
+
+`PE_run_3` contains four ordered development-only sub-experiment groups and one
+frozen locked-confirmation gate. Run or resume the complete workflow with one
+command:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_3
+```
+
+1. `PE3_feature_union` compares the Run 4 drift-pruned features, all supported
+   signal-family features, and their explicit union.
+2. `PE3_cap_sensitivity` compares fitting-target caps 110, 125, 140, and 150
+   with the same early/middle scenarios.
+3. `PE3_ensemble_calibration` reuses selected inner-fold predictions to compare
+   XGBoost, ExtraTrees, fixed 25/50/75% XGBoost blends, and cross-fitted
+   polynomial residual corrections based on raw prediction and cutoff.
+4. `PE3_severity_loss` compares symmetric XGBoost with three superlinear
+   overprediction penalties. For residual `e = prediction - target`, the loss
+   is `e^2 + ((weight - 1) / 10) * max(e, 0)^3`.
+
+The workflow automatically selects feature and cap winners by highest
+equal-weight mean development R2 across model families, then lowest RMSE. It
+propagates those choices into downstream cells without editing the source TOML.
+The selected cap-125 feature cell is reused as the cap control, and the selected
+cap cell's XGBoost predictions are reused as the symmetric safety control, so
+those searches are not duplicated.
+The final safety selection admits candidates within `0.005` R2 of the best
+observed candidate, then minimizes RMS overprediction, overprediction rate, and
+RMSE in that order. The resolved catalog and development-only decision are written under
+`pipeline_experiments/runs/PE_run_3/workflow/`.
+
+All training cells remain `selection_only`. After the final policy is selected,
+`PE3_final_ensemble` freezes its component weights and residual calibrator from
+development OOF rows, then opens locked scenarios once. It evaluates XGBoost
+and ExtraTrees over five outer folds and three retraining seeds, combines their
+aligned predictions, and writes locked accuracy and RUL-band safety diagnostics
+below `pipeline_experiments/runs/PE_run_3/PE3_final_ensemble/`. It does not
+create Phase 3; that remains a manual gate after reviewing the locked result.
+
+New Step 5 runs export
+`selected_inner_predictions.csv.gz`, which makes ensemble and calibration
+comparisons reproducible without refitting candidates.
+
+The individual `--group PE3_*` commands remain available for targeted reruns,
+but they use the static TOML defaults and do not propagate winners. Rerunning
+`--run PE_run_3` resumes completed cells, rebuilds the automatic reports and
+selection manifest, and resumes incomplete locked component folds. To resume
+only the confirmation step, run:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE3_final_ensemble
+```
+
+All PE_run_3 plots are collected directly in
+`pipeline_experiments/runs/PE_run_3/figures/`. Sub-experiments retain only their
+canonical reports and numeric artifacts, not separate gallery copies.
 
 ## Target/scenario 2x2 experiment
 
@@ -114,7 +175,8 @@ folder. The non-winning cells remain selection-only.
 
 Current status: `PE_2x2_early_cap125` was the sole selected cell. Its locked
 Steps 6-7 are complete, it now has `phase_2_scope = "complete"`, and Phase 3
-Run 4 is enabled with XGBoost. The two losing cells remain selection-only.
+Run 4 completed with XGBoost and scored `0.84513` publicly. The two losing cells
+remain selection-only.
 The default Phase 3 TOML now contains the selected experiment's artifact paths,
 so the primary direct command is:
 
@@ -136,8 +198,10 @@ Phase 1 creates a named run under
 `1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 reads the dedicated
 `pipeline_experiments/phase_2_settings.toml`, binds the selected experiment and
 Phase 1 interface, and writes its resolved settings under
-`pipeline_experiments/runs/<experiment>/phase2/`, while Steps 5-7 use the
-same experiment-owned Phase 2 folder. The Phase 2 run number remains recorded
+`pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/phase2/` for grouped
+sub-experiments, while a top-level experiment uses
+`pipeline_experiments/runs/<pipeline_run>/phase2/`. Steps 5-7 use the same
+experiment-owned Phase 2 folder. The Phase 2 run number remains recorded
 as scientific metadata but no longer selects a standalone Phase 2 directory.
 Phase 3 uses the configured numbered Phase 3 run folder. All generated
 manifests retain the exact paths used by that experiment. Phase 2 Steps 5 and
@@ -146,12 +210,21 @@ manifests retain the exact paths used by that experiment. Phase 2 Steps 5 and
 that can run concurrently.
 
 Step 7 automatically generates asymmetric safety diagnostics in the
-experiment-owned `phase2/7_architecture_comparison/figures/` directory. These
+experiment-owned `phase2/7_architecture_comparison/figures/` directory and
+gathers them in the run's top-level `figures/` directory. These
 include residual ECDFs with fixed offset thresholds, overprediction rate and
 RMS magnitude by true-RUL band, fixed-offset accuracy/safety tradeoffs,
 positive-residual P90/P95/maximum tails, and per-family prediction alignment
 before and after the six-cycle diagnostic offset. Offset plots are descriptive:
 they do not select or apply an offset to a trained model.
+
+Refresh all figure galleries without rerunning any experiment:
+
+```powershell
+python pipeline_experiments/run_experiments.py --collect-figures
+```
+
+Add `--run <experiment>` or `--group <group>` to refresh only one gallery.
 
 The launcher resumes Phase 2 and Phase 3 checkpoints. A partial Phase 1 or
 Phase 2 run can be continued by running the same command again; an interrupted
@@ -216,7 +289,7 @@ submissions:
   --submission-description PE_run_1
 ```
 
-The record is stored at
-`pipeline_experiments/runs/<experiment>/leaderboard_result.json` and is kept
+The record is stored in the experiment's artifact folder below
+`pipeline_experiments/runs/<pipeline_run>/` and is kept
 separate from the offline validation results. No test labels are loaded by
 these tools, and no automatic leaderboard submission is attempted.

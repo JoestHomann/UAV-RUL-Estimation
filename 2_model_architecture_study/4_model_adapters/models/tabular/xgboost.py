@@ -42,6 +42,31 @@ class AsymmetricSquaredObjective:
         return 2.0 * weights * residual, 2.0 * weights
 
 
+class SeverityAsymmetricObjective:
+    """Increase the marginal penalty as positive residual severity grows."""
+
+    def __init__(self, overprediction_weight: float, severity_scale: float) -> None:
+        self.severity = (float(overprediction_weight) - 1.0) / float(
+            severity_scale
+        )
+
+    def __call__(
+        self,
+        y_true: NDArray[np.float64],
+        y_pred: NDArray[np.float64],
+        sample_weight: NDArray[np.float64] | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        residual = np.asarray(y_pred) - np.asarray(y_true)
+        positive = np.maximum(residual, 0.0)
+        gradient = 2.0 * residual + 3.0 * self.severity * np.square(positive)
+        hessian = 2.0 + 6.0 * self.severity * positive
+        if sample_weight is not None:
+            weights = np.asarray(sample_weight)
+            gradient = gradient * weights
+            hessian = hessian * weights
+        return gradient, hessian
+
+
 def _xgboost_cuda_available() -> bool:
     """Return whether both XGBoost and the active machine can use CUDA."""
 
@@ -147,11 +172,18 @@ class XGBoostAdapter(ModelAdapter):
         progress_callback = self.require_training_monitor().create_xgboost_callback(
             self.log_training_step
         )
-        objective: str | AsymmetricSquaredObjective = "reg:squarederror"
+        objective: str | AsymmetricSquaredObjective | SeverityAsymmetricObjective = (
+            "reg:squarederror"
+        )
         objective_arguments: dict[str, Any] = {}
         if self.prediction_policy.loss == "asymmetric_mse":
             objective = AsymmetricSquaredObjective(
                 self.prediction_policy.overprediction_weight
+            )
+        elif self.prediction_policy.loss == "severity_asymmetric_mse":
+            objective = SeverityAsymmetricObjective(
+                self.prediction_policy.overprediction_weight,
+                self.prediction_policy.severity_scale,
             )
         elif self.prediction_policy.loss == "quantile":
             objective = "reg:quantileerror"

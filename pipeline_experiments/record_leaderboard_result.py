@@ -10,8 +10,13 @@ import sys
 import tomllib
 from typing import Any
 
-
 MANAGER_DIR = Path(__file__).resolve().parent
+if str(MANAGER_DIR) not in sys.path:
+    sys.path.insert(0, str(MANAGER_DIR))
+
+from experiment_paths import artifact_directory
+
+
 REPOSITORY_ROOT = MANAGER_DIR.parent
 DEFAULT_CONFIG_PATH = MANAGER_DIR / "pipeline_experiments.toml"
 
@@ -38,7 +43,12 @@ def record(
         raise ValueError(f"Unknown experiment {run_name!r}")
     if not math.isfinite(public_score):
         raise ValueError("public score must be finite")
-    path = MANAGER_DIR / "runs" / run_name / "leaderboard_result.json"
+    experiment = experiments[run_name]
+    path = artifact_directory(
+        MANAGER_DIR / "runs",
+        run_name,
+        experiment,
+    ) / "leaderboard_result.json"
     payload = {
         "record_version": 1,
         "experiment": run_name,

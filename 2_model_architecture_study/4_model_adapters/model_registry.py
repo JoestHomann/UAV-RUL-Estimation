@@ -266,6 +266,7 @@ class ModelAdapterFactory:
                     "loss": "symmetric_rmse",
                     "overprediction_weight": 1.0,
                     "quantile": 0.5,
+                    "severity_scale": 10.0,
                     "calibration": "none",
                     "safety_offset": 0.0,
                     "non_overprediction_coverage": 0.5,

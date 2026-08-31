@@ -68,6 +68,16 @@ feature_sets = [
 ]
 prefix_variants = ["current20"]
 
+[profiles.performance_optimization]
+feature_profile = "extended"
+scenario_profile = "early_and_middle"
+feature_sets = [
+    "screened_drift_pruned",
+    "signal_all_families",
+    "screened_signal_union",
+]
+prefix_variants = ["current20"]
+
 [scenario_profiles.current]
 assignment = "eligible_random"
 development_scenarios = 5
@@ -102,6 +112,18 @@ mode = "raw"
 mode = "piecewise_cap"
 maximum_rul = 125.0
 
+[target_profiles.capped_110]
+mode = "piecewise_cap"
+maximum_rul = 110.0
+
+[target_profiles.capped_140]
+mode = "piecewise_cap"
+maximum_rul = 140.0
+
+[target_profiles.capped_150]
+mode = "piecewise_cap"
+maximum_rul = 150.0
+
 [target_profiles.failure_cycle]
 mode = "failure_cycle"
 
@@ -109,6 +131,7 @@ mode = "failure_cycle"
 loss = "symmetric_rmse"
 overprediction_weight = 1.0
 quantile = 0.5
+severity_scale = 10.0
 calibration = "none"
 safety_offset = 0.0
 non_overprediction_coverage = 0.5
@@ -117,11 +140,40 @@ non_overprediction_coverage = 0.5
 loss = "asymmetric_mse"
 overprediction_weight = 2.0
 quantile = 0.5
+severity_scale = 10.0
 calibration = "fixed_offset"
 safety_offset = 5.0
 non_overprediction_coverage = 0.6
 
+[prediction_profiles.severity_1_5]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 1.5
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
+[prediction_profiles.severity_2_0]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 2.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
+[prediction_profiles.severity_3_0]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 3.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
 [experiment_groups.PE_signal_family_ablation]
+pipeline_run = "PE_run_2"
 control = "PE_signal_control"
 experiments = [
     "PE_signal_control",
@@ -134,11 +186,13 @@ experiments = [
 reporter = "pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_failure_cycle_target]
+pipeline_run = "PE_run_2"
 control = "PE_failure_raw_rul"
 experiments = ["PE_failure_raw_rul", "PE_failure_cycle"]
 reporter = "pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_baseline_normalization]
+pipeline_run = "PE_run_2"
 control = "PE_normalization_raw"
 experiments = [
     "PE_normalization_raw",
@@ -148,6 +202,7 @@ experiments = [
 reporter = "pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_fault_mode]
+pipeline_run = "PE_run_2"
 control = "PE_fault_mode_global"
 experiments = [
     "PE_fault_mode_global",
@@ -157,6 +212,7 @@ experiments = [
 reporter = "pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_signal_compression]
+pipeline_run = "PE_run_2"
 control = "PE_compression_individual"
 experiments = [
     "PE_compression_individual",
@@ -168,14 +224,68 @@ experiments = [
 reporter = "pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_dense_prefix_training]
+pipeline_run = "PE_run_2"
 control = "PE_dense_current20"
 experiments = ["PE_dense_current20", "PE_dense_stride5"]
 reporter = "pipeline_experiments/report_experiment_group.py"
+
+# PE_run_3 is deliberately staged. Run these groups in declaration order and
+# freeze each winner before changing the downstream group's source feature set.
+[experiment_groups.PE3_feature_union]
+pipeline_run = "PE_run_3"
+control = "PE3_features_drift"
+experiments = [
+    "PE3_features_drift",
+    "PE3_features_signal",
+    "PE3_features_union",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE3_cap_sensitivity]
+pipeline_run = "PE_run_3"
+control = "PE3_cap_125"
+experiments = ["PE3_cap_125", "PE3_cap_110", "PE3_cap_140", "PE3_cap_150"]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_groups.PE3_ensemble_calibration]
+pipeline_run = "PE_run_3"
+control = "PE3_features_union"
+experiments = ["PE3_features_union"]
+reporter = "pipeline_experiments/report_ensemble_calibration.py"
+blend_weights = [0.25, 0.50, 0.75]
+calibration_degree = 2
+calibration_ridge_alpha = 10.0
+
+[experiment_groups.PE3_severity_loss]
+pipeline_run = "PE_run_3"
+control = "PE3_safety_symmetric"
+experiments = [
+    "PE3_safety_symmetric",
+    "PE3_safety_severity_1_5",
+    "PE3_safety_severity_2_0",
+    "PE3_safety_severity_3_0",
+]
+reporter = "pipeline_experiments/report_experiment_group.py"
+
+[experiment_workflows.PE_run_3]
+feature_group = "PE3_feature_union"
+cap_group = "PE3_cap_sensitivity"
+ensemble_group = "PE3_ensemble_calibration"
+safety_group = "PE3_severity_loss"
+promotion = "PE3_final_ensemble"
+# Final safety candidates may lose at most this absolute development R2 relative
+# to the best observed candidate before one-sided error metrics decide.
+safety_r2_tolerance = 0.005
+
+[promotions.PE3_final_ensemble]
+workflow = "PE_run_3"
+ensemble_group = "PE3_ensemble_calibration"
 
 # CatBoost was removed after the initial Run 6 attempt was stopped because its
 # CPU search dominated this pipeline experiment. Completed checkpoints for the
 # remaining families can resume without rerunning their finished folds.
 [experiments.PE_run_1]
+pipeline_run = "PE_run_1"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -211,6 +321,7 @@ phase_3_model_seed = 13
 # cell. The three cells below stop after development-only Step 5 until one is
 # selected and its phase_2_scope is deliberately changed to "complete".
 [experiments.PE_2x2_current_cap125]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -238,6 +349,7 @@ phase_3_search_seed = 13
 phase_3_model_seed = 13
 
 [experiments.PE_2x2_early_raw]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -265,6 +377,7 @@ phase_3_search_seed = 13
 phase_3_model_seed = 13
 
 [experiments.PE_2x2_early_cap125]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -295,6 +408,7 @@ phase_3_model_seed = 13
 # so Phase 1 is built once, all five treatments reuse it, and the paired report
 # is generated only after every component selection succeeds.
 [experiments.PE_signal_control]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -316,6 +430,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_13_16_22_25_28]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -337,6 +452,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_19_21]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -358,6 +474,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_15_23]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -379,6 +496,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_07]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -400,6 +518,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_all_families]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -423,6 +542,7 @@ phase_3_enabled = false
 # Predicting total failure cycle makes every prefix from one UAV share a target;
 # raw RUL metrics are restored before any selection metric is calculated.
 [experiments.PE_failure_raw_rul]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -444,6 +564,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_failure_cycle]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -467,6 +588,7 @@ phase_3_enabled = false
 # Fold-fitted two-mode clustering uses only the latest available training
 # prefix per training UAV. Untrusted assignments retain the global fallback.
 [experiments.PE_fault_mode_global]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -489,6 +611,7 @@ fault_mode_strategy = "none"
 phase_3_enabled = false
 
 [experiments.PE_fault_mode_indicator]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -511,6 +634,7 @@ fault_mode_strategy = "indicator"
 phase_3_enabled = false
 
 [experiments.PE_fault_mode_experts]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -536,6 +660,7 @@ phase_3_enabled = false
 # all-family cells make the mechanism testable; edit the retained family list
 # only after recording the ablation decision.
 [experiments.PE_compression_individual]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -558,6 +683,7 @@ signal_compression_strategy = "none"
 phase_3_enabled = false
 
 [experiments.PE_compression_median]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -580,6 +706,7 @@ signal_compression_strategy = "median_only"
 phase_3_enabled = false
 
 [experiments.PE_compression_pca]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -602,6 +729,7 @@ signal_compression_strategy = "pca_only"
 phase_3_enabled = false
 
 [experiments.PE_compression_individual_median]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -624,6 +752,7 @@ signal_compression_strategy = "individual_plus_median"
 phase_3_enabled = false
 
 [experiments.PE_compression_individual_pca]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -648,6 +777,7 @@ phase_3_enabled = false
 # Prefix-density comparison preserves equal total UAV weight. The current20
 # control reuses the signal-ablation Phase 1 run; stride 5 owns a new run.
 [experiments.PE_dense_current20]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -669,6 +799,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_dense_stride5]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -692,6 +823,7 @@ phase_3_enabled = false
 # Matched raw and robust-normalized telemetry recipes contain the same feature
 # concepts; the combined cell tests whether absolute context remains useful.
 [experiments.PE_normalization_raw]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -713,6 +845,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_normalization_robust]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -734,6 +867,7 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_normalization_combined]
+pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -752,4 +886,252 @@ search_seed = 13
 retraining_seeds = [13, 37, 73]
 target_profile = "raw"
 prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# PE_run_3 Stage A: determine whether degradation-specific signal features add
+# information beyond the Run 4 drift-pruned set.
+[experiments.PE3_features_drift]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 31
+phase_2_settings_version = 37
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_drift_pruned"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_features_signal]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 32
+phase_2_settings_version = 38
+architectures = ["extra_trees", "xgboost"]
+feature_set = "signal_all_families"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_features_union]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 33
+phase_2_settings_version = 39
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# PE_run_3 Stage B: vary only the fitting-target cap while preserving the same
+# early/middle scenarios, folds, features, models, seeds, and candidate budget.
+[experiments.PE3_cap_125]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 34
+phase_2_settings_version = 40
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_110]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 35
+phase_2_settings_version = 41
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_110"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_140]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 36
+phase_2_settings_version = 42
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_140"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_cap_150]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 37
+phase_2_settings_version = 43
+architectures = ["extra_trees", "xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_150"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# PE_run_3 Stage D: keep the accuracy configuration fixed and vary only the
+# XGBoost loss. No scalar safety offset is mixed into these cells.
+[experiments.PE3_safety_symmetric]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 38
+phase_2_settings_version = 44
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_1_5]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 39
+phase_2_settings_version = 45
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_1_5"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_2_0]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 40
+phase_2_settings_version = 46
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_2_0"
+phase_3_enabled = false
+
+[experiments.PE3_safety_severity_3_0]
+pipeline_run = "PE_run_3"
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "performance_optimization"
+phase_1_run_name = "PE_run_3"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 41
+phase_2_settings_version = 47
+architectures = ["xgboost"]
+feature_set = "screened_signal_union"
+candidate_budget = 25
+search_seed = 13
+retraining_seeds = [13, 37, 73]
+target_profile = "capped_125"
+prediction_profile = "severity_3_0"
 phase_3_enabled = false

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 import tomllib
 from typing import Any
 
@@ -12,8 +13,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from experiment_paths import artifact_directory
+
+
 REPOSITORY_ROOT = SCRIPT_DIR.parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pipeline_experiments.toml"
 RESULT_COLUMNS = {
@@ -39,10 +45,15 @@ class AblationReportError(ValueError):
 
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        with path.open("rb") as stream:
-            payload = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        if path.suffix.lower() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            with path.open("rb") as stream:
+                payload = tomllib.load(stream)
+    except (OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
         raise AblationReportError(f"Cannot read experiment catalog: {error}") from error
+    if not isinstance(payload, dict):
+        raise AblationReportError("Experiment catalog must contain an object")
     return payload
 
 
@@ -96,9 +107,11 @@ def collect_results(
             raise AblationReportError(f"Unknown component experiment {experiment_name!r}")
         feature_set = experiment.get("feature_set")
         path = (
-            SCRIPT_DIR
-            / "runs"
-            / experiment_name
+            artifact_directory(
+                SCRIPT_DIR / "runs",
+                experiment_name,
+                experiment,
+            )
             / "phase2"
             / "5_inner_model_selection"
             / "candidate_results.csv"
@@ -122,6 +135,11 @@ def collect_results(
             5,
             "signal_compression_strategy",
             experiment.get("signal_compression_strategy", "none"),
+        )
+        selected.insert(
+            6,
+            "prediction_profile",
+            experiment.get("prediction_profile", "symmetric"),
         )
         frames.append(selected)
     return pd.concat(frames, ignore_index=True), str(control)
@@ -162,6 +180,7 @@ def summarize_pairs(paired: pd.DataFrame) -> pd.DataFrame:
         "prefix_variant": "unknown",
         "fault_mode_strategy": "none",
         "signal_compression_strategy": "none",
+        "prediction_profile": "symmetric",
     }
     paired = paired.copy()
     for column, value in defaults.items():
@@ -174,13 +193,16 @@ def summarize_pairs(paired: pd.DataFrame) -> pd.DataFrame:
         "prefix_variant",
         "fault_mode_strategy",
         "signal_compression_strategy",
+        "prediction_profile",
         "model_family",
     ]
     summary = paired.groupby(group_columns, as_index=False).agg(
         folds=("outer_fold", "count"),
         mean_r2=("r2", "mean"),
         mean_rmse=("rmse", "mean"),
+        mean_bias=("bias", "mean"),
         mean_overprediction_rate=("overprediction_rate", "mean"),
+        mean_rms_overprediction=("rms_overprediction", "mean"),
         mean_r2_improvement=("r2_improvement", "mean"),
         sd_r2_improvement=("r2_improvement", "std"),
         mean_rmse_improvement=("rmse_improvement", "mean"),
@@ -234,11 +256,15 @@ def _plot(summary: pd.DataFrame, control: str, output_path: Path) -> None:
     axes[1].axhline(0.0, color="black", linewidth=0.8)
     axes[0].set_ylabel("Paired R2 improvement")
     axes[1].set_ylabel("Paired RMSE improvement")
+    feature_counts = treatments.groupby("feature_set")["experiment"].nunique()
     labels = []
     for experiment in experiment_order:
         row = model_rows.loc[experiment]
         feature_set = str(row["feature_set"])
-        labels.append(DISPLAY_NAMES.get(feature_set, experiment.removeprefix("PE_")))
+        if feature_counts.get(feature_set, 0) > 1:
+            labels.append(experiment.removeprefix("PE3_").removeprefix("PE_"))
+        else:
+            labels.append(DISPLAY_NAMES.get(feature_set, experiment.removeprefix("PE_")))
     axes[1].set_xticks(x, labels, rotation=20, ha="right")
     axes[1].set_xlabel("Treatment experiment")
     axes[0].legend(frameon=False, ncol=max(len(model_order), 1))

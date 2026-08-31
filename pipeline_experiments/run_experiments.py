@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -13,8 +15,21 @@ from typing import Any
 
 import pandas as pd
 
-
 MANAGER_DIR = Path(__file__).resolve().parent
+if str(MANAGER_DIR) not in sys.path:
+    sys.path.insert(0, str(MANAGER_DIR))
+
+from experiment_paths import (
+    artifact_directory,
+    gallery_directory,
+    pipeline_run_name,
+)
+from promote_calibrated_ensemble import (
+    PromotionError,
+    run_promotion as run_calibrated_ensemble_promotion,
+)
+
+
 REPOSITORY_ROOT = MANAGER_DIR.parent
 DEFAULT_CONFIG_PATH = MANAGER_DIR / "pipeline_experiments.toml"
 RUNS_DIR = MANAGER_DIR / "runs"
@@ -150,6 +165,92 @@ def _experiment_group(config: dict[str, Any], name: str) -> dict[str, Any]:
     return group
 
 
+def _experiment_workflows(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    value = config.get("experiment_workflows", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError("experiment_workflows must be a TOML table")
+    groups = _experiment_groups(config)
+    required_group_fields = (
+        "feature_group",
+        "cap_group",
+        "ensemble_group",
+        "safety_group",
+    )
+    result: dict[str, dict[str, Any]] = {}
+    for name, workflow in value.items():
+        if not isinstance(name, str) or not name or not isinstance(workflow, dict):
+            raise ExperimentManagerError("Every workflow must be a named TOML table")
+        for field in required_group_fields:
+            group_name = workflow.get(field)
+            if not isinstance(group_name, str) or group_name not in groups:
+                raise ExperimentManagerError(
+                    f"experiment_workflows.{name}.{field} must name a group"
+                )
+        tolerance = workflow.get("safety_r2_tolerance", 0.005)
+        if (
+            isinstance(tolerance, bool)
+            or not isinstance(tolerance, (int, float))
+            or not 0.0 <= float(tolerance) < 1.0
+        ):
+            raise ExperimentManagerError(
+                f"experiment_workflows.{name}.safety_r2_tolerance must be in [0, 1)"
+            )
+        result[name] = workflow
+    return result
+
+
+def _promotions(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    value = config.get("promotions", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError("promotions must be a TOML table")
+    workflows = _experiment_workflows(config)
+    result: dict[str, dict[str, Any]] = {}
+    for name, promotion in value.items():
+        if not isinstance(name, str) or not name or not isinstance(promotion, dict):
+            raise ExperimentManagerError("Every promotion must be a named TOML table")
+        workflow = promotion.get("workflow")
+        if not isinstance(workflow, str) or workflow not in workflows:
+            raise ExperimentManagerError(
+                f"promotions.{name}.workflow must name an experiment workflow"
+            )
+        ensemble_group = promotion.get("ensemble_group")
+        if not isinstance(ensemble_group, str) or ensemble_group not in _experiment_groups(config):
+            raise ExperimentManagerError(
+                f"promotions.{name}.ensemble_group must name an experiment group"
+            )
+        result[name] = promotion
+    return result
+
+
+def run_promotion(
+    name: str,
+    config: dict[str, Any],
+    *,
+    force: bool,
+) -> dict[str, Any]:
+    """Run or resume one catalogued locked confirmation policy."""
+
+    _promotions(config)[name]
+    configured_workers = _configured_max_workers(config)
+    max_workers = (
+        max(1, os.cpu_count() or 1)
+        if configured_workers == "auto"
+        else int(configured_workers)
+    )
+    try:
+        manifest = run_calibrated_ensemble_promotion(
+            config,
+            name,
+            force=force,
+            max_workers=max_workers,
+        )
+    except PromotionError as error:
+        raise ExperimentManagerError(str(error)) from error
+    workflow = str(_promotions(config)[name]["workflow"])
+    _collect_existing_figures(config, workflow)
+    return manifest
+
+
 def _configured_max_workers(config: dict[str, Any]) -> int | str:
     """Read the global execution worker limit from the experiment catalog."""
 
@@ -178,12 +279,184 @@ def _phase2_scope(experiment: dict[str, Any]) -> str:
     return str(scope)
 
 
-def _run_dir(name: str) -> Path:
-    return RUNS_DIR / name
+def _run_dir(
+    name: str,
+    specification: dict[str, Any] | None = None,
+) -> Path:
+    try:
+        return artifact_directory(RUNS_DIR, name, specification)
+    except ValueError as error:
+        raise ExperimentManagerError(str(error)) from error
 
 
-def _state_path(name: str) -> Path:
-    return _run_dir(name) / "experiment_status.json"
+def _state_path(name: str, experiment: dict[str, Any]) -> Path:
+    return _run_dir(name, experiment) / "experiment_status.json"
+
+
+def _phase3_figure_dir(experiment: dict[str, Any]) -> Path | None:
+    if not experiment.get("phase_3_enabled", False):
+        return None
+    run_number = experiment.get("phase_3_run_number")
+    if isinstance(run_number, bool) or not isinstance(run_number, int):
+        return None
+    return (
+        PHASE_3_ROOT
+        / "runs"
+        / f"run_{run_number}"
+        / "7_post_run_reporting"
+        / "figures"
+    )
+
+
+def _collect_figures(
+    name: str,
+    experiment: dict[str, Any] | None = None,
+    *,
+    related_experiments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Refresh one run's flat figure gallery without moving canonical outputs."""
+
+    figure_dir = gallery_directory(RUNS_DIR, name, experiment)
+    owner_dir = figure_dir.parent
+    manifest_path = figure_dir / "figure_manifest.json"
+    figure_dir.mkdir(parents=True, exist_ok=True)
+
+    sources: list[tuple[Path, str]] = []
+    if owner_dir.is_dir():
+        for path in sorted(owner_dir.rglob("*.png")):
+            if figure_dir in path.parents:
+                continue
+            if any(
+                parent.name == "figures"
+                and (parent / "figure_manifest.json").is_file()
+                for parent in path.parents
+                if parent != figure_dir
+            ):
+                continue
+            relative_parent = path.relative_to(owner_dir).parent
+            label = "__".join(
+                part for part in relative_parent.parts if part != "figures"
+            )
+            sources.append((path, label or "run"))
+
+    phase3_specs = [experiment] if experiment is not None else []
+    phase3_specs.extend(related_experiments or [])
+    observed_phase3_runs: set[int] = set()
+    for phase3_spec in phase3_specs:
+        run_number = phase3_spec.get("phase_3_run_number")
+        if isinstance(run_number, bool) or not isinstance(run_number, int):
+            continue
+        if run_number in observed_phase3_runs:
+            continue
+        observed_phase3_runs.add(run_number)
+        phase3_dir = _phase3_figure_dir(phase3_spec)
+        if phase3_dir is not None and phase3_dir.is_dir():
+            sources.extend(
+                (path, f"phase3_run_{run_number}")
+                for path in sorted(phase3_dir.glob("*.png"))
+            )
+
+    name_counts: dict[str, int] = {}
+    for source, _ in sources:
+        key = source.name.casefold()
+        name_counts[key] = name_counts.get(key, 0) + 1
+
+    previous_files: set[str] = set()
+    if manifest_path.is_file():
+        try:
+            previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+            previous_files = {
+                str(item["file"])
+                for item in previous.get("figures", [])
+                if isinstance(item, dict) and isinstance(item.get("file"), str)
+            }
+        except (OSError, json.JSONDecodeError, AttributeError):
+            previous_files = set()
+
+    records: list[dict[str, str]] = []
+    current_files: set[str] = set()
+    for source, label in sources:
+        filename = source.name
+        if name_counts[source.name.casefold()] > 1:
+            filename = f"{label}__{source.name}"
+        destination = figure_dir / filename
+        shutil.copy2(source, destination)
+        relative_destination = destination.relative_to(owner_dir).as_posix()
+        current_files.add(relative_destination)
+        records.append(
+            {
+                "file": relative_destination,
+                "source": _repo_relative(source),
+            }
+        )
+
+    for relative_path in previous_files - current_files:
+        stale_path = (owner_dir / relative_path).resolve()
+        try:
+            stale_path.relative_to(figure_dir.resolve())
+        except ValueError:
+            continue
+        if stale_path.is_file():
+            stale_path.unlink()
+
+    manifest = {
+        "status": "complete",
+        "pipeline_run": pipeline_run_name(name, experiment),
+        "figures": records,
+    }
+    _write_json(manifest, manifest_path)
+    print(f"{name}: collected {len(records)} plot(s) in {figure_dir}", flush=True)
+    return manifest
+
+
+def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -> None:
+    experiments = _experiments(config)
+    groups = _experiment_groups(config)
+
+    def owned_by(owner: str) -> list[dict[str, Any]]:
+        return [
+            experiment
+            for experiment_name, experiment in experiments.items()
+            if pipeline_run_name(experiment_name, experiment) == owner
+        ]
+
+    if name is not None:
+        if name in experiments:
+            experiment = experiments[name]
+            owner = pipeline_run_name(name, experiment)
+            _collect_figures(
+                name,
+                experiment,
+                related_experiments=owned_by(owner),
+            )
+            return
+        if name in groups:
+            group = groups[name]
+            owner = pipeline_run_name(name, group)
+            _collect_figures(
+                name,
+                group,
+                related_experiments=owned_by(owner),
+            )
+            return
+        if _run_dir(name).is_dir():
+            _collect_figures(name, related_experiments=owned_by(name))
+            return
+        raise ExperimentManagerError(f"Unknown experiment or group {name!r}")
+
+    existing_names = set()
+    if RUNS_DIR.is_dir():
+        existing_names = {
+            path.name
+            for path in RUNS_DIR.iterdir()
+            if path.is_dir() and not path.name.startswith("_")
+        }
+    for run_name in sorted(existing_names):
+        _collect_figures(
+            run_name,
+            experiments.get(run_name),
+            related_experiments=owned_by(run_name),
+        )
 
 
 def _write_json(payload: dict[str, Any], path: Path) -> None:
@@ -508,8 +781,11 @@ def _run_phase1(name: str, config_path: Path, config: dict[str, Any], experiment
     _read_json(interface_path, "Phase 1 interface")
 
 
-def _phase2_paths(name: str) -> dict[str, Path]:
-    root = _run_dir(name) / "phase2"
+def _phase2_paths(
+    name: str,
+    experiment: dict[str, Any] | None = None,
+) -> dict[str, Path]:
+    root = _run_dir(name, experiment) / "phase2"
     return {
         "root": root,
         "settings": root / "phase_2_settings.json",
@@ -524,7 +800,7 @@ def _phase2_paths(name: str) -> dict[str, Path]:
 def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -> None:
     paths = _paths(config)
     interface_path, interface = _load_interface(experiment)
-    phase2 = _phase2_paths(name)
+    phase2 = _phase2_paths(name, experiment)
     settings = _phase2_settings(config, experiment, interface, interface_path)
     _write_json(settings, phase2["settings"])
 
@@ -626,7 +902,7 @@ def _phase3_settings(name: str, config: dict[str, Any], experiment: dict[str, An
         raise ExperimentManagerError(
             "phase_3_selected_model_family must be one of the Phase 2 architectures"
         )
-    phase2 = _phase2_paths(name)
+    phase2 = _phase2_paths(name, experiment)
     payload = {
         "settings_version": int(experiment.get("phase_3_settings_version", 1)),
         "run_number": int(experiment["phase_3_run_number"]),
@@ -644,7 +920,7 @@ def _phase3_settings(name: str, config: dict[str, Any], experiment: dict[str, An
             "model_seed": int(experiment.get("phase_3_model_seed", 13)),
         },
     }
-    path = _run_dir(name) / "phase3_settings.json"
+    path = _run_dir(name, experiment) / "phase3_settings.json"
     _write_json(payload, path)
     return path, payload
 
@@ -664,7 +940,7 @@ def _run_phase3(name: str, config: dict[str, Any], experiment: dict[str, Any], f
 
 
 def _state(name: str, experiment: dict[str, Any]) -> dict[str, Any]:
-    path = _state_path(name)
+    path = _state_path(name, experiment)
     if path.is_file():
         return _read_json(path, "experiment status")
     return {
@@ -679,7 +955,7 @@ def _state(name: str, experiment: dict[str, Any]) -> dict[str, Any]:
 def _mark_stage(name: str, experiment: dict[str, Any], stage: str, status: str) -> None:
     payload = _state(name, experiment)
     payload.setdefault("stages", {})[stage] = status
-    _write_json(payload, _state_path(name))
+    _write_json(payload, _state_path(name, experiment))
 
 
 def _stage_complete(name: str, experiment: dict[str, Any], stage: str) -> bool:
@@ -689,7 +965,7 @@ def _stage_complete(name: str, experiment: dict[str, Any], stage: str) -> bool:
     if stage == "phase1":
         return _phase1_interface_path(experiment).is_file()
     if stage == "phase2":
-        root = _phase2_paths(name)["root"]
+        root = _phase2_paths(name, experiment)["root"]
         if _phase2_scope(experiment) == "selection_only":
             path = root / "5_inner_model_selection" / "selection_manifest.json"
         else:
@@ -733,6 +1009,17 @@ def run_experiment(
             )
         if not force and _stage_complete(name, experiment, stage):
             print(f"{name}: {stage} already complete; resuming after it")
+            owner = pipeline_run_name(name, experiment)
+            related = [
+                specification
+                for experiment_name, specification in _experiments(config).items()
+                if pipeline_run_name(experiment_name, specification) == owner
+            ]
+            _collect_figures(
+                name,
+                experiment,
+                related_experiments=related,
+            )
             continue
         _mark_stage(name, experiment, stage, "running")
         try:
@@ -749,6 +1036,17 @@ def run_experiment(
             _mark_stage(name, experiment, stage, "failed")
             raise
         _mark_stage(name, experiment, stage, "complete")
+        owner = pipeline_run_name(name, experiment)
+        related = [
+            specification
+            for experiment_name, specification in _experiments(config).items()
+            if pipeline_run_name(experiment_name, specification) == owner
+        ]
+        _collect_figures(
+            name,
+            experiment,
+            related_experiments=related,
+        )
         print(f"{name}: {stage} complete")
 
 
@@ -758,6 +1056,7 @@ def run_experiment_group(
     config: dict[str, Any],
     *,
     force: bool,
+    report_config_path: Path | None = None,
 ) -> None:
     """Run an explicit ordered experiment group and then build its report."""
 
@@ -792,12 +1091,404 @@ def run_experiment_group(
             sys.executable,
             str(reporter),
             "--config",
-            str(config_path),
+            str(report_config_path or config_path),
             "--group",
             name,
+            "--output-dir",
+            str(_run_dir(name, group) / "reporting"),
         ],
         label=f"{name}: paired ablation report",
     )
+    owner = pipeline_run_name(name, group)
+    related = [
+        specification
+        for experiment_name, specification in _experiments(config).items()
+        if pipeline_run_name(experiment_name, specification) == owner
+    ]
+    _collect_figures(name, group, related_experiments=related)
+
+
+def _reporting_directory(config: dict[str, Any], group_name: str) -> Path:
+    group = _experiment_group(config, group_name)
+    return _run_dir(group_name, group) / "reporting"
+
+
+def _read_report_table(path: Path, required: set[str]) -> pd.DataFrame:
+    try:
+        table = pd.read_csv(path)
+    except (OSError, ValueError, pd.errors.ParserError) as error:
+        raise ExperimentManagerError(f"Cannot read workflow report {path}: {error}") from error
+    missing = sorted(required - set(table.columns))
+    if missing:
+        raise ExperimentManagerError(f"Workflow report {path} is missing {missing}")
+    if table.empty:
+        raise ExperimentManagerError(f"Workflow report {path} is empty")
+    return table
+
+
+def _accuracy_winner(config: dict[str, Any], group_name: str) -> dict[str, Any]:
+    """Select one experiment by equal-weight model-family development accuracy."""
+
+    path = _reporting_directory(config, group_name) / "paired_summary.csv"
+    table = _read_report_table(
+        path,
+        {"experiment", "model_family", "mean_r2", "mean_rmse"},
+    )
+    ranking = (
+        table.groupby("experiment", as_index=False)
+        .agg(
+            model_families=("model_family", "nunique"),
+            mean_r2=("mean_r2", "mean"),
+            mean_rmse=("mean_rmse", "mean"),
+        )
+        .sort_values(
+            ["mean_r2", "mean_rmse", "experiment"],
+            ascending=[False, True, True],
+        )
+        .reset_index(drop=True)
+    )
+    winner = ranking.iloc[0]
+    return {
+        "experiment": str(winner["experiment"]),
+        "mean_r2": float(winner["mean_r2"]),
+        "mean_rmse": float(winner["mean_rmse"]),
+        "model_families": int(winner["model_families"]),
+        "selection_rule": (
+            "highest equal-weight mean development R2 across model families; "
+            "then lowest mean RMSE; then lexical experiment name"
+        ),
+        "summary": _repo_relative(path),
+    }
+
+
+def _safety_winner(
+    table: pd.DataFrame,
+    *,
+    identity_column: str,
+    r2_tolerance: float,
+) -> dict[str, Any]:
+    required = {
+        identity_column,
+        "mean_r2",
+        "mean_rmse",
+        "mean_bias",
+        "mean_overprediction_rate",
+        "mean_rms_overprediction",
+    }
+    missing = sorted(required - set(table.columns))
+    if missing:
+        raise ExperimentManagerError(f"Safety comparison is missing {missing}")
+    best_r2 = float(table["mean_r2"].max())
+    minimum_r2 = best_r2 - float(r2_tolerance)
+    eligible = table.loc[table["mean_r2"] >= minimum_r2].copy()
+    eligible = eligible.sort_values(
+        [
+            "mean_rms_overprediction",
+            "mean_overprediction_rate",
+            "mean_rmse",
+            "mean_r2",
+            identity_column,
+        ],
+        ascending=[True, True, True, False, True],
+    )
+    winner = eligible.iloc[0]
+    return {
+        "candidate": str(winner[identity_column]),
+        "mean_r2": float(winner["mean_r2"]),
+        "mean_rmse": float(winner["mean_rmse"]),
+        "mean_bias": float(winner["mean_bias"]),
+        "mean_overprediction_rate": float(winner["mean_overprediction_rate"]),
+        "mean_rms_overprediction": float(winner["mean_rms_overprediction"]),
+        "best_observed_r2": best_r2,
+        "minimum_eligible_r2": minimum_r2,
+        "r2_tolerance": float(r2_tolerance),
+        "selection_rule": (
+            "within the R2 tolerance of the best candidate, minimize RMS "
+            "overprediction; then overprediction rate, RMSE, and maximize R2"
+        ),
+    }
+
+
+def _selected_prediction_summary(
+    config: dict[str, Any],
+    experiment_name: str,
+    *,
+    model_family: str,
+) -> dict[str, Any]:
+    """Calculate pooled outer-fold metrics from one selected Step 5 model."""
+
+    experiment = _experiment(config, experiment_name)
+    path = (
+        _phase2_paths(experiment_name, experiment)["root"]
+        / "5_inner_model_selection"
+        / "selected_inner_predictions.csv.gz"
+    )
+    table = _read_report_table(
+        path,
+        {"outer_fold", "model_family", "observed_rul", "predicted_rul"},
+    )
+    families = sorted(table["model_family"].astype(str).unique())
+    if model_family not in families:
+        raise ExperimentManagerError(
+            f"Safety experiment {experiment_name} has no {model_family!r} "
+            f"predictions; observed {families}"
+        )
+    table = table.loc[table["model_family"].astype(str) == model_family].copy()
+    fold_records: list[dict[str, float]] = []
+    for _, rows in table.groupby("outer_fold", sort=True):
+        targets = rows["observed_rul"].to_numpy(dtype=float)
+        predictions = rows["predicted_rul"].to_numpy(dtype=float)
+        residual = predictions - targets
+        positive = residual.clip(min=0.0)
+        denominator = float(((targets - targets.mean()) ** 2).sum())
+        if denominator <= 0.0:
+            raise ExperimentManagerError(
+                f"Safety experiment {experiment_name} has a constant outer-fold target"
+            )
+        fold_records.append(
+            {
+                "mean_r2": 1.0 - float((residual**2).sum()) / denominator,
+                "mean_rmse": float((residual**2).mean() ** 0.5),
+                "mean_bias": float(residual.mean()),
+                "mean_overprediction_rate": float((residual > 0.0).mean()),
+                "mean_rms_overprediction": float((positive**2).mean() ** 0.5),
+            }
+        )
+    folds = pd.DataFrame.from_records(fold_records)
+    return {
+        "experiment": experiment_name,
+        "model_family": model_family,
+        "outer_folds": len(fold_records),
+        **{column: float(folds[column].mean()) for column in fold_records[0]},
+        "predictions": _repo_relative(path),
+    }
+
+
+def _write_resolved_workflow_catalog(
+    config: dict[str, Any],
+    path: Path,
+) -> None:
+    _write_json(config, path)
+
+
+def run_experiment_workflow(
+    name: str,
+    config_path: Path,
+    source_config: dict[str, Any],
+    *,
+    force: bool,
+) -> dict[str, Any]:
+    """Run PE_run_3-style staged selection and propagate each winner."""
+
+    workflows = _experiment_workflows(source_config)
+    if name not in workflows:
+        available = ", ".join(sorted(workflows))
+        raise ExperimentManagerError(
+            f"Unknown experiment workflow {name!r}; available: {available}"
+        )
+    config = copy.deepcopy(source_config)
+    workflow = workflows[name]
+    workflow_dir = RUNS_DIR / name / "workflow"
+    resolved_path = workflow_dir / "resolved_catalog.json"
+    manifest_path = workflow_dir / "selection_manifest.json"
+    tolerance = float(workflow.get("safety_r2_tolerance", 0.005))
+    selections: dict[str, Any] = {}
+
+    feature_group_name = str(workflow["feature_group"])
+    _write_resolved_workflow_catalog(config, resolved_path)
+    run_experiment_group(
+        feature_group_name,
+        config_path,
+        config,
+        force=force,
+        report_config_path=resolved_path,
+    )
+    feature_selection = _accuracy_winner(config, feature_group_name)
+    feature_experiment = _experiment(config, feature_selection["experiment"])
+    selected_feature = str(feature_experiment["feature_set"])
+    feature_selection["feature_set"] = selected_feature
+    selections["feature"] = feature_selection
+
+    cap_group_name = str(workflow["cap_group"])
+    cap_group = _experiment_group(config, cap_group_name)
+    cap_treatments = [
+        experiment_name
+        for experiment_name in cap_group["experiments"]
+        if experiment_name != cap_group["control"]
+    ]
+    cap_group["control"] = feature_selection["experiment"]
+    cap_group["experiments"] = [
+        feature_selection["experiment"],
+        *cap_treatments,
+    ]
+    for experiment_name in cap_treatments:
+        _experiment(config, experiment_name)["feature_set"] = selected_feature
+    _write_resolved_workflow_catalog(config, resolved_path)
+    run_experiment_group(
+        cap_group_name,
+        config_path,
+        config,
+        force=force,
+        report_config_path=resolved_path,
+    )
+    cap_selection = _accuracy_winner(config, cap_group_name)
+    cap_experiment = _experiment(config, cap_selection["experiment"])
+    selected_target = str(cap_experiment["target_profile"])
+    cap_selection["target_profile"] = selected_target
+    cap_selection["feature_set"] = selected_feature
+    selections["target_cap"] = cap_selection
+
+    ensemble_group_name = str(workflow["ensemble_group"])
+    ensemble_group = _experiment_group(config, ensemble_group_name)
+    ensemble_group["control"] = cap_selection["experiment"]
+    ensemble_group["experiments"] = [cap_selection["experiment"]]
+    _write_resolved_workflow_catalog(config, resolved_path)
+    run_experiment_group(
+        ensemble_group_name,
+        config_path,
+        config,
+        force=force,
+        report_config_path=resolved_path,
+    )
+    ensemble_summary_path = _reporting_directory(
+        config,
+        ensemble_group_name,
+    ) / "summary.csv"
+    ensemble_summary = _read_report_table(
+        ensemble_summary_path,
+        {
+            "method",
+            "mean_r2",
+            "mean_rmse",
+            "mean_bias",
+            "mean_overprediction_rate",
+            "mean_rms_overprediction",
+        },
+    )
+    ensemble_accuracy = ensemble_summary.sort_values(
+        ["mean_r2", "mean_rmse", "method"],
+        ascending=[False, True, True],
+    ).iloc[0]
+    selections["ensemble_accuracy"] = {
+        "method": str(ensemble_accuracy["method"]),
+        "mean_r2": float(ensemble_accuracy["mean_r2"]),
+        "mean_rmse": float(ensemble_accuracy["mean_rmse"]),
+        "source_experiment": cap_selection["experiment"],
+        "summary": _repo_relative(ensemble_summary_path),
+        "selection_rule": "highest development R2, then lowest RMSE",
+    }
+
+    safety_group_name = str(workflow["safety_group"])
+    safety_group = _experiment_group(config, safety_group_name)
+    severity_treatments = [
+        experiment_name
+        for experiment_name in safety_group["experiments"]
+        if experiment_name != safety_group["control"]
+    ]
+    safety_group["control"] = cap_selection["experiment"]
+    safety_group["experiments"] = [
+        cap_selection["experiment"],
+        *severity_treatments,
+    ]
+    for experiment_name in severity_treatments:
+        experiment = _experiment(config, experiment_name)
+        experiment["feature_set"] = selected_feature
+        experiment["target_profile"] = selected_target
+    _write_resolved_workflow_catalog(config, resolved_path)
+    run_experiment_group(
+        safety_group_name,
+        config_path,
+        config,
+        force=force,
+        report_config_path=resolved_path,
+    )
+    generic_safety_summary_path = _reporting_directory(
+        config,
+        safety_group_name,
+    ) / "paired_summary.csv"
+    _read_report_table(
+        generic_safety_summary_path,
+        {"experiment", "mean_r2", "mean_rmse"},
+    )
+    safety_summary = pd.DataFrame.from_records(
+        [
+            _selected_prediction_summary(
+                config,
+                experiment_name,
+                model_family="xgboost",
+            )
+            for experiment_name in safety_group["experiments"]
+        ]
+    )
+    safety_summary_path = workflow_dir / "severity_candidate_summary.csv"
+    safety_summary.to_csv(safety_summary_path, index=False)
+    safety_selection = _safety_winner(
+        safety_summary,
+        identity_column="experiment",
+        r2_tolerance=tolerance,
+    )
+    selections["severity_loss"] = {
+        **safety_selection,
+        "summary": _repo_relative(safety_summary_path),
+    }
+
+    ensemble_candidates = ensemble_summary.copy()
+    ensemble_candidates["candidate"] = "ensemble:" + ensemble_candidates["method"]
+    severity_candidates = safety_summary.copy()
+    severity_candidates["candidate"] = "loss:" + severity_candidates["experiment"]
+    final_candidates = pd.concat(
+        [
+            ensemble_candidates[
+                [
+                    "candidate",
+                    "mean_r2",
+                    "mean_rmse",
+                    "mean_bias",
+                    "mean_overprediction_rate",
+                    "mean_rms_overprediction",
+                ]
+            ],
+            severity_candidates[
+                [
+                    "candidate",
+                    "mean_r2",
+                    "mean_rmse",
+                    "mean_bias",
+                    "mean_overprediction_rate",
+                    "mean_rms_overprediction",
+                ]
+            ],
+        ],
+        ignore_index=True,
+    )
+    final_selection = _safety_winner(
+        final_candidates,
+        identity_column="candidate",
+        r2_tolerance=tolerance,
+    )
+    selections["final"] = final_selection
+
+    _write_resolved_workflow_catalog(config, resolved_path)
+    manifest = {
+        "status": "complete",
+        "workflow": name,
+        "pipeline_run": name,
+        "uses_locked_evaluation": False,
+        "safety_r2_tolerance": tolerance,
+        "selections": selections,
+        "resolved_catalog": _repo_relative(resolved_path),
+    }
+    _write_json(manifest, manifest_path)
+    _collect_existing_figures(config, name)
+    promotion_name = workflow.get("promotion")
+    if promotion_name is not None:
+        if not isinstance(promotion_name, str) or promotion_name not in _promotions(config):
+            raise ExperimentManagerError(
+                f"experiment_workflows.{name}.promotion must name a promotion"
+            )
+        run_promotion(promotion_name, config, force=force)
+    print(json.dumps(manifest, indent=2, sort_keys=True), flush=True)
+    return manifest
 
 
 def print_status(config: dict[str, Any]) -> None:
@@ -811,6 +1502,19 @@ def print_status(config: dict[str, Any]) -> None:
             f"{name}: phase2_scope={_phase2_scope(experiment)}, "
             + ", ".join(stages)
         )
+    for name in sorted(_experiment_workflows(config)):
+        manifest = RUNS_DIR / name / "workflow" / "selection_manifest.json"
+        status = "complete" if manifest.is_file() else "not_started"
+        print(f"{name}: workflow={status}")
+    for name, promotion in sorted(_promotions(config).items()):
+        manifest = (
+            RUNS_DIR
+            / str(promotion["workflow"])
+            / name
+            / "locked_confirmation_manifest.json"
+        )
+        status = "complete" if manifest.is_file() else "not_started"
+        print(f"{name}: locked_confirmation={status}")
 
 
 def main() -> None:
@@ -820,6 +1524,11 @@ def main() -> None:
     parser.add_argument("--group", dest="group_name")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--status", action="store_true")
+    parser.add_argument(
+        "--collect-figures",
+        action="store_true",
+        help="Refresh top-level figure galleries without rerunning experiments.",
+    )
     parser.add_argument("--from-stage", choices=STAGES)
     parser.add_argument("--through-stage", choices=STAGES)
     parser.add_argument("--force", action="store_true")
@@ -833,9 +1542,18 @@ def main() -> None:
                 print(f"{name}: {'enabled' if experiment.get('enabled', True) else 'disabled'}")
             for name, group in sorted(_experiment_groups(config).items()):
                 print(f"{name}: group ({len(group['experiments'])} experiments)")
+            for name in sorted(_experiment_workflows(config)):
+                print(f"{name}: automatic workflow")
+            for name, promotion in sorted(_promotions(config).items()):
+                print(f"{name}: locked promotion for {promotion['workflow']}")
             return
         if args.status:
             print_status(config)
+            return
+        if args.collect_figures:
+            if args.run_name and args.group_name:
+                parser.error("declare either --run or --group, not both")
+            _collect_existing_figures(config, args.run_name or args.group_name)
             return
         if args.run_name and args.group_name:
             parser.error("declare either --run or --group, not both")
@@ -848,6 +1566,21 @@ def main() -> None:
                 config,
                 force=args.force,
             )
+            return
+        if args.run_name in _experiment_workflows(config):
+            if args.from_stage is not None or args.through_stage is not None:
+                parser.error("workflow runs do not accept --from-stage or --through-stage")
+            run_experiment_workflow(
+                args.run_name,
+                config_path,
+                config,
+                force=args.force,
+            )
+            return
+        if args.run_name in _promotions(config):
+            if args.from_stage is not None or args.through_stage is not None:
+                parser.error("promotion runs do not accept --from-stage or --through-stage")
+            run_promotion(args.run_name, config, force=args.force)
             return
         experiment = _experiment(config, args.run_name)
         from_stage = _resolve_stage(

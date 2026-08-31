@@ -5,9 +5,9 @@ Last updated: 2026-08-30
 ## Purpose
 
 `pipeline_experiments` contains controlled experiments that change assumptions
-across Phase 1 and Phase 2. Each named experiment owns its resolved settings,
-checkpoints, and results under
-`pipeline_experiments/runs/<experiment>/`. The catalog is defined in
+across Phase 1 and Phase 2. Each pipeline run owns one directory. Its named
+sub-experiments own resolved settings, checkpoints, and results below
+`pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. The catalog is defined in
 [`pipeline_experiments.toml`](../../pipeline_experiments/pipeline_experiments.toml).
 
 The current experiment sets test whether validation/target assumptions explain
@@ -43,7 +43,7 @@ experiment is later changed to `"complete"` and evaluated in Steps 6-7.
 | `PE_run_1` | Current | Raw | Baseline task and architecture performance | Complete through Step 7 |
 | `PE_2x2_current_cap125` | Current | Cap 125 | Target-cap effect without changing validation scenarios | Step 5 complete; rejected |
 | `PE_2x2_early_raw` | Early/middle | Raw | Scenario-construction effect without changing the target | Step 5 complete; rejected |
-| `PE_2x2_early_cap125` | Early/middle | Cap 125 | Interaction between bounded scenarios and capped fitting | Selected; locked Steps 6-7 complete; Phase 3 Run 4 configured |
+| `PE_2x2_early_cap125` | Early/middle | Cap 125 | Interaction between bounded scenarios and capped fitting | Selected; locked Steps 6-7 and Phase 3 Run 4 complete |
 
 ### PE_run_1: current scenarios, raw target
 
@@ -129,8 +129,10 @@ scenarios and three retraining seeds, the results were:
 No paired XGBoost-versus-ExtraTrees interval excluded zero. XGBoost remains the
 declared Phase 3 family because it has the nominally better R2/RMSE and is much
 faster and smaller, not because the locked comparison established statistical
-superiority. Phase 3 Run 4 inherits cap 125 and the symmetric prediction policy;
-its final report and Kaggle score are pending.
+superiority. Phase 3 Run 4 inherited cap 125 and the symmetric prediction
+policy, completed all seven steps, and scored `0.84513` on the public Kaggle
+leaderboard. This is a major improvement over Run 3 (`0.54136`) but remains
+below the `0.9` objective and below the locked estimate.
 
 The overall negative bias does not establish safety. For XGBoost at true RUL
 0-25, bias was `+2.2731`, overprediction rate was `67.65%`, and RMS
@@ -196,11 +198,75 @@ Run with:
 ```
 
 Results are written to
-`pipeline_experiments/runs/PE_signal_family_ablation/reporting/`. The summary
+`pipeline_experiments/runs/PE_run_2/PE_signal_family_ablation/reporting/`. The summary
 reports fold-paired R2, RMSE, absolute-bias, overprediction-rate, and RMS
 overprediction improvements relative to the same model/fold control. A family
 is supported only when accuracy gains are consistent across folds and both
 models; leaderboard scores are not used to select it.
+
+For every experiment and group, all generated PNG plots are additionally
+gathered in `pipeline_experiments/runs/<pipeline_run>/figures/`. The original plots and
+numeric artifacts remain in their stage folders; `figure_manifest.json` maps
+the flat gallery copies back to those canonical sources.
+
+## PE_run_3: Focused Performance and Safety Study
+
+PE_run_3 implements the ordered sequence
+`feature union -> cap sensitivity -> ensemble/calibration -> severity loss ->
+frozen locked confirmation`. Every model-training cell uses development Step 5
+only. Locked scenarios stay closed until the complete policy is selected and
+frozen; Phase 3 remains closed until the confirmation is reviewed.
+
+| Group | Sub-experiments | Why it is investigated | Result |
+| --- | --- | --- | --- |
+| `PE3_feature_union` | Drift-pruned; all signal families; union | Test whether the previously supported degradation features add information to the Run 4 feature set | Drift-pruned selected; added signal features did not improve the equal-weight two-model result |
+| `PE3_cap_sensitivity` | Caps 110, 125, 140, 150 | Determine whether 125 is robust or an arbitrary match to the development endpoint range | Cap 125 retained |
+| `PE3_ensemble_calibration` | XGBoost; ExtraTrees; fixed blends; cross-fitted residual functions | Test complementary tree errors and replace a constant safety offset with a learned, leakage-controlled correction | Calibrated 50/50 blend selected: development R2 0.87955, RMSE 11.5080 |
+| `PE3_severity_loss` | Symmetric; severity weights 1.5, 2.0, 3.0 | Penalize large overpredictions increasingly strongly while retaining ordinary squared loss for underprediction | Weight 2.0 was safest among loss variants, but R2 0.86802 fell outside the final 0.005 tolerance |
+| `PE3_final_ensemble` | Frozen calibrated 50/50 blend | Confirm the complete selected policy once on locked scenarios before Phase 3 | Pending locked confirmation |
+
+The union is the logical OR of `screened_drift_pruned` and
+`signal_all_families`; duplicate features occur only once. The cap cells keep
+the early/middle scenarios, models, folds, seeds, and candidate budget fixed.
+
+The ensemble report uses the selected candidate's inner validation predictions
+from each outer fold. Blends are predeclared at 25%, 50%, and 75% XGBoost. The
+calibrator predicts residual from raw prediction and cutoff, holding out each
+inner fold when fitting the correction. It therefore evaluates a function of
+predicted severity rather than choosing one scalar offset on the same rows.
+
+For positive residual `e = prediction - target`, severity-loss XGBoost uses
+`e^2 + ((w - 1) / 10) * e^3`; for `e <= 0`, it remains `e^2`. This leaves
+underprediction at the symmetric baseline penalty while making severe
+overprediction progressively more expensive. Selection must still enforce the
+predeclared R2/RMSE tolerance before considering safety improvements.
+
+Run the complete sequence with:
+
+```powershell
+.venv\Scripts\python.exe pipeline_experiments\run_experiments.py --run PE_run_3
+```
+
+The launcher selects feature and cap winners by highest equal-weight mean
+development R2 across model families, with RMSE and lexical name as deterministic
+tie-breakers. It propagates the selected feature set, target cap, and ensemble
+source through a resolved in-memory catalog. For the final safety decision,
+only candidates within `0.005` absolute R2 of the best observed method are
+eligible; RMS overprediction, overprediction rate, RMSE, and R2 then decide in
+that order. The chosen cap-125 feature experiment is reused as the cap control,
+and the selected cap experiment's XGBoost predictions are reused as the
+symmetric safety control. The exact choices and resolved catalog are stored in
+`pipeline_experiments/runs/PE_run_3/workflow/selection_manifest.json` and
+`resolved_catalog.json`.
+
+The selected policy is frozen in `PE3_final_ensemble/promotion_contract.json`.
+Its calibrator is fitted only from selected development OOF predictions before
+the existing Step 6 evaluator opens locked data. Locked XGBoost and ExtraTrees
+family/fold checkpoints are resumable and are combined without further tuning.
+The confirmation writes seed metrics, RUL-band safety metrics, predictions, and
+figures under `PE3_final_ensemble/`; all plots are also copied into
+`pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 may be created only
+after this result is reviewed.
 
 ## Degradation-Learning Experiment Register
 

@@ -25,7 +25,10 @@ from models.tabular.fold_fitted_transforms import (  # noqa: E402
 from models.tabular.extra_trees import ExtraTreesAdapter  # noqa: E402
 from policies import PolicyError, PredictionPolicy, TargetPolicy  # noqa: E402
 from tabular_data_adapter import TabularDataset  # noqa: E402
-from models.tabular.xgboost import XGBoostAdapter  # noqa: E402
+from models.tabular.xgboost import (  # noqa: E402
+    SeverityAsymmetricObjective,
+    XGBoostAdapter,
+)
 from xgboost_callback import XGBoostProgressCallback  # noqa: E402
 
 
@@ -63,6 +66,34 @@ class TargetPolicyTests(unittest.TestCase):
         policy = TargetPolicy.from_settings({"mode": "failure_cycle"})
         with self.assertRaises(PolicyError):
             policy.transform(np.asarray([1.0, 2.0]), None)
+
+    def test_severity_loss_penalty_accelerates_only_for_overprediction(self) -> None:
+        policy = PredictionPolicy.from_settings(
+            {
+                "loss": "severity_asymmetric_mse",
+                "overprediction_weight": 2.0,
+                "quantile": 0.5,
+                "severity_scale": 10.0,
+                "calibration": "none",
+                "safety_offset": 0.0,
+                "non_overprediction_coverage": 0.5,
+            }
+        )
+        losses = policy.numpy_losses(
+            np.zeros(4),
+            np.asarray([-10.0, -5.0, 5.0, 10.0]),
+        )
+        np.testing.assert_allclose(losses[:2], [100.0, 25.0])
+        np.testing.assert_allclose(losses[2:], [37.5, 200.0])
+
+    def test_severity_xgboost_objective_has_positive_hessian(self) -> None:
+        objective = SeverityAsymmetricObjective(2.0, 10.0)
+        gradient, hessian = objective(
+            np.zeros(3),
+            np.asarray([-5.0, 0.0, 10.0]),
+        )
+        np.testing.assert_allclose(gradient, [-10.0, 0.0, 50.0])
+        np.testing.assert_allclose(hessian, [2.0, 2.0, 8.0])
 
 
 class FoldFittedTransformTests(unittest.TestCase):

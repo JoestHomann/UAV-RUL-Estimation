@@ -11,8 +11,13 @@ from typing import Any
 
 import pandas as pd
 
-
 MANAGER_DIR = Path(__file__).resolve().parent
+if str(MANAGER_DIR) not in sys.path:
+    sys.path.insert(0, str(MANAGER_DIR))
+
+from experiment_paths import artifact_directory
+
+
 REPOSITORY_ROOT = MANAGER_DIR.parent
 DEFAULT_CONFIG_PATH = MANAGER_DIR / "pipeline_experiments.toml"
 OUTPUT_PATH = MANAGER_DIR / "experiment_comparison.csv"
@@ -37,8 +42,8 @@ def _repo_path(value: str) -> Path:
     return path
 
 
-def _phase2_root(name: str) -> Path:
-    return MANAGER_DIR / "runs" / name / "phase2"
+def _phase2_root(name: str, experiment: dict[str, Any]) -> Path:
+    return artifact_directory(MANAGER_DIR / "runs", name, experiment) / "phase2"
 
 
 def _not_complete_row(
@@ -62,8 +67,8 @@ def _selection_table(
     name: str,
     experiment: dict[str, Any],
 ) -> pd.DataFrame | None:
-    path = _phase2_root(name) / "5_inner_model_selection" / "candidate_results.csv"
-    manifest = _phase2_root(name) / "5_inner_model_selection" / "selection_manifest.json"
+    path = _phase2_root(name, experiment) / "5_inner_model_selection" / "candidate_results.csv"
+    manifest = _phase2_root(name, experiment) / "5_inner_model_selection" / "selection_manifest.json"
     if not path.is_file() or not manifest.is_file():
         return None
 
@@ -153,7 +158,7 @@ def _locked_table(
     name: str,
     experiment: dict[str, Any],
 ) -> pd.DataFrame | None:
-    path = _phase2_root(name) / "7_architecture_comparison" / "architecture_comparison.csv"
+    path = _phase2_root(name, experiment) / "7_architecture_comparison" / "architecture_comparison.csv"
     if not path.is_file():
         return None
     table = pd.read_csv(path)
@@ -162,7 +167,11 @@ def _locked_table(
     table.insert(2, "comparison_scope", "locked")
     table.insert(3, "phase_2_run_number", experiment.get("phase_2_run_number"))
 
-    leaderboard_path = MANAGER_DIR / "runs" / name / "leaderboard_result.json"
+    leaderboard_path = artifact_directory(
+        MANAGER_DIR / "runs",
+        name,
+        experiment,
+    ) / "leaderboard_result.json"
     if leaderboard_path.is_file():
         record = json.loads(leaderboard_path.read_text(encoding="utf-8"))
         table["leaderboard_metric"] = record.get("metric")

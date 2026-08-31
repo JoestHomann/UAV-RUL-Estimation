@@ -17,8 +17,8 @@ the hidden Kaggle targets or establish the best safety-performance tradeoff.
 Update 2026-08-30: the registered pipeline experiments are complete through
 the selected target/scenario policy's locked Phase 2 evaluation. Early/middle
 scenarios with a cap-125 fitting target reached locked `R2 = 0.8810` and
-`RMSE = 11.3693` with XGBoost. Phase 3 Run 4 is configured; its Kaggle result is
-pending. Signal-family, failure-cycle, normalization, fault-mode, compression,
+`RMSE = 11.3693` with XGBoost. Phase 3 Run 4 completed and scored `0.84513` on
+the public Kaggle leaderboard. Signal-family, failure-cycle, normalization, fault-mode, compression,
 and dense-prefix experiments are summarized below and recorded in
 [`pipeline_experiments.md`](pipeline_experiments.md).
 
@@ -302,9 +302,10 @@ overall R2 confidence interval is 0.8577 to 0.9026, so a reliable R2 of at least
 
 The following sections preserve the protocol that motivated implementation.
 The cap-125 2x2 matrix and the experiments summarized above are complete.
-Still pending are cap sensitivity at 110, 140, and 150; asymmetric and quantile
-loss experiments; development-only safety calibration; and Kaggle confirmation
-of the frozen Phase 3 Run 4 submission.
+PE_run_3 now implements feature-union, cap-sensitivity, heterogeneous ensemble,
+cross-fitted residual-calibration, and severity-shaped overprediction-loss
+experiments. Their results are pending. Quantile-loss experiments remain
+unimplemented; Kaggle confirmation of Run 4 is complete.
 
 ### Phase 1: validation and prefix construction
 
@@ -356,15 +357,17 @@ rather than silently affecting training.
 The focused study status is:
 
 - complete: unchanged raw-target control;
-- partial: cap 125 complete; caps 110, 140, and 150 pending;
+- implemented, results pending: cap 125 control and caps 110, 140, and 150;
 - complete: XGBoost with ExtraTrees as an independent tree-family control;
 - not justified: CatBoost confirmation, because the cheaper families did not
   support normalization, fault modes, compression, dense prefixes, or the
   failure-cycle target;
 - complete: symmetric RMSE conservatism control;
-- pending: asymmetric overprediction weights of 1.5, 2.0, and 3.0;
+- implemented, results pending: severity-shaped overprediction weights of 1.5,
+  2.0, and 3.0;
 - pending: lower-quantile objectives between 0.30 and 0.45;
-- pending: out-of-fold calibrated offsets or lower bounds;
+- implemented, results pending: cross-fitted polynomial residual calibration
+  as a function of raw prediction and cutoff;
 - pending: dense-prefix sequence models, if sequence work resumes; and
 - complete: raw-RUL and one-sided grouped metrics for final comparability.
 
@@ -411,8 +414,9 @@ rejected.
 
 The remaining secondary work is narrower:
 
-- conservative asymmetric or quantile objectives and out-of-fold calibration;
-- cap sensitivity at 110, 140, and 150;
+- run and evaluate the implemented severity objective and cross-fitted
+  calibration; quantile objectives remain optional follow-up work;
+- run and evaluate cap sensitivity at 110, 140, and 150;
 - residual diagnosis by RUL and cutoff band using development predictions; and
 - dense sequence-window training only if neural sequence work resumes.
 

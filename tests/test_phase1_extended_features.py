@@ -260,6 +260,30 @@ class PhaseOneExtendedFeatureTests(unittest.TestCase):
         self.assertFalse(catalog.loc[temporal, "signal_family_15_23"])
         self.assertTrue(catalog.loc[temporal, "signal_all_families"])
 
+    def test_screened_signal_union_is_the_union_of_both_feature_sets(self) -> None:
+        history = synthetic_history("UAV_A", 80)
+        features = extract_prefix_features(
+            history,
+            60,
+            feature_profile="extended",
+        )
+        feature_sets = (
+            "screened_drift_pruned",
+            "signal_all_families",
+            "screened_signal_union",
+        )
+        catalog = feature_catalog(
+            list(features),
+            feature_profile="extended",
+            feature_sets=feature_sets,
+        ).set_index("feature_name")
+        expected = catalog["screened_drift_pruned"] | catalog["signal_all_families"]
+        self.assertTrue(catalog["screened_signal_union"].equals(expected))
+        self.assertGreater(
+            int(catalog["screened_signal_union"].sum()),
+            int(catalog["screened_drift_pruned"].sum()),
+        )
+
     def test_baseline_normalization_sets_are_matched_and_composable(self) -> None:
         history = synthetic_history("UAV_A", 80)
         features = extract_prefix_features(

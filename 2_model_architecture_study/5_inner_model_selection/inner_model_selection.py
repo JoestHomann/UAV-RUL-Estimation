@@ -156,6 +156,22 @@ FOLD_COLUMNS = [
     "trainable_parameters",
 ]
 
+PREDICTION_COLUMNS = [
+    "settings_version",
+    "model_family",
+    "outer_fold",
+    "candidate_number",
+    "configuration_id",
+    "inner_fold",
+    "validation_row",
+    "uav_id",
+    "scenario",
+    "cutoff",
+    "observed_rul",
+    "predicted_rul",
+    "residual",
+]
+
 SELECTED_COLUMNS = [
     "settings_version",
     "model_family",
@@ -245,6 +261,25 @@ def _write_csv(records: list[dict[str, Any]], columns: list[str], path: Path) ->
     frame = pd.DataFrame.from_records(records, columns=columns)
     temporary_path = _unique_temporary_path(path)
     frame.to_csv(temporary_path, index=False, float_format="%.12g")
+    _replace_with_retry(temporary_path, path)
+
+
+def _write_csv_gzip(
+    records: list[dict[str, Any]],
+    columns: list[str],
+    path: Path,
+) -> None:
+    """Write a compressed stable-column CSV through an atomic replacement."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame.from_records(records, columns=columns)
+    temporary_path = _unique_temporary_path(path)
+    frame.to_csv(
+        temporary_path,
+        index=False,
+        float_format="%.12g",
+        compression="gzip",
+    )
     _replace_with_retry(temporary_path, path)
 
 
@@ -465,6 +500,9 @@ class StudyArtifactWriter:
         self.candidate_path = self.study_dir / f"{self.prefix}__candidates.csv"
         self.fold_path = self.study_dir / f"{self.prefix}__inner_folds.csv"
         self.selected_path = self.study_dir / f"{self.prefix}__selected.json"
+        self.prediction_path = (
+            self.study_dir / f"{self.prefix}__selected_predictions.csv.gz"
+        )
         self.status_path = self.study_dir / f"{self.prefix}__status.json"
 
     def start(self) -> None:
@@ -516,6 +554,18 @@ class StudyArtifactWriter:
         selected_record["selection_metric"] = "mean_inner_rmse"
         selected_record["selection_direction"] = "minimize"
         _write_json(selected_record, self.selected_path)
+        selected_trial = next(
+            trial
+            for trial in study.trials
+            if trial.state == TrialState.COMPLETE
+            and trial.user_attrs["candidate_record"]["configuration_id"]
+            == selected["configuration_id"]
+        )
+        _write_csv_gzip(
+            [dict(record) for record in selected_trial.user_attrs["prediction_records"]],
+            PREDICTION_COLUMNS,
+            self.prediction_path,
+        )
         self._write_status(
             "complete",
             completed_candidates=len(candidate_records),
@@ -781,7 +831,11 @@ class InnerModelSelectionRunner:
                         "Resolved candidate duplicates an earlier complete candidate"
                     )
                 candidate_number = len(seen_configurations) + 1
-                candidate_record, fold_records = self._evaluate_candidate(
+                (
+                    candidate_record,
+                    fold_records,
+                    prediction_records,
+                ) = self._evaluate_candidate(
                     trial=trial,
                     family=family,
                     architecture=architecture,
@@ -794,6 +848,7 @@ class InnerModelSelectionRunner:
                 trial.set_user_attr("candidate_number", candidate_number)
                 trial.set_user_attr("candidate_record", candidate_record)
                 trial.set_user_attr("fold_records", fold_records)
+                trial.set_user_attr("prediction_records", prediction_records)
                 trial.set_user_attr("configuration_json", canonical)
                 seen_configurations.add(canonical)
                 return float(candidate_record["mean_inner_rmse"])
@@ -840,13 +895,18 @@ class InnerModelSelectionRunner:
         outer_fold: int,
         split_repository: InnerSplitRepository,
         study_monitor: Any,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    ) -> tuple[
+        dict[str, Any],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
         """Fit one resolved candidate on all four inner UAV folds."""
 
         configuration_id = (
             f"{family}__outer_{outer_fold:02d}__candidate_{candidate_number:03d}"
         )
         fold_records: list[dict[str, Any]] = []
+        prediction_records: list[dict[str, Any]] = []
         inner_fold_labels = split_repository.inner_fold_labels(
             architecture["representation"],
             outer_fold,
@@ -909,6 +969,28 @@ class InnerModelSelectionRunner:
                         raise InnerModelSelectionError(
                             "Adapter and Step 5 validation RMSE calculations "
                             "disagree"
+                        )
+                    metadata = split.validation.metadata.reset_index(drop=True)
+                    for validation_row, (observed, predicted) in enumerate(
+                        zip(observed_targets, predictions, strict=True)
+                    ):
+                        row = metadata.iloc[validation_row]
+                        prediction_records.append(
+                            {
+                                "settings_version": self.settings_version,
+                                "model_family": family,
+                                "outer_fold": outer_fold,
+                                "candidate_number": candidate_number,
+                                "configuration_id": configuration_id,
+                                "inner_fold": inner_fold,
+                                "validation_row": validation_row,
+                                "uav_id": str(row["uav_id"]),
+                                "scenario": str(row["scenario"]),
+                                "cutoff": float(row["cutoff"]),
+                                "observed_rul": float(observed),
+                                "predicted_rul": float(predicted),
+                                "residual": float(predicted - observed),
+                            }
                         )
                 finally:
                     # Live writers must never become part of a fitted model or
@@ -1046,7 +1128,7 @@ class InnerModelSelectionRunner:
             mean_inner_rmse=candidate_record["mean_inner_rmse"],
             hyperparameters=candidate.hyperparameters,
         )
-        return candidate_record, fold_records
+        return candidate_record, fold_records, prediction_records
 
     @staticmethod
     def _retraining_iterations(
@@ -1078,6 +1160,7 @@ class InnerModelSelectionRunner:
         candidate_records: list[dict[str, Any]] = []
         fold_records: list[dict[str, Any]] = []
         selected_records: list[dict[str, Any]] = []
+        selected_prediction_frames: list[pd.DataFrame] = []
         complete_studies: list[str] = []
         incomplete_studies: list[str] = []
 
@@ -1123,6 +1206,11 @@ class InnerModelSelectionRunner:
                 candidate_records.extend(candidates)
                 fold_records.extend(folds)
                 selected_records.append(selected)
+                prediction_path = (
+                    study_dir / f"{prefix}__selected_predictions.csv.gz"
+                )
+                if prediction_path.is_file():
+                    selected_prediction_frames.append(pd.read_csv(prediction_path))
                 complete_studies.append(prefix)
 
         candidate_records.sort(
@@ -1158,6 +1246,16 @@ class InnerModelSelectionRunner:
             SELECTED_COLUMNS,
             self.output_dir / "selected_configurations.csv",
         )
+        selected_predictions = (
+            pd.concat(selected_prediction_frames, ignore_index=True)
+            if selected_prediction_frames
+            else pd.DataFrame(columns=PREDICTION_COLUMNS)
+        )
+        _write_csv_gzip(
+            selected_predictions.to_dict("records"),
+            PREDICTION_COLUMNS,
+            self.output_dir / "selected_inner_predictions.csv.gz",
+        )
 
         expected_studies = len(self.enabled_families) * len(self.outer_fold_labels)
         manifest = {
@@ -1189,6 +1287,7 @@ class InnerModelSelectionRunner:
             "selected_configuration_rows": len(selected_records),
             "candidate_result_rows": len(candidate_records),
             "inner_fold_result_rows": len(fold_records),
+            "selected_inner_prediction_rows": len(selected_predictions),
             "locked_data_loaded": False,
             "test_data_loaded": False,
             "libraries": {
@@ -1200,6 +1299,7 @@ class InnerModelSelectionRunner:
                 "candidate_results": "candidate_results.csv",
                 "inner_fold_results": "inner_fold_results.csv",
                 "selected_configurations": "selected_configurations.csv",
+                "selected_inner_predictions": "selected_inner_predictions.csv.gz",
                 "study_checkpoints": "studies/",
             },
         }

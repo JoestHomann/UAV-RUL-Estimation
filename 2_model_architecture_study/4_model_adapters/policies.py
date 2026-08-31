@@ -80,6 +80,7 @@ class PredictionPolicy:
     loss: str = "symmetric_rmse"
     overprediction_weight: float = 1.0
     quantile: float = 0.5
+    severity_scale: float = 10.0
     calibration: str = "none"
     safety_offset: float = 0.0
     non_overprediction_coverage: float = 0.5
@@ -90,16 +91,31 @@ class PredictionPolicy:
             loss=str(value.get("loss")),
             overprediction_weight=float(value.get("overprediction_weight")),
             quantile=float(value.get("quantile")),
+            severity_scale=float(value.get("severity_scale", 10.0)),
             calibration=str(value.get("calibration")),
             safety_offset=float(value.get("safety_offset")),
             non_overprediction_coverage=float(
                 value.get("non_overprediction_coverage")
             ),
         )
-        if policy.loss not in {"symmetric_rmse", "asymmetric_mse", "quantile"}:
+        if policy.loss not in {
+            "symmetric_rmse",
+            "asymmetric_mse",
+            "severity_asymmetric_mse",
+            "quantile",
+        }:
             raise PolicyError(f"Unknown loss policy {policy.loss!r}")
         if policy.overprediction_weight < 1.0:
             raise PolicyError("Overprediction weight cannot be below one")
+        if (
+            policy.loss == "severity_asymmetric_mse"
+            and policy.overprediction_weight <= 1.0
+        ):
+            raise PolicyError(
+                "Severity-asymmetric loss requires overprediction weight above one"
+            )
+        if policy.severity_scale <= 0.0:
+            raise PolicyError("Severity scale must be positive")
         if not 0.0 < policy.quantile <= 0.5:
             raise PolicyError("Conservative quantile must be in (0, 0.5]")
         if policy.calibration not in {"none", "fixed_offset"}:
@@ -128,6 +144,10 @@ class PredictionPolicy:
         if self.loss == "asymmetric_mse":
             weights = np.where(residual > 0.0, self.overprediction_weight, 1.0)
             return weights * np.square(residual)
+        if self.loss == "severity_asymmetric_mse":
+            positive = np.maximum(residual, 0.0)
+            severity = (self.overprediction_weight - 1.0) / self.severity_scale
+            return np.square(residual) + severity * np.power(positive, 3.0)
         if self.loss == "quantile":
             return np.where(
                 residual > 0.0,
@@ -141,6 +161,7 @@ class PredictionPolicy:
             "loss": self.loss,
             "overprediction_weight": self.overprediction_weight,
             "quantile": self.quantile,
+            "severity_scale": self.severity_scale,
             "calibration": self.calibration,
             "safety_offset": self.safety_offset,
             "non_overprediction_coverage": self.non_overprediction_coverage,
@@ -165,7 +186,12 @@ TARGET_CAPABLE_FAMILIES = {
 }
 
 LOSS_CAPABILITIES = {
-    "xgboost": {"symmetric_rmse", "asymmetric_mse", "quantile"},
+    "xgboost": {
+        "symmetric_rmse",
+        "asymmetric_mse",
+        "severity_asymmetric_mse",
+        "quantile",
+    },
     "catboost": {"symmetric_rmse", "quantile"},
     "mlp": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "tcn": {"symmetric_rmse", "asymmetric_mse", "quantile"},

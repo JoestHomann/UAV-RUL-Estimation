@@ -462,9 +462,15 @@ class TargetSpecification(StrictModel):
 class PredictionPolicySpecification(StrictModel):
     """Define conservative fitting and post-model prediction behavior."""
 
-    loss: Literal["symmetric_rmse", "asymmetric_mse", "quantile"]
+    loss: Literal[
+        "symmetric_rmse",
+        "asymmetric_mse",
+        "severity_asymmetric_mse",
+        "quantile",
+    ]
     overprediction_weight: float = Field(ge=1.0)
     quantile: float = Field(gt=0.0, le=0.5)
+    severity_scale: float = Field(default=10.0, gt=0.0)
     calibration: Literal["none", "fixed_offset"]
     safety_offset: float = Field(ge=0.0)
     non_overprediction_coverage: float = Field(gt=0.0, lt=1.0)
@@ -475,9 +481,19 @@ class PredictionPolicySpecification(StrictModel):
             raise ValueError(
                 "symmetric_rmse requires overprediction_weight = 1.0"
             )
-        if self.loss != "asymmetric_mse" and self.overprediction_weight != 1.0:
+        if (
+            self.loss not in {"asymmetric_mse", "severity_asymmetric_mse"}
+            and self.overprediction_weight != 1.0
+        ):
             raise ValueError(
-                "overprediction_weight only applies to asymmetric_mse"
+                "overprediction_weight only applies to asymmetric losses"
+            )
+        if (
+            self.loss == "severity_asymmetric_mse"
+            and self.overprediction_weight <= 1.0
+        ):
+            raise ValueError(
+                "severity_asymmetric_mse requires overprediction_weight > 1"
             )
         if self.loss != "quantile" and self.quantile != 0.5:
             raise ValueError("quantile must be 0.5 unless loss = 'quantile'")

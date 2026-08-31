@@ -5,9 +5,12 @@ from __future__ import annotations
 import copy
 import importlib.util
 from pathlib import Path
+import shutil
 import tomllib
 import unittest
 from unittest.mock import patch
+
+import pandas as pd
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +23,9 @@ if MODULE_SPEC is None or MODULE_SPEC.loader is None:
     raise RuntimeError(f"Cannot load {MANAGER_PATH}")
 run_experiments = importlib.util.module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(run_experiments)
+
+import report_ensemble_calibration
+import promote_calibrated_ensemble
 
 
 class PipelineExperimentCatalogTests(unittest.TestCase):
@@ -78,6 +84,55 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 )
                 self.assertEqual(experiment["candidate_budget"], 25)
                 self.assertFalse(experiment["phase_3_enabled"])
+
+    def test_pe_run_3_groups_use_one_parent_artifact_directory(self) -> None:
+        groups = run_experiments._experiment_groups(self.config)
+        expected = {
+            "PE3_feature_union",
+            "PE3_cap_sensitivity",
+            "PE3_ensemble_calibration",
+            "PE3_severity_loss",
+        }
+        self.assertTrue(expected.issubset(groups))
+        for group_name in expected:
+            self.assertEqual(groups[group_name]["pipeline_run"], "PE_run_3")
+            for name in groups[group_name]["experiments"]:
+                experiment = run_experiments._experiment(self.config, name)
+                self.assertEqual(experiment["pipeline_run"], "PE_run_3")
+                self.assertEqual(
+                    run_experiments._run_dir(name, experiment),
+                    REPOSITORY_ROOT
+                    / "pipeline_experiments"
+                    / "runs"
+                    / "PE_run_3"
+                    / name,
+                )
+
+    def test_pe_run_3_is_declared_as_an_automatic_workflow(self) -> None:
+        workflow = run_experiments._experiment_workflows(self.config)["PE_run_3"]
+        self.assertEqual(workflow["feature_group"], "PE3_feature_union")
+        self.assertEqual(workflow["cap_group"], "PE3_cap_sensitivity")
+        self.assertEqual(workflow["ensemble_group"], "PE3_ensemble_calibration")
+        self.assertEqual(workflow["safety_group"], "PE3_severity_loss")
+        self.assertEqual(workflow["safety_r2_tolerance"], 0.005)
+        self.assertEqual(workflow["promotion"], "PE3_final_ensemble")
+        promotion = run_experiments._promotions(self.config)["PE3_final_ensemble"]
+        self.assertEqual(promotion["workflow"], "PE_run_3")
+        self.assertEqual(promotion["ensemble_group"], "PE3_ensemble_calibration")
+
+    def test_pe_run_3_severity_cells_vary_only_prediction_profile(self) -> None:
+        group = run_experiments._experiment_group(self.config, "PE3_severity_loss")
+        profiles = []
+        for name in group["experiments"]:
+            experiment = run_experiments._experiment(self.config, name)
+            self.assertEqual(experiment["architectures"], ["xgboost"])
+            self.assertEqual(experiment["feature_set"], "screened_signal_union")
+            self.assertEqual(experiment["target_profile"], "capped_125")
+            profiles.append(experiment["prediction_profile"])
+        self.assertEqual(
+            profiles,
+            ["symmetric", "severity_1_5", "severity_2_0", "severity_3_0"],
+        )
 
     def test_target_and_adapter_strategy_cells_are_explicit(self) -> None:
         self.assertEqual(
@@ -238,6 +293,382 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             / "artifacts"
             / "experiment_specification.json",
         )
+
+    def test_figures_are_collected_into_a_flat_run_gallery(self) -> None:
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_figure_collection_test"
+        test_root.mkdir(parents=True, exist_ok=True)
+        try:
+            runs_dir = test_root / "runs"
+            run_dir = runs_dir / "PE_test"
+            phase2_figure = (
+                run_dir
+                / "phase2"
+                / "7_architecture_comparison"
+                / "figures"
+                / "performance.png"
+            )
+            report_figure = run_dir / "reporting" / "paired_comparison.png"
+            phase2_figure.parent.mkdir(parents=True)
+            report_figure.parent.mkdir(parents=True)
+            phase2_figure.write_bytes(b"phase2")
+            report_figure.write_bytes(b"report")
+
+            with patch.object(run_experiments, "RUNS_DIR", runs_dir):
+                manifest = run_experiments._collect_figures("PE_test")
+
+            gallery = run_dir / "figures"
+            self.assertEqual(len(manifest["figures"]), 2)
+            self.assertEqual((gallery / "performance.png").read_bytes(), b"phase2")
+            self.assertEqual(
+                (gallery / "paired_comparison.png").read_bytes(),
+                b"report",
+            )
+            self.assertTrue((gallery / "figure_manifest.json").is_file())
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
+
+    def test_subexperiment_figures_are_collected_in_parent_gallery(self) -> None:
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_parent_gallery_test"
+        test_root.mkdir(parents=True, exist_ok=True)
+        try:
+            runs_dir = test_root / "runs"
+            experiment = {"pipeline_run": "PE_parent"}
+            source = (
+                runs_dir
+                / "PE_parent"
+                / "PE_cell"
+                / "reporting"
+                / "comparison.png"
+            )
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"comparison")
+            phase3_root = test_root / "phase3"
+            phase3_figure = (
+                phase3_root
+                / "runs"
+                / "run_4"
+                / "7_post_run_reporting"
+                / "figures"
+                / "submission.png"
+            )
+            phase3_figure.parent.mkdir(parents=True)
+            phase3_figure.write_bytes(b"submission")
+            related = [
+                {
+                    "pipeline_run": "PE_parent",
+                    "phase_3_enabled": True,
+                    "phase_3_run_number": 4,
+                }
+            ]
+            with (
+                patch.object(run_experiments, "RUNS_DIR", runs_dir),
+                patch.object(run_experiments, "PHASE_3_ROOT", phase3_root),
+            ):
+                manifest = run_experiments._collect_figures(
+                    "PE_cell",
+                    experiment,
+                    related_experiments=related,
+                )
+                refreshed = run_experiments._collect_figures(
+                    "PE_parent",
+                    related_experiments=related,
+                )
+            gallery = runs_dir / "PE_parent" / "figures"
+            self.assertEqual(manifest["pipeline_run"], "PE_parent")
+            self.assertEqual(len(refreshed["figures"]), 2)
+            self.assertEqual((gallery / "comparison.png").read_bytes(), b"comparison")
+            self.assertEqual((gallery / "submission.png").read_bytes(), b"submission")
+            self.assertFalse((runs_dir / "PE_parent" / "PE_cell" / "figures").exists())
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
+
+    def test_ensemble_report_uses_selected_cross_fitted_predictions(self) -> None:
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_ensemble_report_test"
+        test_root.mkdir(parents=True, exist_ok=True)
+        try:
+            source_dir = (
+                test_root
+                / "runs"
+                / "PE_parent"
+                / "PE_source"
+                / "phase2"
+                / "5_inner_model_selection"
+            )
+            source_dir.mkdir(parents=True)
+            records = []
+            for outer_fold in range(2):
+                for inner_fold in range(2):
+                    for row in range(4):
+                        observed = float(20 + 5 * row + outer_fold)
+                        shared = {
+                            "outer_fold": outer_fold,
+                            "inner_fold": inner_fold,
+                            "validation_row": row,
+                            "uav_id": f"UAV_{outer_fold}_{inner_fold}_{row}",
+                            "scenario": f"development_{inner_fold:02d}",
+                            "cutoff": float(10 + row),
+                            "observed_rul": observed,
+                        }
+                        records.append(
+                            {
+                                **shared,
+                                "model_family": "xgboost",
+                                "predicted_rul": observed + 2.0,
+                            }
+                        )
+                        records.append(
+                            {
+                                **shared,
+                                "model_family": "extra_trees",
+                                "predicted_rul": observed - 2.0,
+                            }
+                        )
+            pd.DataFrame.from_records(records).to_csv(
+                source_dir / "selected_inner_predictions.csv.gz",
+                index=False,
+                compression="gzip",
+            )
+            config = {
+                "experiments": {
+                    "PE_source": {"pipeline_run": "PE_parent"},
+                },
+                "experiment_groups": {
+                    "PE_ensemble": {
+                        "control": "PE_source",
+                        "experiments": ["PE_source"],
+                        "blend_weights": [0.5],
+                        "calibration_degree": 1,
+                        "calibration_ridge_alpha": 1.0,
+                    }
+                },
+            }
+            output_dir = test_root / "runs" / "PE_parent" / "reporting"
+            with patch.object(report_ensemble_calibration, "SCRIPT_DIR", test_root):
+                manifest = report_ensemble_calibration.write_report(
+                    config,
+                    "PE_ensemble",
+                    output_dir,
+                )
+            summary = pd.read_csv(output_dir / "summary.csv")
+            best = summary.iloc[0]
+            self.assertEqual(manifest["best_method"], "blend_xgb_0.50")
+            self.assertEqual(best["method"], "blend_xgb_0.50")
+            self.assertAlmostEqual(float(best["mean_r2"]), 1.0)
+            self.assertTrue((output_dir / "ensemble_calibration_comparison.png").is_file())
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
+
+    def test_pe_run_3_workflow_propagates_winners_and_selects_safety(self) -> None:
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_workflow_test"
+        test_root.mkdir(parents=True, exist_ok=True)
+        config = copy.deepcopy(self.config)
+
+        def write_group_report(
+            name: str,
+            config_path: Path,
+            active_config: dict,
+            *,
+            force: bool,
+            report_config_path: Path | None = None,
+        ) -> None:
+            del config_path, force
+            self.assertIsNotNone(report_config_path)
+            output = run_experiments._reporting_directory(active_config, name)
+            output.mkdir(parents=True, exist_ok=True)
+            if name == "PE3_feature_union":
+                rows = []
+                scores = {
+                    "PE3_features_drift": 0.86,
+                    "PE3_features_signal": 0.87,
+                    "PE3_features_union": 0.89,
+                }
+                for experiment, score in scores.items():
+                    for family in ("extra_trees", "xgboost"):
+                        rows.append(
+                            {
+                                "experiment": experiment,
+                                "model_family": family,
+                                "mean_r2": score,
+                                "mean_rmse": 12.0 - score,
+                            }
+                        )
+                pd.DataFrame(rows).to_csv(output / "paired_summary.csv", index=False)
+            elif name == "PE3_cap_sensitivity":
+                group = run_experiments._experiment_group(active_config, name)
+                self.assertTrue(
+                    all(
+                        run_experiments._experiment(active_config, experiment)[
+                            "feature_set"
+                        ]
+                        == "screened_signal_union"
+                        for experiment in group["experiments"]
+                    )
+                )
+                rows = []
+                scores = {
+                    "PE3_cap_110": 0.88,
+                    "PE3_features_union": 0.89,
+                    "PE3_cap_140": 0.91,
+                    "PE3_cap_150": 0.90,
+                }
+                for experiment, score in scores.items():
+                    for family in ("extra_trees", "xgboost"):
+                        rows.append(
+                            {
+                                "experiment": experiment,
+                                "model_family": family,
+                                "mean_r2": score,
+                                "mean_rmse": 12.0 - score,
+                            }
+                        )
+                pd.DataFrame(rows).to_csv(output / "paired_summary.csv", index=False)
+            elif name == "PE3_ensemble_calibration":
+                group = run_experiments._experiment_group(active_config, name)
+                self.assertEqual(group["control"], "PE3_cap_140")
+                self.assertEqual(group["experiments"], ["PE3_cap_140"])
+                pd.DataFrame(
+                    [
+                        {
+                            "method": "xgboost",
+                            "mean_r2": 0.900,
+                            "mean_rmse": 10.0,
+                            "mean_bias": 1.0,
+                            "mean_overprediction_rate": 0.60,
+                            "mean_rms_overprediction": 4.0,
+                        },
+                        {
+                            "method": "xgboost__calibrated",
+                            "mean_r2": 0.897,
+                            "mean_rmse": 10.2,
+                            "mean_bias": -0.5,
+                            "mean_overprediction_rate": 0.40,
+                            "mean_rms_overprediction": 1.5,
+                        },
+                    ]
+                ).to_csv(output / "summary.csv", index=False)
+            else:
+                group = run_experiments._experiment_group(active_config, name)
+                for experiment_name in group["experiments"]:
+                    experiment = run_experiments._experiment(
+                        active_config,
+                        experiment_name,
+                    )
+                    self.assertEqual(experiment["feature_set"], "screened_signal_union")
+                    self.assertEqual(experiment["target_profile"], "capped_140")
+                pd.DataFrame(
+                    [
+                        {
+                            "experiment": "PE3_safety_symmetric",
+                            "mean_r2": 0.900,
+                            "mean_rmse": 10.0,
+                            "mean_bias": 1.0,
+                            "mean_overprediction_rate": 0.60,
+                            "mean_rms_overprediction": 4.0,
+                        },
+                        {
+                            "experiment": "PE3_safety_severity_2_0",
+                            "mean_r2": 0.898,
+                            "mean_rmse": 10.1,
+                            "mean_bias": -0.4,
+                            "mean_overprediction_rate": 0.35,
+                            "mean_rms_overprediction": 1.0,
+                        },
+                    ]
+                ).to_csv(output / "paired_summary.csv", index=False)
+
+        def selected_prediction_summary(
+            active_config: dict,
+            experiment_name: str,
+            *,
+            model_family: str,
+        ) -> dict:
+            del active_config
+            self.assertEqual(model_family, "xgboost")
+            values = {
+                "PE3_cap_140": (0.900, 10.0, 1.0, 0.60, 4.0),
+                "PE3_safety_severity_1_5": (0.899, 10.1, 0.0, 0.45, 2.0),
+                "PE3_safety_severity_2_0": (0.898, 10.1, -0.4, 0.35, 1.0),
+                "PE3_safety_severity_3_0": (0.890, 10.5, -1.0, 0.25, 0.5),
+            }
+            r2, rmse, bias, rate, rms = values[experiment_name]
+            return {
+                "experiment": experiment_name,
+                "model_family": "xgboost",
+                "outer_folds": 5,
+                "mean_r2": r2,
+                "mean_rmse": rmse,
+                "mean_bias": bias,
+                "mean_overprediction_rate": rate,
+                "mean_rms_overprediction": rms,
+                "predictions": f"{experiment_name}.csv.gz",
+            }
+
+        try:
+            with (
+                patch.object(run_experiments, "RUNS_DIR", test_root / "runs"),
+                patch.object(
+                    run_experiments,
+                    "run_experiment_group",
+                    side_effect=write_group_report,
+                ),
+                patch.object(
+                    run_experiments,
+                    "_selected_prediction_summary",
+                    side_effect=selected_prediction_summary,
+                ),
+                patch.object(run_experiments, "_collect_existing_figures"),
+                patch.object(run_experiments, "run_promotion") as promotion,
+            ):
+                manifest = run_experiments.run_experiment_workflow(
+                    "PE_run_3",
+                    REPOSITORY_ROOT
+                    / "pipeline_experiments"
+                    / "pipeline_experiments.toml",
+                    config,
+                    force=False,
+                )
+            selections = manifest["selections"]
+            self.assertEqual(selections["feature"]["experiment"], "PE3_features_union")
+            self.assertEqual(selections["target_cap"]["experiment"], "PE3_cap_140")
+            self.assertEqual(
+                selections["final"]["candidate"],
+                "loss:PE3_safety_severity_2_0",
+            )
+            promotion.assert_called_once()
+            promotion_args, promotion_kwargs = promotion.call_args
+            self.assertEqual(promotion_args[0], "PE3_final_ensemble")
+            self.assertEqual(
+                promotion_args[1]["experiments"]["PE3_cap_140"]["feature_set"],
+                "screened_signal_union",
+            )
+            self.assertEqual(promotion_kwargs, {"force": False})
+            self.assertTrue(
+                (
+                    test_root
+                    / "runs"
+                    / "PE_run_3"
+                    / "workflow"
+                    / "selection_manifest.json"
+                ).is_file()
+            )
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
+
+    def test_promoted_ensemble_contract_is_frozen_from_workflow_selection(self) -> None:
+        contract, source, _ = promote_calibrated_ensemble._selected_contract(
+            self.config,
+            "PE3_final_ensemble",
+        )
+        self.assertEqual(
+            contract["selected_candidate"],
+            "ensemble:blend_xgb_0.50__calibrated",
+        )
+        self.assertEqual(contract["component_families"], ["extra_trees", "xgboost"])
+        self.assertEqual(contract["xgboost_weight"], 0.5)
+        self.assertEqual(contract["feature_set"], "screened_drift_pruned")
+        self.assertEqual(contract["target_profile"], "capped_125")
+        self.assertFalse(contract["locked_results_used_for_selection"])
+        self.assertEqual(source["phase_2_scope"], "selection_only")
 
     def test_pipeline_phase3_settings_reference_experiment_phase2_root(self) -> None:
         experiment = copy.deepcopy(
