@@ -1,0 +1,1049 @@
+# Pipeline-experiment-owned Phase 2 configuration. The pipeline experiment
+# manager reads this file; the standalone Phase 2 workflow does not. Named
+# experiment values and observed Phase 1 artifact facts are resolved into the
+# generated settings under 2_architecture_experiments/1_pipeline_experiments/runs/<experiment>/phase2/.
+#
+# Live training progress: in a second PowerShell terminal at the repository
+# root run tensorboard_monitoring\launch_tensorboard.py, then open the printed
+# address, normally http://localhost:6006
+
+# Placeholder identity required by the shared Phase 2 schema. Each named
+# pipeline experiment supplies its actual settings version and run number.
+settings_version = 1    # Options: any positive integer
+
+run_number = 1    # Options: any positive integer
+
+[execution]
+# Step 5/6 studies run at once, each a subprocess; the one performance-only
+# knob here, so --max-workers may override it without editing this file.
+max_workers = 6    # Options: "auto", or any positive integer
+
+[study]
+# Architectures in the comparison. Every name in the three lists below needs an
+# [architectures.*] table and must appear in exactly one list.
+architectures_to_run = [    # Options: any declared architecture name
+    "mean_baseline",
+    "cycle_only_baseline",
+    "regularized_linear",
+    "random_forest",
+    "extra_trees",
+    "hist_gradient_boosting",
+    "xgboost",
+    "catboost",
+    "mlp",
+    "tcn",
+    "multiscale_cnn",
+    "sensor_graph_tcn",
+    "lstm",
+]
+# Held back on a prerequisite, not on results: promote the transformer once TCN
+# and LSTM prove out, since 100 UAVs make attention an overfitting risk.
+conditional_architectures = ["transformer"]    # Options: any declared name
+# Neither required nor gated, added only if a question stays open or time allows.
+optional_architectures = ["rbf_svr", "trajectory_dtw_knn"]    # Options: any declared name
+
+[study.enabled]
+# The single on/off switch per architecture; false drops it from the run and
+# nothing else changes. Every name in the three [study] lists appears once here.
+# Options: true, false.
+mean_baseline = true
+cycle_only_baseline = false
+regularized_linear = false
+random_forest = true
+extra_trees = true
+hist_gradient_boosting = false
+xgboost = true
+catboost = false
+mlp = false
+tcn = true
+multiscale_cnn = true
+sensor_graph_tcn = true
+lstm = false
+transformer = false
+rbf_svr = false
+trajectory_dtw_knn = true
+# Saving every architecture's results and never declaring a winner are fixed
+# pipeline behaviors with nothing to configure.
+
+[tuning]
+# Candidate configurations Optuna tries per tunable family; the two baselines
+# have nothing to tune and always use one.
+candidate_budget_per_architecture = 50    # Options: any positive integer
+# Seed making candidate generation repeatable.
+search_seed = 13    # Options: any integer
+# Seeds quantifying run-to-run variation, one retraining run each for the
+# stochastic families (random_forest, extra_trees, xgboost, catboost, mlp,
+# tcn, multiscale_cnn, sensor_graph_tcn, lstm, transformer).
+retraining_seeds = [13, 37, 73]    # Options: any list of distinct integers
+# Early-stopped models retrain for the median best iteration found in the inner
+# folds, so training duration never looks at outer validation targets.
+
+[evaluation]
+# Metrics for every architecture and group; RMSE is the tuning objective and
+# the rest are never combined into an automatic ranking score.
+metrics = [
+    "r2",
+    "rmse",
+    "mae",
+    "bias",
+    "overprediction_rate",
+    "mean_overprediction",
+    "root_mean_squared_overprediction",
+    "underprediction_rate",
+    "mean_underprediction",
+]    # Options: the supported regression and one-sided safety metrics
+# Breakdowns reported alongside the overall result.
+reported_groups = [    # Options: any subset of the five below
+    "overall",
+    "scenario",
+    "outer_fold",
+    "age_band",
+    "lifetime_quantile",
+    "rul_band",
+]
+# Floor on reported predictions, since remaining useful life cannot be negative.
+prediction_minimum = 0.0    # Options: any float
+# Bootstrap resamples for confidence intervals, resampling whole UAVs so
+# prefixes from one vehicle stay together.
+bootstrap_repetitions = 1000    # Options: any positive integer
+# Seed making the bootstrap repeatable.
+bootstrap_seed = 20260814    # Options: any integer
+
+[target]
+# Raw RUL remains the evaluation target. This section controls only the target
+# supplied while fitting a model.
+mode = "raw"    # Options: "raw", "piecewise_cap", "failure_cycle"
+# maximum_rul is required for piecewise_cap and omitted for other modes.
+
+[prediction_policy]
+# Conservative fitting and prediction settings. The neutral values below
+# reproduce all existing runs.
+loss = "symmetric_rmse"    # Options: "symmetric_rmse", "asymmetric_mse", "quantile"
+overprediction_weight = 1.0    # Above 1 only for asymmetric_mse
+quantile = 0.5    # Below 0.5 only for quantile loss
+calibration = "none"    # Options: "none", "fixed_offset"
+safety_offset = 0.0    # Positive only for fixed_offset calibration
+non_overprediction_coverage = 0.5    # Recorded calibration target
+
+[representations]
+# Feature sets available to tabular architectures; each architecture's own
+# "feature_sets" must be a subset of this.
+tabular_feature_sets = [    # Options: names declared by the selected Phase 1 catalog
+    "age_only",
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+# Telemetry channels sequence models receive; must equal the list length below.
+sequence_channel_count = 22    # Options: any positive integer
+# The channels kept after Phase 0 screening, listed explicitly so later code
+# never depends on CSV column order.
+sequence_channels = [    # Options: any list of unique channel names
+    "telemetry_01",
+    "telemetry_02",
+    "telemetry_04",
+    "telemetry_05",
+    "telemetry_06",
+    "telemetry_07",
+    "telemetry_09",
+    "telemetry_10",
+    "telemetry_11",
+    "telemetry_12",
+    "telemetry_13",
+    "telemetry_15",
+    "telemetry_16",
+    "telemetry_18",
+    "telemetry_19",
+    "telemetry_21",
+    "telemetry_22",
+    "telemetry_23",
+    "telemetry_24",
+    "telemetry_25",
+    "telemetry_26",
+    "telemetry_28",
+]
+# History-window lengths in flight cycles every sequence model is compared at;
+# shorter histories are padded on the left and marked by a mask.
+sequence_lookbacks = [50, 100]    # Options: any list of positive integers
+# Age features sent alongside telemetry, because a fixed window alone does not
+# say where the UAV is in its lifetime.
+sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]    # Options: any subset of these two
+
+[preprocessing]
+# Architectures receiving robust median/IQR scaled tabular inputs.
+scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]    # Options: any architecture names
+# Architectures receiving unscaled values, since split ordering needs no scaling.
+unscaled_tree_architectures = ["random_forest", "extra_trees", "hist_gradient_boosting", "xgboost", "catboost"]    # Options: any architecture names
+# Every fitted statistic comes only from the current fold's training UAVs;
+# validation UAVs are transformed but never influence a median or IQR.
+
+[neural_training]
+# Shared by every PyTorch family so their comparison never uses different
+# optimization policies.
+# Training examples per gradient step.
+batch_size = 64    # Options: any positive integer
+# Hard ceiling on epochs regardless of early stopping.
+maximum_epochs = 400    # Options: any positive integer
+# Epochs to wait for a validation improvement before stopping early.
+early_stopping_patience = 20    # Options: any positive integer
+# Maximum global gradient norm allowed before clipping.
+gradient_clip_global_norm = 1.0    # Options: any positive float
+
+# Architectures ==============================================================
+# Each [architectures.*] table declares:
+#   status          Options: "included", "conditional", "optional" (must match
+#                   the [study] list the name appears in)
+#   representation  Options: "none", "tabular", "sequence", "trajectory" (decides whether
+#                   "feature_sets" or "lookbacks" applies)
+#   feature_sets    Options: any subset of [representations].tabular_feature_sets
+#   lookbacks       Options: any subset of [representations].sequence_lookbacks
+#   variants        Options: the exact set the verifier requires per family
+#
+# Each [architectures.*.search.*] table declares one tunable hyperparameter as a
+# "kind" plus its matching fields:
+#   fixed                          value
+#   categorical                    values
+#   categorical_integer_sequences  values (a list of integer lists)
+#   integer_range                  low, high, optionally step
+#   uniform                        low, high
+#   log_uniform                    low, high
+
+# Predicts one constant, so it needs no model input at all.
+[architectures.mean_baseline]
+status = "included"
+representation = "none"
+variants = ["mean"]
+
+# Predicts from UAV age alone, the simplest reference using any input.
+[architectures.cycle_only_baseline]
+status = "included"
+representation = "tabular"
+feature_sets = ["age_only"]
+variants = ["weighted_linear"]
+
+# Ridge and Elastic Net, the linear reference against the nonlinear families.
+[architectures.regularized_linear]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["ridge", "elastic_net"]
+
+# Which variant is fitted; the choice activates either the ridge penalty or
+# both Elastic Net parameters, and the inactive ones are ignored.
+[architectures.regularized_linear.search.variant]
+kind = "categorical"
+values = ["ridge", "elastic_net"]
+
+# Ridge penalty strength.
+[architectures.regularized_linear.search.ridge_alpha]
+kind = "log_uniform"
+low = 1e-4
+high = 1e4
+
+# Elastic Net overall penalty strength.
+[architectures.regularized_linear.search.elastic_net_alpha]
+kind = "log_uniform"
+low = 1e-2
+high = 1e2
+
+# Elastic Net balance between the L1 and L2 penalties.
+[architectures.regularized_linear.search.elastic_net_l1_ratio]
+kind = "categorical"
+values = [0.05, 0.2, 0.5, 0.8, 0.95]
+
+# Bagged decision trees, the first nonlinear tabular reference.
+[architectures.random_forest]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["random_forest"]
+
+# Trees in the forest.
+[architectures.random_forest.search.n_estimators]
+kind = "fixed"
+value = 500
+
+# Maximum tree depth; "none" is a portable sentinel the adapter turns into
+# Python "None", because TOML has no null value.
+[architectures.random_forest.search.max_depth]
+kind = "categorical"
+values = ["none", 5, 10, 20]
+
+# Minimum training samples required in a leaf.
+[architectures.random_forest.search.min_samples_leaf]
+kind = "categorical"
+values = [1, 2, 5, 10]
+
+# Fraction of features considered at each split.
+[architectures.random_forest.search.max_features]
+kind = "categorical"
+values = [0.15, 0.2, 0.33, 0.67, 1.0]
+
+# Extremely randomized trees isolate the effect of random split thresholds
+# while retaining the Random Forest capacity controls and tabular inputs.
+[architectures.extra_trees]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["extra_trees"]
+
+[architectures.extra_trees.search.n_estimators]
+kind = "fixed"
+value = 500
+
+[architectures.extra_trees.search.max_depth]
+kind = "categorical"
+values = ["none", 5, 10, 20]
+
+[architectures.extra_trees.search.min_samples_leaf]
+kind = "categorical"
+values = [1, 2, 5, 10]
+
+[architectures.extra_trees.search.max_features]
+kind = "categorical"
+values = [0.15, 0.2, 0.33, 0.67, 1.0]
+
+[architectures.extra_trees.search.fault_mode_strategy]
+kind = "fixed"
+value = "none"
+
+[architectures.extra_trees.search.signal_compression_strategy]
+kind = "fixed"
+value = "none"
+
+# Histogram-based boosting provides a fast, regularized tree challenger without
+# adding another third-party dependency.
+[architectures.hist_gradient_boosting]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["hist_gradient_boosting"]
+
+[architectures.hist_gradient_boosting.search.max_iter]
+kind = "categorical"
+values = [100, 200, 400, 800]
+
+[architectures.hist_gradient_boosting.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.2
+
+[architectures.hist_gradient_boosting.search.max_leaf_nodes]
+kind = "categorical"
+values = [7, 15, 31, 63]
+
+[architectures.hist_gradient_boosting.search.max_depth]
+kind = "categorical"
+values = ["none", 3, 5, 8]
+
+[architectures.hist_gradient_boosting.search.min_samples_leaf]
+kind = "categorical"
+values = [5, 10, 20, 40]
+
+[architectures.hist_gradient_boosting.search.l2_regularization]
+kind = "log_uniform"
+low = 1e-6
+high = 100.0
+
+# Gradient-boosted trees, the second nonlinear tabular reference.
+[architectures.xgboost]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["xgboost"]
+# Boosting rounds without improvement before stopping; this family stops on
+# rounds, so it ignores [neural_training].early_stopping_patience.
+early_stopping_patience = 35    # Options: any positive integer
+
+# Ceiling on boosting rounds, set high because early stopping usually ends
+# training well before it.
+[architectures.xgboost.search.maximum_trees]
+kind = "fixed"
+value = 1500
+
+# Shrinkage applied to each boosting round's contribution.
+[architectures.xgboost.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.2
+
+# Maximum depth of each boosted tree.
+[architectures.xgboost.search.max_depth]
+kind = "categorical"
+values = [2, 3, 4, 6, 8]
+
+# Minimum summed instance weight required in a child node.
+[architectures.xgboost.search.min_child_weight]
+kind = "log_uniform"
+low = 0.5
+high = 20.0
+
+# Fraction of training rows sampled per boosting round.
+[architectures.xgboost.search.subsample]
+kind = "uniform"
+low = 0.6
+high = 1.0
+
+# Fraction of features sampled per tree.
+[architectures.xgboost.search.colsample_bytree]
+kind = "uniform"
+low = 0.5
+high = 1.0
+
+# L1 regularization on leaf weights.
+[architectures.xgboost.search.reg_alpha]
+kind = "log_uniform"
+low = 1e-8
+high = 10.0
+
+# L2 regularization on leaf weights.
+[architectures.xgboost.search.reg_lambda]
+kind = "log_uniform"
+low = 1e-3
+high = 100.0
+
+[architectures.xgboost.search.fault_mode_strategy]
+kind = "fixed"
+value = "none"
+
+[architectures.xgboost.search.signal_compression_strategy]
+kind = "fixed"
+value = "none"
+
+# CatBoost provides a second regularized boosting mechanism over the same
+# numerical engineered features. CPU execution is fixed for reproducibility.
+[architectures.catboost]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["catboost"]
+early_stopping_patience = 35
+
+[architectures.catboost.search.maximum_trees]
+kind = "fixed"
+value = 1000
+
+[architectures.catboost.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.2
+
+[architectures.catboost.search.depth]
+kind = "categorical"
+values = [4, 6, 8]
+
+[architectures.catboost.search.l2_leaf_reg]
+kind = "log_uniform"
+low = 1e-2
+high = 100.0
+
+[architectures.catboost.search.random_strength]
+kind = "log_uniform"
+low = 1e-3
+high = 10.0
+
+[architectures.catboost.search.bagging_temperature]
+kind = "uniform"
+low = 0.0
+high = 1.0
+
+[architectures.catboost.search.rsm]
+kind = "uniform"
+low = 0.5
+high = 1.0
+
+# "Ordered" was measured in run 4 at ~1662 s per inner-fold fit against ~35 s
+# for "Plain" (47x), rising to 3112 s mean and 5177 s worst case at depth 10,
+# because ordered boosting fits one model per permutation and this family is
+# pinned to thread_count = 1 for determinism. Five ordered candidates consumed
+# 97.5% of the family's compute for a best inner RMSE of 29.19 against 29.37
+# for plain: a 0.6% gain for 47x the cost. Ordered boosting targets small data
+# with categorical features; all 606 features here are numeric, so the leakage
+# it guards against does not apply. Fixed to "Plain" on that measurement.
+[architectures.catboost.search.boosting_type]
+kind = "fixed"
+value = "Plain"
+
+# Feed-forward network on the same engineered rows the tree models use.
+[architectures.mlp]
+status = "included"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["mlp"]
+
+# Hidden-layer layout; each nested list is one architecture, so [128, 64] means
+# two layers of 128 then 64 units.
+[architectures.mlp.search.hidden_layers]
+kind = "categorical_integer_sequences"
+values = [[64], [128, 64], [256, 128], [512, 256], [512, 256, 128]]
+
+# Dropout probability after each hidden layer.
+[architectures.mlp.search.dropout]
+kind = "uniform"
+low = 0.0
+high = 0.5
+
+# Adam learning rate.
+[architectures.mlp.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.mlp.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Temporal convolutional network over raw telemetry windows.
+[architectures.tcn]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["tcn"]
+
+# Stacked residual blocks, which together set the temporal receptive field.
+[architectures.tcn.search.residual_blocks]
+kind = "categorical"
+values = [3, 4, 5]
+
+# Convolution channels per residual block.
+[architectures.tcn.search.channels]
+kind = "categorical"
+values = [32, 64, 128]
+
+# Width of each causal convolution kernel.
+[architectures.tcn.search.kernel_size]
+kind = "categorical"
+values = [5, 7]
+
+# Dilation growth per block, fixed at doubling so the receptive field expands
+# while the search space stays compact.
+[architectures.tcn.search.dilation_base]
+kind = "fixed"
+value = 2
+
+# Dropout probability inside each residual block.
+[architectures.tcn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.tcn.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.tcn.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Parallel causal convolutions summarize degradation patterns at several
+# temporal scales without changing the existing sequence representation.
+[architectures.multiscale_cnn]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["multiscale_cnn"]
+
+# Width produced by each parallel temporal branch.
+[architectures.multiscale_cnn.search.branch_channels]
+kind = "categorical"
+values = [16, 32, 64]
+
+# The three kernel widths used together by one candidate. All choices are odd
+# so causal padding has an unambiguous temporal center and preserved length.
+[architectures.multiscale_cnn.search.kernel_sizes]
+kind = "categorical_integer_sequences"
+values = [[3, 5, 9], [3, 7, 15], [5, 11, 21]]
+
+# Dropout inside the branches and regression head.
+[architectures.multiscale_cnn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.multiscale_cnn.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.multiscale_cnn.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# A fold-fitted sensor-correlation graph mixes telemetry channels before a
+# causal temporal convolutional stack models degradation over time.
+[architectures.sensor_graph_tcn]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["sensor_graph_tcn"]
+
+# Hidden feature width retained for each sensor node.
+[architectures.sensor_graph_tcn.search.graph_hidden]
+kind = "categorical"
+values = [8, 16, 32]
+
+# Consecutive graph message-passing layers at each time step.
+[architectures.sensor_graph_tcn.search.graph_layers]
+kind = "categorical"
+values = [1, 2]
+
+# Strongest absolute-correlation neighbours retained per sensor before the
+# graph is symmetrized and normalized.
+[architectures.sensor_graph_tcn.search.graph_neighbors]
+kind = "categorical"
+values = [3, 5, 8]
+
+# Dilated residual blocks used after graph feature extraction.
+[architectures.sensor_graph_tcn.search.temporal_blocks]
+kind = "categorical"
+values = [2, 3, 4]
+
+# Width of every temporal residual block.
+[architectures.sensor_graph_tcn.search.temporal_channels]
+kind = "categorical"
+values = [32, 64]
+
+# Width of each causal temporal convolution.
+[architectures.sensor_graph_tcn.search.kernel_size]
+kind = "categorical"
+values = [3, 5]
+
+# Dropout in graph and temporal layers.
+[architectures.sensor_graph_tcn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.sensor_graph_tcn.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.sensor_graph_tcn.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Recurrent network over the same telemetry windows the TCN receives.
+[architectures.lstm]
+status = "included"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["lstm"]
+
+# Stacked recurrent layers.
+[architectures.lstm.search.layers]
+kind = "categorical"
+values = [1, 2, 3]
+
+# Hidden state size per layer.
+[architectures.lstm.search.hidden_units]
+kind = "categorical"
+values = [32, 64, 128]
+
+# Recurrence direction, fixed unidirectional so only past and current
+# observations can influence a prediction.
+[architectures.lstm.search.direction]
+kind = "fixed"
+value = "unidirectional"
+
+# Dropout probability between recurrent layers.
+[architectures.lstm.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.lstm.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.lstm.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Disabled extensions stay fully specified, so enabling one is a deliberate
+# one-line change in [study.enabled] against a documented search space.
+
+# Attention encoder over telemetry windows, held back until TCN and LSTM prove
+# out because 100 UAVs make attention an overfitting risk.
+[architectures.transformer]
+status = "conditional"
+representation = "sequence"
+lookbacks = [50, 100]
+variants = ["transformer_encoder"]
+
+# Stacked encoder layers.
+[architectures.transformer.search.encoder_layers]
+kind = "categorical"
+values = [1, 2, 3]
+
+# Model embedding width.
+[architectures.transformer.search.model_width]
+kind = "categorical"
+values = [32, 64, 128]
+
+# Parallel attention heads per encoder layer.
+[architectures.transformer.search.attention_heads]
+kind = "categorical"
+values = [2, 4, 8]
+
+# Feed-forward block width as a multiple of the model width.
+[architectures.transformer.search.feed_forward_ratio]
+kind = "categorical"
+values = [2, 4]
+
+# How time-step order is encoded.
+[architectures.transformer.search.position_encoding]
+kind = "fixed"
+value = "sinusoidal"
+
+# Dropout probability inside each encoder layer.
+[architectures.transformer.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.5
+
+# Adam learning rate.
+[architectures.transformer.search.learning_rate]
+kind = "log_uniform"
+low = 1e-4
+high = 1e-2
+
+# L2 weight decay applied by the optimizer.
+[architectures.transformer.search.weight_decay]
+kind = "log_uniform"
+low = 1e-6
+high = 1e-2
+
+# Kernel support vector regression, an extra nonlinear reference.
+[architectures.rbf_svr]
+status = "optional"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["rbf_svr"]
+
+# Penalty on training errors, trading margin width against training fit.
+[architectures.rbf_svr.search.c]
+kind = "log_uniform"
+low = 1e-2
+high = 1e3
+
+# Width of the radial basis kernel.
+[architectures.rbf_svr.search.gamma]
+kind = "log_uniform"
+low = 1e-5
+high = 1.0
+
+# Half-width of the tube inside which errors cost nothing.
+[architectures.rbf_svr.search.epsilon]
+kind = "log_uniform"
+low = 1e-3
+high = 10.0
+
+# Similarity-based trajectory retrieval using constrained multivariate DTW.
+# All values are fixed for the first architecture-study implementation so this
+# deterministic reference model contributes one candidate per outer fold.
+[architectures.trajectory_dtw_knn]
+status = "optional"
+representation = "trajectory"
+variants = ["dtw_knn"]
+
+[architectures.trajectory_dtw_knn.search.neighbors]
+kind = "fixed"
+value = 5
+
+[architectures.trajectory_dtw_knn.search.reference_pool_size]
+kind = "fixed"
+value = 20
+
+[architectures.trajectory_dtw_knn.search.max_points]
+kind = "fixed"
+value = 48
+
+[architectures.trajectory_dtw_knn.search.warping_window]
+kind = "fixed"
+value = 8
+
+[architectures.trajectory_dtw_knn.search.distance_power]
+kind = "fixed"
+value = 1.0
+
+# Phase 1 inputs =============================================================
+# Phase 2 consumes the folds, prefix samples, features, preprocessing and
+# metric definitions already built in Phase 1. Paths stay relative to the
+# repository root so the project is portable. No hashes or frozen copies are
+# used; the verifier checks the interface Phase 2 needs: existence, dimensions,
+# required fields, critical values, leakage assertions and cross-file agreement.
+#
+# Each [phase_1.artifacts.*] table declares:
+#   path                  Options: any repository-relative path
+#   format                Options: "csv", "json"
+#   rows, total_columns   Options: any non-negative integer (csv)
+#   feature_columns       Options: any non-negative integer (csv feature tables)
+#   required_columns      Options: any list of column names (csv)
+#   required_json_keys    Options: any list of top-level keys (json)
+# A nested [*.required_json_values] table lists scalars that must match exactly;
+# other metadata in those files may change freely.
+
+[phase_1]
+# Expected quantities from the dataset-construction protocol; a mismatch means
+# Phase 1 changed and these settings need review. Prefix policies declare either
+# expected_prefixes_per_training_uav or both minimum/maximum bounds. Options:
+# any positive integer.
+expected_training_uavs = 100
+expected_outer_folds = 5
+expected_inner_folds_per_outer_fold = 4
+expected_development_scenarios = 5
+expected_locked_scenarios = 20
+expected_prefixes_per_training_uav = 20
+expected_generated_features = 1288
+
+[phase_1.expected_feature_sets]
+# "feature__*" column count in each named feature set. Options: positive integer.
+age_only = 2
+screened_v1 = 310
+screened_drift_pruned = 298
+screened_drift_replaced = 342
+
+# The Phase 1 leakage-check report, whose passed status gates everything else.
+[phase_1.artifacts.verification_report]
+path = "1_dataset_construction/runs/FE_run_2/current20/10_automated_leakage_checks/artifacts/verification_report.json"
+format = "json"
+required_json_keys = ["status", "assertions", "feature_files", "feature_sets"]
+
+[phase_1.artifacts.verification_report.required_json_values]
+status = "passed"
+development_scenarios = 5
+locked_scenarios = 20
+
+# How the UAV-grouped outer and inner folds were generated.
+[phase_1.artifacts.fold_config]
+path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/fold_config.json"
+format = "json"
+required_json_keys = ["group_key", "outer_folds", "inner_folds", "seed"]
+
+[phase_1.artifacts.fold_config.required_json_values]
+group_key = "uav_id"
+outer_folds = 5
+inner_folds = 4
+
+# Outer-fold assignment for every training UAV.
+[phase_1.artifacts.outer_folds]
+path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+format = "csv"
+rows = 100
+total_columns = 6
+required_columns = [
+    "uav_id",
+    "row_count",
+    "final_cycle",
+    "terminal_lifetime",
+    "lifetime_quantile",
+    "outer_fold",
+]
+
+# Inner-fold assignment within each outer fold.
+[phase_1.artifacts.inner_folds]
+path = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/inner_folds.csv"
+format = "csv"
+rows = 400
+total_columns = 7
+required_columns = [
+    "outer_fold",
+    "uav_id",
+    "row_count",
+    "final_cycle",
+    "terminal_lifetime",
+    "lifetime_quantile",
+    "inner_fold",
+]
+
+# How the test-like cutoff scenarios were generated.
+[phase_1.artifacts.scenario_config]
+path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/scenario_config.json"
+format = "json"
+required_json_keys = [
+    "cutoff_source",
+    "development_scenarios",
+    "locked_scenarios",
+    "seed",
+    "terminal_training_cutoffs_excluded",
+]
+
+[phase_1.artifacts.scenario_config.required_json_values]
+development_scenarios = 5
+locked_scenarios = 20
+terminal_training_cutoffs_excluded = true
+
+# Development scenario endpoints, the only ones Step 5 may score against.
+[phase_1.artifacts.development_scenarios]
+path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/development_validation_scenarios.csv"
+format = "csv"
+rows = 500
+total_columns = 8
+required_columns = [
+    "sample_id",
+    "scenario",
+    "outer_fold",
+    "uav_id",
+    "cutoff",
+    "RUL",
+    "terminal_lifetime",
+    "lifetime_quantile",
+]
+
+# Locked scenario endpoints, opened only after the Step 5 gate passes.
+[phase_1.artifacts.locked_scenarios]
+path = "1_dataset_construction/3_test_like_validation_scenarios/artifacts/locked_validation_scenarios.csv"
+format = "csv"
+rows = 2000
+total_columns = 8
+required_columns = [
+    "sample_id",
+    "scenario",
+    "outer_fold",
+    "uav_id",
+    "cutoff",
+    "RUL",
+    "terminal_lifetime",
+    "lifetime_quantile",
+]
+
+# How the training prefix samples and their weights were generated.
+[phase_1.artifacts.training_prefix_config]
+path = "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefix_config.json"
+format = "json"
+required_json_keys = [
+    "cutoff_source",
+    "cutoffs_per_uav",
+    "equal_total_weight_per_uav",
+    "seed",
+]
+
+[phase_1.artifacts.training_prefix_config.required_json_values]
+cutoffs_per_uav = 20
+equal_total_weight_per_uav = true
+
+# Training prefix samples with the weights that equalize UAV influence.
+[phase_1.artifacts.training_prefixes]
+path = "1_dataset_construction/runs/FE_run_2/current20/4_training_prefixes/artifacts/training_prefixes.csv"
+format = "csv"
+rows = 2000
+total_columns = 6
+required_columns = [
+    "sample_id",
+    "uav_id",
+    "prefix_number",
+    "cutoff",
+    "RUL",
+    "sample_weight",
+]
+
+# Engineered features for the training prefixes.
+[phase_1.artifacts.training_features]
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/training_features.csv.gz"
+format = "csv"
+rows = 2000
+total_columns = 1294
+feature_columns = 1288
+required_columns = [
+    "sample_id",
+    "uav_id",
+    "prefix_number",
+    "cutoff",
+    "RUL",
+    "sample_weight",
+]
+
+# Engineered features for the development scenario endpoints.
+[phase_1.artifacts.development_features]
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+format = "csv"
+rows = 500
+total_columns = 1296
+feature_columns = 1288
+required_columns = [
+    "sample_id",
+    "scenario",
+    "outer_fold",
+    "uav_id",
+    "cutoff",
+    "RUL",
+    "terminal_lifetime",
+    "lifetime_quantile",
+]
+
+# Engineered features for the locked scenario endpoints.
+[phase_1.artifacts.locked_features]
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/locked_validation_features.csv.gz"
+format = "csv"
+rows = 2000
+total_columns = 1296
+feature_columns = 1288
+required_columns = [
+    "sample_id",
+    "scenario",
+    "outer_fold",
+    "uav_id",
+    "cutoff",
+    "RUL",
+    "terminal_lifetime",
+    "lifetime_quantile",
+]
+
+# Engineered features for the held-out test endpoints, which Phase 2 never opens.
+[phase_1.artifacts.test_features]
+path = "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/test_features.csv.gz"
+format = "csv"
+rows = 100
+total_columns = 1291
+feature_columns = 1288
+required_columns = ["sample_id", "uav_id", "cutoff"]
+
+# Which generated feature belongs to which named feature set.
+[phase_1.artifacts.feature_catalog]
+path = "1_dataset_construction/runs/FE_run_2/current20/6_feature_sets/artifacts/feature_catalog.csv"
+format = "csv"
+rows = 1288
+total_columns = 9
+required_columns = [
+    "feature_name",
+    "channel",
+    "channel_role",
+    "statistic",
+    "window",
+    "age_only",
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+
+# How fold-fitted preprocessing was defined in Phase 1.
+[phase_1.artifacts.preprocessing_config]
+path = "1_dataset_construction/runs/FE_run_2/current20/7_fold_fitted_preprocessing/artifacts/preprocessing_config.json"
+format = "json"
+required_json_keys = ["feature_counts", "fit_scope", "outer_folds", "scaling"]
+
+[phase_1.artifacts.preprocessing_config.required_json_values]
+outer_folds = 5
+
+# The Phase 1 metric definition that Phase 2 reporting must agree with.
+[phase_1.artifacts.metric_specification]
+path = "1_dataset_construction/8_validation_metrics/artifacts/metric_specification.json"
+format = "json"
+required_json_keys = ["metrics", "prediction_unit", "reported_groups", "uncertainty"]

@@ -15,7 +15,7 @@ import pandas as pd
 
 PHASE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PHASE_DIR.parent
-PHASE_2_DIR = REPOSITORY_ROOT / "2_model_architecture_study"
+PHASE_2_DIR = REPOSITORY_ROOT / "2_architecture_experiments" / "2_model_architecture_study"
 for dependency_dir in (
     PHASE_DIR,
     PHASE_DIR / "1_winning_architecture_selection",
@@ -115,8 +115,18 @@ def _verify_settings_and_selection() -> tuple[int, str]:
         "Current TOML differs from the resolved Step 1 settings",
     )
     resolved = load_resolved_phase_3_settings(settings.run_number)
+    expected_resolved = settings.model_dump(mode="json", exclude_none=True)
+    if settings.selected_model_family == "calibrated_tree_blend":
+        promoted_specification = resolved.get("phase_2_specification")
+        _require(
+            isinstance(promoted_specification, str)
+            and Path(promoted_specification).name
+            == "promoted_phase_2_specification.json",
+            "Promoted ensemble did not resolve its generated Phase 2 specification",
+        )
+        expected_resolved["phase_2_specification"] = promoted_specification
     _require(
-        resolved == settings.model_dump(mode="json", exclude_none=True),
+        resolved == expected_resolved,
         "Resolved settings do not reproduce the validated TOML",
     )
     _require(

@@ -12,6 +12,7 @@ import pandas as pd
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 COMPARISON_DIR = (
     REPOSITORY_ROOT
+    / "2_architecture_experiments"
     / "2_model_architecture_study"
     / "7_architecture_comparison"
 )

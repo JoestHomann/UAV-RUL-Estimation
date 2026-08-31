@@ -9,11 +9,24 @@ import pandas as pd
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-ADAPTER_ROOT = REPOSITORY_ROOT / "2_model_architecture_study" / "4_model_adapters"
-TABULAR_ADAPTER_ROOT = (
-    REPOSITORY_ROOT / "2_model_architecture_study" / "2_tabular_data_adapter"
+ADAPTER_ROOT = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+    / "4_model_adapters"
 )
-MONITORING_ROOT = REPOSITORY_ROOT / "2_model_architecture_study" / "tensorboard_monitoring"
+TABULAR_ADAPTER_ROOT = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+    / "2_tabular_data_adapter"
+)
+MONITORING_ROOT = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+    / "tensorboard_monitoring"
+)
 for path in (ADAPTER_ROOT, TABULAR_ADAPTER_ROOT, MONITORING_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))

@@ -16,7 +16,11 @@ from phase_3_run_layout import PHASE_DIR, read_run_number, run_root, step_direct
 
 
 REPOSITORY_ROOT = PHASE_DIR.parent
-PHASE_2_DIR = REPOSITORY_ROOT / "2_model_architecture_study"
+PHASE_2_DIR = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+)
 PHASE_2_SPECIFICATION_PATH = (
     PHASE_2_DIR
     / "1_architecture_study_settings"
@@ -26,6 +30,49 @@ PHASE_2_SPECIFICATION_PATH = (
 PHASE_2_MODEL_REGISTRY_PATH = (
     PHASE_2_DIR / "4_model_adapters" / "artifacts" / "model_registry.json"
 )
+
+MOVED_REPOSITORY_PREFIXES = {
+    "pipeline_experiments": Path(
+        "2_architecture_experiments/1_pipeline_experiments"
+    ),
+    "2_model_architecture_study": Path(
+        "2_architecture_experiments/2_model_architecture_study"
+    ),
+}
+
+
+def canonicalize_relocated_paths(value: Any) -> Any:
+    """Normalize legacy Phase 2 path prefixes without changing other settings."""
+
+    if isinstance(value, dict):
+        return {
+            key: canonicalize_relocated_paths(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [canonicalize_relocated_paths(item) for item in value]
+    if not isinstance(value, str):
+        return value
+    supplied = Path(value)
+    if not supplied.parts:
+        return value
+    replacement = MOVED_REPOSITORY_PREFIXES.get(supplied.parts[0])
+    if replacement is None:
+        return value
+    return replacement.joinpath(*supplied.parts[1:]).as_posix()
+
+
+def repository_path(value: str) -> Path:
+    """Resolve a current path or a legacy path stored before Phase 2 moved."""
+
+    supplied = Path(value)
+    direct = (REPOSITORY_ROOT / supplied).resolve()
+    if direct.exists() or not supplied.parts:
+        return direct
+    replacement = MOVED_REPOSITORY_PREFIXES.get(supplied.parts[0])
+    if replacement is None:
+        return direct
+    return (REPOSITORY_ROOT / replacement.joinpath(*supplied.parts[1:])).resolve()
 
 
 def configured_repository_path(
@@ -40,7 +87,7 @@ def configured_repository_path(
         return default.resolve()
     if not isinstance(value, str) or not value:
         raise Phase3Error(f"{field} must be a non-empty repository-relative path")
-    path = (REPOSITORY_ROOT / value).resolve()
+    path = repository_path(value)
     try:
         path.relative_to(REPOSITORY_ROOT.resolve())
     except ValueError as error:
@@ -241,7 +288,7 @@ def load_resolved_phase_3_settings(run_number: int) -> dict[str, Any]:
         raise Phase3Error("Resolved Phase 3 settings have no settings object")
     if settings.get("run_number") != run_number:
         raise Phase3Error("Resolved Phase 3 settings identify another run")
-    return settings
+    return canonicalize_relocated_paths(settings)
 
 
 def require_current_settings(settings_path: Path) -> int:
@@ -263,7 +310,7 @@ def require_current_settings(settings_path: Path) -> int:
     resolved = resolved_payload.get("source_settings", resolved_payload.get("settings"))
     if not isinstance(resolved, dict):
         raise Phase3Error("Resolved Phase 3 settings have no settings object")
-    if current != resolved:
+    if canonicalize_relocated_paths(current) != canonicalize_relocated_paths(resolved):
         raise Phase3Error(
             "Current Phase 3 settings differ from this run's resolved settings; "
             "restore the settings or start a new run"

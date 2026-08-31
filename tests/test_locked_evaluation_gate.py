@@ -11,6 +11,7 @@ import unittest
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 GATE_DIR = (
     REPOSITORY_ROOT
+    / "2_architecture_experiments"
     / "2_model_architecture_study"
     / "6_locked_outer_evaluation"
 )

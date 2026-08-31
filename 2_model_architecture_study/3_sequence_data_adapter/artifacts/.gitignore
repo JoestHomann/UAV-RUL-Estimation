@@ -1,4 +1,0 @@
-# Raw-data copies and generated sequence metadata remain local and reproducible.
-# Only this placeholder is tracked by Git.
-*
-!.gitignore

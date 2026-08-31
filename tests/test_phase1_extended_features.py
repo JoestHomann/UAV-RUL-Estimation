@@ -17,6 +17,7 @@ DIAGNOSTIC_ROOT = (
 )
 PHASE_2_SETTINGS_ROOT = (
     REPOSITORY_ROOT
+    / "2_architecture_experiments"
     / "2_model_architecture_study"
     / "1_architecture_study_settings"
 )

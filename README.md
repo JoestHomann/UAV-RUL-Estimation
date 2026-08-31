@@ -20,7 +20,7 @@ decision before any final tuning or test inference.
 | [data](data/) | Input | Raw training and test CSV files |
 | [0_data_analysis](0_data_analysis/) | Phase 0 | Broad and core telemetry analysis |
 | [1_dataset_construction](1_dataset_construction/) | Phase 1 | Leakage-safe folds, prefixes, features, and validation artifacts |
-| [2_model_architecture_study](2_model_architecture_study/) | Phase 2 | Model tuning, locked evaluation, and architecture comparison |
+| [2_architecture_experiments](2_architecture_experiments/) | Phase 2 | Reusable pipeline experiments and standalone model architecture studies |
 | [3_final_model_training_and_inference](3_final_model_training_and_inference/) | Phase 3 | Winner selection, final tuning and training, test inference, and submission verification |
 | [literature_and_planning](literature_and_planning/) | Documentation | Research notes and phase documentation |
 
@@ -46,7 +46,7 @@ Install the shared Phase 2 dependencies and SciPy, which is additionally used
 by Phase 0:
 
     .\.venv\Scripts\python.exe -m pip install --upgrade pip
-    .\.venv\Scripts\python.exe -m pip install -r 2_model_architecture_study\requirements.txt
+    .\.venv\Scripts\python.exe -m pip install -r 2_architecture_experiments\2_model_architecture_study\requirements.txt
     .\.venv\Scripts\python.exe -m pip install "scipy>=1.15,<2"
 
 Check that the intended interpreter is available:
@@ -145,20 +145,20 @@ folds, and creates the final architecture-comparison tables and figures.
 
 The status command is read-only and can be used at any time:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py --status
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py --status
 
 ### Run the complete phase
 
 Start TensorBoard in a second PowerShell terminal:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\tensorboard_monitoring\launch_tensorboard.py
 
 Open the printed address, normally "http://localhost:6006". The dashboard can
 be started before or during training and can be restarted independently.
 
 For a new Phase 2 run, execute:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py
 
 The entry point uses the same virtual-environment interpreter for every child
 step and stops immediately if a prerequisite, TensorBoard dependency, event
@@ -169,7 +169,7 @@ not require a command-line option.
 
 To continue from model tuning without rebuilding Steps 1–4:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py --from-step 5
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py --from-step 5
 
 Completed Step 5 family/fold studies are preserved. Step 6 also preserves
 complete family/fold evaluations; an interrupted stochastic family/fold is
@@ -177,18 +177,18 @@ rerun as one complete unit.
 
 If Step 5 is already complete and only locked evaluation and comparison remain:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py --from-step 6
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py --from-step 6
 
 To run only the preparation stages and stop before expensive tuning:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py --through-step 4
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py --through-step 4
 
 ### Force a complete expensive rerun
 
 The following command deliberately replaces completed Step 5 studies and Step
 6 evaluations:
 
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py --from-step 5 --force
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py --from-step 5 --force
 
 Use "--force" only when a complete rerun is genuinely intended.
 
@@ -209,7 +209,7 @@ The expensive work is checkpointed below the corresponding Step 5 and Step 6
 by Git but remain visible locally.
 
 More details are available in the
-[Phase 2 README](2_model_architecture_study/README.md).
+[Phase 2 README](2_architecture_experiments/2_model_architecture_study/README.md).
 
 ## Phase 3: Final model training and inference
 
@@ -255,7 +255,7 @@ For a clean execution, run these commands in order:
 
     .\.venv\Scripts\python.exe 0_data_analysis\core_data_analysis\run_all.py
     .\.venv\Scripts\python.exe 1_dataset_construction\run_all.py
-    .\.venv\Scripts\python.exe 2_model_architecture_study\run_phase_2.py
+    .\.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_phase_2.py
     .\.venv\Scripts\python.exe 3_final_model_training_and_inference\run_phase_3.py
 
 Broad Phase 0 descriptive plots are optional additions to the core analysis and

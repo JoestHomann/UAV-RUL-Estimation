@@ -12,7 +12,10 @@ import pandas as pd
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 COMPARISON_PATH = (
-    REPOSITORY_ROOT / "pipeline_experiments" / "compare_experiments.py"
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "1_pipeline_experiments"
+    / "compare_experiments.py"
 )
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "pipeline_experiment_comparison",
@@ -26,7 +29,9 @@ MODULE_SPEC.loader.exec_module(compare_experiments)
 
 class PipelineExperimentComparisonTests(unittest.TestCase):
     def test_selection_scope_reads_step5_without_locked_artifacts(self) -> None:
-        manager_dir = Path("C:/repository/pipeline_experiments")
+        manager_dir = Path(
+            "C:/repository/2_architecture_experiments/1_pipeline_experiments"
+        )
         experiment = {
             "phase_2_run_number": 17,
             "architectures": ["extra_trees", "xgboost"],

@@ -1,4 +1,0 @@
-# Step 2 artifacts are reproducible copies and generated metadata. They remain
-# available locally for inspection but are not duplicated in Git history.
-*
-!.gitignore

@@ -9,7 +9,10 @@ import pandas as pd
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 REPORTER_PATH = (
-    REPOSITORY_ROOT / "pipeline_experiments" / "report_signal_family_ablation.py"
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "1_pipeline_experiments"
+    / "report_signal_family_ablation.py"
 )
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "signal_family_ablation_report",

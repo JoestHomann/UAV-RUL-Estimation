@@ -23,7 +23,7 @@ import pandas as pd
 STEP_DIR = Path(__file__).resolve().parent
 PHASE_DIR = STEP_DIR.parent
 REPOSITORY_ROOT = PHASE_DIR.parent
-PHASE_2_DIR = REPOSITORY_ROOT / "2_model_architecture_study"
+PHASE_2_DIR = REPOSITORY_ROOT / "2_architecture_experiments" / "2_model_architecture_study"
 DEPENDENCY_DIRS = [
     PHASE_DIR,
     PHASE_2_DIR,

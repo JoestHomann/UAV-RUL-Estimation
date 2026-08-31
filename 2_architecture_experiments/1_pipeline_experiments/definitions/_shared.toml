@@ -1,0 +1,168 @@
+# Shared mechanics for all pipeline-experiment run definitions.
+# Run-specific experiments and execution order belong in PE_run_X/PE_run_X.toml.
+
+settings_version = 1
+
+[execution]
+# Shared ceiling for concurrent Phase 2 family/outer-fold subprocesses.
+# A run may override this table in its own TOML.
+max_workers = 6
+
+[paths]
+train_csv = "data/train.csv"
+test_csv = "data/test.csv"
+phase_1_runner = "1_dataset_construction/run_all.py"
+# Pipeline-owned Phase 2 configuration; standalone Phase 2 has its own TOML.
+phase_2_settings = "2_architecture_experiments/1_pipeline_experiments/phase_2_settings.toml"
+phase_2_settings_builder = "2_architecture_experiments/2_model_architecture_study/1_architecture_study_settings/build_architecture_study_settings.py"
+phase_2_orchestrator = "2_architecture_experiments/2_model_architecture_study/run_phase_2.py"
+tabular_adapter_builder = "2_architecture_experiments/2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py"
+sequence_adapter_builder = "2_architecture_experiments/2_model_architecture_study/3_sequence_data_adapter/build_sequence_data_adapter.py"
+trajectory_adapter_builder = "2_architecture_experiments/2_model_architecture_study/3_trajectory_data_adapter/build_trajectory_data_adapter.py"
+model_registry_builder = "2_architecture_experiments/2_model_architecture_study/4_model_adapters/build_model_registry.py"
+phase_2_inner_selection = "2_architecture_experiments/2_model_architecture_study/5_inner_model_selection/run_inner_model_selection.py"
+phase_2_locked_evaluation = "2_architecture_experiments/2_model_architecture_study/6_locked_outer_evaluation/run_locked_outer_evaluation.py"
+phase_2_comparison = "2_architecture_experiments/2_model_architecture_study/7_architecture_comparison/run_architecture_comparison.py"
+phase_3_runner = "3_final_model_training_and_inference/run_phase_3.py"
+
+# Phase 1-compatible profiles. The same profile can be reused by many
+# experiments while each experiment chooses its own run name and prefix policy.
+
+[profiles.drift_ablation]
+feature_profile = "extended"
+scenario_profile = "current"
+feature_sets = [
+    "age_only",
+    "screened_v1",
+    "screened_drift_pruned",
+    "screened_drift_replaced",
+]
+prefix_variants = ["current20", "dense_stride_5"]
+
+[profiles.signal_family_ablation]
+feature_profile = "extended"
+scenario_profile = "current"
+feature_sets = [
+    "signal_control",
+    "signal_family_13_16_22_25_28",
+    "signal_family_19_21",
+    "signal_family_15_23",
+    "signal_family_07",
+    "signal_all_families",
+]
+prefix_variants = ["current20", "dense_stride_5"]
+
+[profiles.baseline_normalization]
+feature_profile = "extended"
+scenario_profile = "current"
+feature_sets = [
+    "normalization_raw",
+    "normalization_robust",
+    "normalization_combined",
+]
+prefix_variants = ["current20"]
+
+[profiles.performance_optimization]
+feature_profile = "extended"
+scenario_profile = "early_and_middle"
+feature_sets = [
+    "screened_drift_pruned",
+    "signal_all_families",
+    "screened_signal_union",
+]
+prefix_variants = ["current20"]
+
+[scenario_profiles.current]
+assignment = "eligible_random"
+development_scenarios = 5
+locked_scenarios = 20
+seed = 20260814
+
+# A bounded scenario profile is useful for testing conservative behavior on
+# early and middle-life endpoints. It uses the exact same fold protocol.
+
+[scenario_profiles.early_and_middle]
+assignment = "bipartite"
+development_scenarios = 5
+locked_scenarios = 20
+seed = 20260815
+minimum_rul = 1
+maximum_rul = 125
+
+[prefix_variants.current20]
+strategy = "empirical"
+cutoffs_per_uav = 20
+seed = 20260814
+
+[prefix_variants.dense_stride_5]
+strategy = "dense_stride"
+stride = 5
+minimum_cutoff = 1
+seed = 20260814
+
+[target_profiles.raw]
+mode = "raw"
+
+[target_profiles.capped_125]
+mode = "piecewise_cap"
+maximum_rul = 125.0
+
+[target_profiles.capped_110]
+mode = "piecewise_cap"
+maximum_rul = 110.0
+
+[target_profiles.capped_140]
+mode = "piecewise_cap"
+maximum_rul = 140.0
+
+[target_profiles.capped_150]
+mode = "piecewise_cap"
+maximum_rul = 150.0
+
+[target_profiles.failure_cycle]
+mode = "failure_cycle"
+
+[prediction_profiles.symmetric]
+loss = "symmetric_rmse"
+overprediction_weight = 1.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
+[prediction_profiles.conservative_110]
+loss = "asymmetric_mse"
+overprediction_weight = 2.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "fixed_offset"
+safety_offset = 5.0
+non_overprediction_coverage = 0.6
+
+[prediction_profiles.severity_1_5]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 1.5
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
+[prediction_profiles.severity_2_0]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 2.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5
+
+[prediction_profiles.severity_3_0]
+loss = "severity_asymmetric_mse"
+overprediction_weight = 3.0
+quantile = 0.5
+severity_scale = 10.0
+calibration = "none"
+safety_offset = 0.0
+non_overprediction_coverage = 0.5

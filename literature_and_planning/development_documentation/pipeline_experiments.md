@@ -7,10 +7,10 @@ Last updated: 2026-08-31
 `pipeline_experiments` contains controlled experiments that change assumptions
 across Phase 1 and Phase 2. Each pipeline run owns one directory. Its named
 sub-experiments own resolved settings, checkpoints, and results below
-`pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. Each numbered run
+`2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. Each numbered run
 has one source TOML and one execution entry point under
-[`definitions/PE_run_X`](../../pipeline_experiments/definitions/). The top-level
-[`pipeline_experiments.toml`](../../pipeline_experiments/pipeline_experiments.toml)
+[`definitions/PE_run_X`](../../2_architecture_experiments/1_pipeline_experiments/definitions/). The top-level
+[`pipeline_experiments.toml`](../../2_architecture_experiments/1_pipeline_experiments/pipeline_experiments.toml)
 only composes those definitions for compatibility tools.
 
 | Run | Definition | Single entry point |
@@ -96,7 +96,7 @@ be interpreted cautiously.
 
 Step 5 results are the only values used to choose which cell may enter locked
 evaluation. Update this table from
-`pipeline_experiments/selection_experiment_comparison.csv` after all selections
+`2_architecture_experiments/1_pipeline_experiments/selection_experiment_comparison.csv` after all selections
 finish.
 
 | Experiment | Family | Inner RMSE mean | Fold SD | Inner R2 mean | Bias | Overprediction rate | Result |
@@ -207,19 +207,19 @@ calculated from rows at or before the prefix cutoff.
 Run with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py `
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py `
   --step signal_family_ablation
 ```
 
 Results are written to
-`pipeline_experiments/runs/PE_run_2/PE_signal_family_ablation/reporting/`. The summary
+`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_2/PE_signal_family_ablation/reporting/`. The summary
 reports fold-paired R2, RMSE, absolute-bias, overprediction-rate, and RMS
 overprediction improvements relative to the same model/fold control. A family
 is supported only when accuracy gains are consistent across folds and both
 models; leaderboard scores are not used to select it.
 
 For every experiment and group, all generated PNG plots are additionally
-gathered in `pipeline_experiments/runs/<pipeline_run>/figures/`. The original plots and
+gathered in `2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/figures/`. The original plots and
 numeric artifacts remain in their stage folders; `figure_manifest.json` maps
 the flat gallery copies back to those canonical sources.
 
@@ -258,7 +258,7 @@ predeclared R2/RMSE tolerance before considering safety improvements.
 Run the complete sequence with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_3\run_PE_run_3.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_3\run_PE_run_3.py
 ```
 
 The launcher selects feature and cap winners by highest equal-weight mean
@@ -270,7 +270,7 @@ eligible; RMS overprediction, overprediction rate, RMSE, and R2 then decide in
 that order. The chosen cap-125 feature experiment is reused as the cap control,
 and the selected cap experiment's XGBoost predictions are reused as the
 symmetric safety control. The exact choices and resolved catalog are stored in
-`pipeline_experiments/runs/PE_run_3/workflow/selection_manifest.json` and
+`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/workflow/selection_manifest.json` and
 `resolved_catalog.json`.
 
 The selected policy is frozen in `PE3_final_ensemble/promotion_contract.json`.
@@ -279,7 +279,7 @@ the existing Step 6 evaluator opens locked data. Locked XGBoost and ExtraTrees
 family/fold checkpoints are resumable and are combined without further tuning.
 The confirmation writes seed metrics, RUL-band safety metrics, predictions, and
 figures under `PE3_final_ensemble/`; all plots are also copied into
-`pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 selected candidate
+`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 selected candidate
 10 of 25, reached development mean-fold R2 0.89422 and RMSE 10.5306, and
 produced a verified 100-row submission. Its public Kaggle R2 was 0.86525,
 improving on Run 4's 0.84513 while retaining a validation-to-leaderboard gap.
@@ -312,13 +312,13 @@ The selected `q=0.55` policy reduces the largest systematic excess in the
 26-75 RUL region. It is fitted once on all 500 development OOF rows and applied
 to the verified, unlabeled Run 5 submission predictions. The candidate
 submission, calibrator, cross-fitted predictions, numeric reports, and four
-figures are stored under `pipeline_experiments/runs/PE_run_4/`. Leaderboard
+figures are stored under `2_architecture_experiments/1_pipeline_experiments/runs/PE_run_4/`. Leaderboard
 confirmation remains pending.
 
 Run or reproduce the complete experiment with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\definitions\PE_run_4\run_PE_run_4.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_4\run_PE_run_4.py
 ```
 
 ## Degradation-Learning Experiment Register
@@ -404,7 +404,7 @@ worse RMS overprediction and overall accuracy.
 Run one group from the repository root with:
 
 ```powershell
-.venv\Scripts\python.exe pipeline_experiments\run_experiments.py `
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py `
   --group PE_failure_cycle_target
 ```
 

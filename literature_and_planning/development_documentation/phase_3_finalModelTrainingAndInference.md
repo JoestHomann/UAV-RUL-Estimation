@@ -123,7 +123,7 @@ model_seed = 13
 
 Run numbers are local to their phase directories. With the settings above,
 Phase 3 reads the completed Phase 2 run from
-`2_model_architecture_study/runs/run_3/` and writes the new Phase 3 run to
+`2_architecture_experiments/2_model_architecture_study/runs/run_3/` and writes the new Phase 3 run to
 `3_final_model_training_and_inference/runs/run_1/`. The completed Phase 2
 directory is referenced in place and is not renamed or modified.
 

@@ -18,8 +18,7 @@ from trajectory_data_adapter import (
     TrajectoryDataset,
 )
 
-from phase_3_common import Phase3Error
-from phase_3_common import REPOSITORY_ROOT
+from phase_3_common import Phase3Error, REPOSITORY_ROOT, repository_path
 
 
 def _manifest_path(contract: dict[str, Any], name: str) -> Path:
@@ -29,7 +28,7 @@ def _manifest_path(contract: dict[str, Any], name: str) -> Path:
     value = manifests.get(name) if isinstance(manifests, dict) else None
     if not isinstance(value, str) or not value:
         raise Phase3Error(f"Final training contract has no {name} data manifest")
-    path = (REPOSITORY_ROOT / value).resolve()
+    path = repository_path(value)
     try:
         path.relative_to(REPOSITORY_ROOT.resolve())
     except ValueError as error:

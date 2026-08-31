@@ -9,7 +9,11 @@ from threading import Event
 
 
 PHASE_DIR = Path(__file__).resolve().parent
-PHASE_2_DIR = PHASE_DIR.parent / "2_model_architecture_study"
+PHASE_2_DIR = (
+    PHASE_DIR.parent
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+)
 for dependency_dir in (PHASE_DIR, PHASE_2_DIR):
     if str(dependency_dir) not in sys.path:
         sys.path.insert(0, str(dependency_dir))

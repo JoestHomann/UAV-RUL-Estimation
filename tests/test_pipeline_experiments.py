@@ -15,7 +15,13 @@ import pandas as pd
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-MANAGER_PATH = REPOSITORY_ROOT / "pipeline_experiments" / "run_experiments.py"
+PIPELINE_EXPERIMENTS_ROOT = (
+    REPOSITORY_ROOT / "2_architecture_experiments" / "1_pipeline_experiments"
+)
+MODEL_ARCHITECTURE_ROOT = (
+    REPOSITORY_ROOT / "2_architecture_experiments" / "2_model_architecture_study"
+)
+MANAGER_PATH = PIPELINE_EXPERIMENTS_ROOT / "run_experiments.py"
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "pipeline_experiment_manager",
     MANAGER_PATH,
@@ -33,7 +39,7 @@ import conditional_safety_calibration
 class PipelineExperimentCatalogTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = run_experiments._read_config(
-            REPOSITORY_ROOT / "pipeline_experiments" / "pipeline_experiments.toml"
+            PIPELINE_EXPERIMENTS_ROOT / "pipeline_experiments.toml"
         )
 
     def test_catalog_has_phase1_profiles_and_named_experiments(self) -> None:
@@ -46,7 +52,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertEqual(run_experiments._configured_max_workers(self.config), 6)
 
     def test_each_pipeline_run_has_one_definition_and_one_entry_point(self) -> None:
-        definitions_root = REPOSITORY_ROOT / "pipeline_experiments" / "definitions"
+        definitions_root = PIPELINE_EXPERIMENTS_ROOT / "definitions"
         expected_steps = {1: 1, 2: 7, 3: 1, 4: 1}
         for run_number, step_count in expected_steps.items():
             run_name = f"PE_run_{run_number}"
@@ -61,7 +67,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             for step in definition["steps"]:
                 self.assertEqual(
                     step["script"],
-                    "pipeline_experiments/run_experiments.py",
+                    "2_architecture_experiments/1_pipeline_experiments/run_experiments.py",
                 )
                 self.assertTrue(
                     (REPOSITORY_ROOT / step["script"]).is_file(),
@@ -87,6 +93,22 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             "PE_target_scenario_2x2",
         )
         self.assertEqual(target_group["model_families"], ["extra_trees", "xgboost"])
+
+    def test_legacy_phase2_prefixes_resolve_after_repository_move(self) -> None:
+        self.assertEqual(
+            run_experiments._repo_path(
+                "pipeline_experiments/run_experiments.py",
+                description="legacy pipeline manager",
+            ),
+            PIPELINE_EXPERIMENTS_ROOT / "run_experiments.py",
+        )
+        self.assertEqual(
+            run_experiments._repo_path(
+                "2_model_architecture_study/run_phase_2.py",
+                description="legacy architecture runner",
+            ),
+            MODEL_ARCHITECTURE_ROOT / "run_phase_2.py",
+        )
 
     def test_signal_family_ablation_is_an_explicit_development_group(self) -> None:
         group = run_experiments._experiment_group(
@@ -146,8 +168,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 self.assertEqual(experiment["pipeline_run"], "PE_run_3")
                 self.assertEqual(
                     run_experiments._run_dir(name, experiment),
-                    REPOSITORY_ROOT
-                    / "pipeline_experiments"
+                    PIPELINE_EXPERIMENTS_ROOT
                     / "runs"
                     / "PE_run_3"
                     / name,
@@ -332,9 +353,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_catboost_search_excludes_the_slow_tail(self) -> None:
         settings_path = (
-            REPOSITORY_ROOT
-            / "pipeline_experiments"
-            / "phase_2_settings.toml"
+            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml"
         )
         with settings_path.open("rb") as settings_file:
             settings = tomllib.load(settings_file)
@@ -344,9 +363,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_hist_gradient_boosting_search_is_available_but_disabled(self) -> None:
         settings_path = (
-            REPOSITORY_ROOT
-            / "pipeline_experiments"
-            / "phase_2_settings.toml"
+            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml"
         )
         with settings_path.open("rb") as settings_file:
             settings = tomllib.load(settings_file)
@@ -368,22 +385,20 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         paths = run_experiments._paths(self.config)
         pipeline_settings = paths["phase_2_settings"]
         standalone_settings = (
-            REPOSITORY_ROOT
-            / "2_model_architecture_study"
+            MODEL_ARCHITECTURE_ROOT
             / "1_architecture_study_settings"
             / "architecture_study_settings.toml"
         )
         self.assertEqual(
             pipeline_settings,
-            REPOSITORY_ROOT / "pipeline_experiments" / "phase_2_settings.toml",
+            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml",
         )
         self.assertNotEqual(pipeline_settings, standalone_settings)
 
     def test_pipeline_phase2_artifacts_are_experiment_owned(self) -> None:
         paths = run_experiments._phase2_paths("PE_run_1")
         expected = (
-            REPOSITORY_ROOT
-            / "pipeline_experiments"
+            PIPELINE_EXPERIMENTS_ROOT
             / "runs"
             / "PE_run_1"
             / "phase2"
@@ -724,9 +739,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             ):
                 manifest = run_experiments.run_experiment_workflow(
                     "PE_run_3",
-                    REPOSITORY_ROOT
-                    / "pipeline_experiments"
-                    / "pipeline_experiments.toml",
+                    PIPELINE_EXPERIMENTS_ROOT / "pipeline_experiments.toml",
                     config,
                     force=False,
                 )
@@ -904,20 +917,21 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             )
         self.assertEqual(
             payload["phase_2_run_root"],
-            "pipeline_experiments/runs/PE_run_1/phase2",
+            "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_1/phase2",
         )
 
     def test_pipeline_rejects_the_standalone_phase2_toml(self) -> None:
         config = copy.deepcopy(self.config)
         config["paths"]["phase_2_settings"] = (
-            "2_model_architecture_study/1_architecture_study_settings/"
+            "2_architecture_experiments/2_model_architecture_study/"
+            "1_architecture_study_settings/"
             "architecture_study_settings.toml"
         )
         experiment = run_experiments._experiment(config, "PE_run_1")
         interface_path, interface = run_experiments._load_interface(experiment)
         with self.assertRaisesRegex(
             run_experiments.ExperimentManagerError,
-            "must point inside pipeline_experiments",
+            "must point inside 1_pipeline_experiments",
         ):
             run_experiments._phase2_settings(
                 config,

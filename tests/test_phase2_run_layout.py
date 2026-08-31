@@ -10,7 +10,11 @@ from unittest.mock import patch
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-PHASE_2_ROOT = REPOSITORY_ROOT / "2_model_architecture_study"
+PHASE_2_ROOT = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+)
 if str(PHASE_2_ROOT) not in sys.path:
     sys.path.insert(0, str(PHASE_2_ROOT))
 PHASE_3_ROOT = REPOSITORY_ROOT / "3_final_model_training_and_inference"
@@ -74,7 +78,8 @@ class Phase2RunLayoutTests(unittest.TestCase):
     def test_phase3_can_resolve_an_experiment_owned_phase2_run(self) -> None:
         root = (
             REPOSITORY_ROOT
-            / "pipeline_experiments"
+            / "2_architecture_experiments"
+            / "1_pipeline_experiments"
             / "runs"
             / "PE_test"
             / "phase2"
