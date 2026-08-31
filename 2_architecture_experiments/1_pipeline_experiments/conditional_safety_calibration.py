@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 import pandas as pd
 
 from experiment_config import ExperimentConfigError, read_experiment_config
+from experiment_paths import pipeline_owner, pipeline_run_name, run_directory
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -483,7 +484,7 @@ def run_workflow(name: str, config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str
                 }
             )
 
-    output_dir = SCRIPT_DIR / "runs" / name
+    output_dir = run_directory(SCRIPT_DIR / "experiments", name, workflow)
     reporting_dir = output_dir / "reporting"
     artifact_dir = output_dir / "artifacts"
     reporting_dir.mkdir(parents=True, exist_ok=True)
@@ -507,7 +508,8 @@ def run_workflow(name: str, config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str
     ].sort_values("bin_lower")
     selected_calibrator = {
         "calibrator_version": 1,
-        "pipeline_run": name,
+        "pipeline_experiment": pipeline_owner(name, workflow)[0],
+        "pipeline_run": pipeline_run_name(name, workflow),
         "source_phase_3_run": source_run,
         "source_configuration_id": configuration_id,
         "selection": selection,
@@ -550,7 +552,8 @@ def run_workflow(name: str, config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str
     submission_verification = {
         "manifest_version": 1,
         "status": "complete",
-        "pipeline_run": name,
+        "pipeline_experiment": pipeline_owner(name, workflow)[0],
+        "pipeline_run": pipeline_run_name(name, workflow),
         "source_phase_3_run": source_run,
         "selected_policy": selected_policy,
         "rows": len(submission),
@@ -568,7 +571,8 @@ def run_workflow(name: str, config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str
     figure_paths = _plot_results(summary, band_metrics, curves, selected_policy, output_dir)
     result = {
         "status": "complete",
-        "pipeline_run": name,
+        "pipeline_experiment": pipeline_owner(name, workflow)[0],
+        "pipeline_run": pipeline_run_name(name, workflow),
         "experiment": "conditional conservative calibration",
         "source_phase_3_run": source_run,
         "source_configuration_id": configuration_id,

@@ -1,54 +1,58 @@
-# USER-EDITABLE SETTINGS FOR PE_run_2.
+# USER-EDITABLE SETTINGS FOR PE_2.
 # Run this experiment with the run.py file beside this settings file.
-# PE_run_1 is included as the frozen raw/current control in the 2x2 study.
+# PE_1 is included as the frozen raw/current control in the 2x2 study.
 # Edit [execution] once for resources. Edit [experiment_groups.*] to change
 # comparisons and [experiments.*] to change individual scientific cells.
-include = ["../PE_run_1/settings.toml"]
+include = ["../PE_1/settings.toml"]
+
+[pipeline]
+experiment = "PE_2"
+run = "run_1"
 
 [execution]
 max_workers = 6
 
-[run_definitions.PE_run_2]
+[run_definitions.PE_2]
 title = "Pipeline-structure and degradation-learning studies"
-description = "Run all seven reviewable PE_run_2 experiment groups, or select individual steps."
+description = "Run all seven reviewable PE_2 experiment groups, or select individual steps."
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "target_scenario_2x2"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_target_scenario_2x2"]
 script_chain = "phase1_phase2_complete_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "signal_family_ablation"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_signal_family_ablation"]
 script_chain = "phase1_phase2_selection_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "failure_cycle_target"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_failure_cycle_target"]
 script_chain = "phase1_phase2_selection_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "baseline_normalization"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_baseline_normalization"]
 script_chain = "phase1_phase2_selection_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "fault_mode"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_fault_mode"]
 script_chain = "phase1_phase2_selection_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "signal_compression"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_signal_compression"]
 script_chain = "phase1_phase2_selection_group"
 
-[[run_definitions.PE_run_2.steps]]
+[[run_definitions.PE_2.steps]]
 name = "dense_prefix_training"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
 arguments = ["--group", "PE_dense_prefix_training"]
@@ -80,11 +84,10 @@ scripts = [
 ]
 
 [experiment_groups.PE_target_scenario_2x2]
-pipeline_run = "PE_run_2"
-control = "PE_run_1"
+control = "PE_1"
 model_families = ["extra_trees", "xgboost"]
 experiments = [
-    "PE_run_1",
+    "PE_1",
     "PE_2x2_current_cap125",
     "PE_2x2_early_raw",
     "PE_2x2_early_cap125",
@@ -92,7 +95,6 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_signal_family_ablation]
-pipeline_run = "PE_run_2"
 control = "PE_signal_control"
 experiments = [
     "PE_signal_control",
@@ -105,13 +107,11 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_failure_cycle_target]
-pipeline_run = "PE_run_2"
 control = "PE_failure_raw_rul"
 experiments = ["PE_failure_raw_rul", "PE_failure_cycle"]
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_baseline_normalization]
-pipeline_run = "PE_run_2"
 control = "PE_normalization_raw"
 experiments = [
     "PE_normalization_raw",
@@ -121,7 +121,6 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_fault_mode]
-pipeline_run = "PE_run_2"
 control = "PE_fault_mode_global"
 experiments = [
     "PE_fault_mode_global",
@@ -131,7 +130,6 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_signal_compression]
-pipeline_run = "PE_run_2"
 control = "PE_compression_individual"
 experiments = [
     "PE_compression_individual",
@@ -143,16 +141,14 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE_dense_prefix_training]
-pipeline_run = "PE_run_2"
 control = "PE_dense_current20"
 experiments = ["PE_dense_current20", "PE_dense_stride5"]
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
-# PE_run_3 is deliberately staged. Run these groups in declaration order and
+# PE_3 is deliberately staged. Run these groups in declaration order and
 # freeze each winner before changing the downstream group's source feature set.
 
 [experiments.PE_2x2_current_cap125]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -180,7 +176,6 @@ phase_3_search_seed = 13
 phase_3_model_seed = 13
 
 [experiments.PE_2x2_early_raw]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -208,7 +203,6 @@ phase_3_search_seed = 13
 phase_3_model_seed = 13
 
 [experiments.PE_2x2_early_cap125]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -240,7 +234,6 @@ phase_3_model_seed = 13
 # is generated only after every component selection succeeds.
 
 [experiments.PE_signal_control]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -262,7 +255,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_13_16_22_25_28]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -284,7 +276,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_19_21]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -306,7 +297,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_15_23]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -328,7 +318,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_family_07]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -350,7 +339,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_signal_all_families]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -375,7 +363,6 @@ phase_3_enabled = false
 # raw RUL metrics are restored before any selection metric is calculated.
 
 [experiments.PE_failure_raw_rul]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -397,7 +384,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_failure_cycle]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -422,7 +408,6 @@ phase_3_enabled = false
 # prefix per training UAV. Untrusted assignments retain the global fallback.
 
 [experiments.PE_fault_mode_global]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -445,7 +430,6 @@ fault_mode_strategy = "none"
 phase_3_enabled = false
 
 [experiments.PE_fault_mode_indicator]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -468,7 +452,6 @@ fault_mode_strategy = "indicator"
 phase_3_enabled = false
 
 [experiments.PE_fault_mode_experts]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -495,7 +478,6 @@ phase_3_enabled = false
 # only after recording the ablation decision.
 
 [experiments.PE_compression_individual]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -518,7 +500,6 @@ signal_compression_strategy = "none"
 phase_3_enabled = false
 
 [experiments.PE_compression_median]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -541,7 +522,6 @@ signal_compression_strategy = "median_only"
 phase_3_enabled = false
 
 [experiments.PE_compression_pca]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -564,7 +544,6 @@ signal_compression_strategy = "pca_only"
 phase_3_enabled = false
 
 [experiments.PE_compression_individual_median]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -587,7 +566,6 @@ signal_compression_strategy = "individual_plus_median"
 phase_3_enabled = false
 
 [experiments.PE_compression_individual_pca]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -613,7 +591,6 @@ phase_3_enabled = false
 # control reuses the signal-ablation Phase 1 run; stride 5 owns a new run.
 
 [experiments.PE_dense_current20]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -635,7 +612,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_dense_stride5]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -660,7 +636,6 @@ phase_3_enabled = false
 # concepts; the combined cell tests whether absolute context remains useful.
 
 [experiments.PE_normalization_raw]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -682,7 +657,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_normalization_robust]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -704,7 +678,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE_normalization_combined]
-pipeline_run = "PE_run_2"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -725,5 +698,5 @@ target_profile = "raw"
 prediction_profile = "symmetric"
 phase_3_enabled = false
 
-# PE_run_3 Stage A: determine whether degradation-specific signal features add
+# PE_3 Stage A: determine whether degradation-specific signal features add
 # information beyond the Run 4 drift-pruned set.

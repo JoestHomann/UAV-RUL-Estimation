@@ -22,8 +22,10 @@ if str(MANAGER_DIR) not in sys.path:
 from experiment_paths import (
     artifact_directory,
     gallery_directory,
+    pipeline_owner,
     pipeline_run_name,
     repository_path,
+    run_directory,
 )
 from experiment_config import ExperimentConfigError, read_experiment_config
 from promote_calibrated_ensemble import (
@@ -35,7 +37,9 @@ from promote_calibrated_ensemble import (
 ARCHITECTURE_EXPERIMENTS_ROOT = MANAGER_DIR.parent
 REPOSITORY_ROOT = ARCHITECTURE_EXPERIMENTS_ROOT.parent
 DEFAULT_CONFIG_PATH = MANAGER_DIR / "pipeline_experiments.toml"
-RUNS_DIR = MANAGER_DIR / "runs"
+EXPERIMENTS_DIR = MANAGER_DIR / "experiments"
+# Kept as an injectable alias for tests and compatibility helpers.
+RUNS_DIR = EXPERIMENTS_DIR
 PHASE_1_ROOT = REPOSITORY_ROOT / "1_dataset_construction"
 PHASE_3_ROOT = REPOSITORY_ROOT / "3_final_model_training_and_inference"
 STAGES = ("phase1", "phase2", "phase3")
@@ -469,6 +473,7 @@ def _collect_figures(
 
     manifest = {
         "status": "complete",
+        "pipeline_experiment": pipeline_owner(name, experiment)[0],
         "pipeline_run": pipeline_run_name(name, experiment),
         "figures": records,
     }
@@ -481,18 +486,23 @@ def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -
     experiments = _experiments(config)
     groups = _experiment_groups(config)
     promotions = _promotions(config)
+    definitions = config.get("run_definitions", {})
+    if not isinstance(definitions, dict):
+        definitions = {}
+    workflows = _experiment_workflows(config)
+    conditional_workflows = _conditional_calibration_workflows(config)
 
-    def owned_by(owner: str) -> list[dict[str, Any]]:
+    def owned_by(owner: tuple[str | None, str]) -> list[dict[str, Any]]:
         return [
             experiment
             for experiment_name, experiment in experiments.items()
-            if pipeline_run_name(experiment_name, experiment) == owner
+            if pipeline_owner(experiment_name, experiment) == owner
         ]
 
     if name is not None:
         if name in experiments:
             experiment = experiments[name]
-            owner = pipeline_run_name(name, experiment)
+            owner = pipeline_owner(name, experiment)
             _collect_figures(
                 name,
                 experiment,
@@ -501,7 +511,7 @@ def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -
             return
         if name in groups:
             group = groups[name]
-            owner = pipeline_run_name(name, group)
+            owner = pipeline_owner(name, group)
             _collect_figures(
                 name,
                 group,
@@ -510,28 +520,67 @@ def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -
             return
         if name in promotions:
             workflow = str(promotions[name]["workflow"])
+            workflow_spec = workflows[workflow]
             _collect_figures(
                 workflow,
-                related_experiments=owned_by(workflow),
+                workflow_spec,
+                related_experiments=owned_by(
+                    pipeline_owner(workflow, workflow_spec)
+                ),
             )
             return
-        if _run_dir(name).is_dir():
-            _collect_figures(name, related_experiments=owned_by(name))
+        parent_specification = workflows.get(name)
+        if not isinstance(parent_specification, dict):
+            parent_specification = conditional_workflows.get(name)
+        if not isinstance(parent_specification, dict):
+            candidate = definitions.get(name)
+            parent_specification = candidate if isinstance(candidate, dict) else None
+        if isinstance(parent_specification, dict) and run_directory(
+            RUNS_DIR,
+            name,
+            parent_specification,
+        ).is_dir():
+            owner = pipeline_owner(name, parent_specification)
+            _collect_figures(
+                name,
+                parent_specification,
+                related_experiments=owned_by(owner),
+            )
             return
         raise ExperimentManagerError(f"Unknown experiment or group {name!r}")
 
-    existing_names = set()
-    if RUNS_DIR.is_dir():
-        existing_names = {
-            path.name
-            for path in RUNS_DIR.iterdir()
-            if path.is_dir() and not path.name.startswith("_")
-        }
-    for run_name in sorted(existing_names):
+    owners: dict[tuple[str | None, str], tuple[str, dict[str, Any]]] = {}
+    for experiment_name, experiment in experiments.items():
+        owners.setdefault(
+            pipeline_owner(experiment_name, experiment),
+            (experiment_name, experiment),
+        )
+    for workflow_name, workflow in workflows.items():
+        owners.setdefault(
+            pipeline_owner(workflow_name, workflow),
+            (workflow_name, workflow),
+        )
+    for workflow_name, workflow in conditional_workflows.items():
+        owners.setdefault(
+            pipeline_owner(workflow_name, workflow),
+            (workflow_name, workflow),
+        )
+    for definition_name, definition in definitions.items():
+        if isinstance(definition, dict):
+            owners.setdefault(
+                pipeline_owner(definition_name, definition),
+                (definition_name, definition),
+            )
+    for owner, (run_name, specification) in sorted(
+        owners.items(),
+        key=lambda item: (str(item[0][0]), item[0][1]),
+    ):
+        if not run_directory(RUNS_DIR, run_name, specification).is_dir():
+            continue
         _collect_figures(
             run_name,
-            experiments.get(run_name),
-            related_experiments=owned_by(run_name),
+            specification,
+            related_experiments=owned_by(owner),
         )
 
 
@@ -1085,11 +1134,11 @@ def run_experiment(
             )
         if not force and _stage_complete(name, experiment, stage):
             print(f"{name}: {stage} already complete; resuming after it")
-            owner = pipeline_run_name(name, experiment)
+            owner = pipeline_owner(name, experiment)
             related = [
                 specification
                 for experiment_name, specification in _experiments(config).items()
-                if pipeline_run_name(experiment_name, specification) == owner
+                if pipeline_owner(experiment_name, specification) == owner
             ]
             _collect_figures(
                 name,
@@ -1112,11 +1161,11 @@ def run_experiment(
             _mark_stage(name, experiment, stage, "failed")
             raise
         _mark_stage(name, experiment, stage, "complete")
-        owner = pipeline_run_name(name, experiment)
+        owner = pipeline_owner(name, experiment)
         related = [
             specification
             for experiment_name, specification in _experiments(config).items()
-            if pipeline_run_name(experiment_name, specification) == owner
+            if pipeline_owner(experiment_name, specification) == owner
         ]
         _collect_figures(
             name,
@@ -1175,11 +1224,11 @@ def run_experiment_group(
         ],
         label=f"{name}: paired ablation report",
     )
-    owner = pipeline_run_name(name, group)
+    owner = pipeline_owner(name, group)
     related = [
         specification
         for experiment_name, specification in _experiments(config).items()
-        if pipeline_run_name(experiment_name, specification) == owner
+        if pipeline_owner(experiment_name, specification) == owner
     ]
     _collect_figures(name, group, related_experiments=related)
 
@@ -1354,7 +1403,7 @@ def run_experiment_workflow(
     *,
     force: bool,
 ) -> dict[str, Any]:
-    """Run PE_run_3-style staged selection and propagate each winner."""
+    """Run a PE_3-style staged selection and propagate each winner."""
 
     workflows = _experiment_workflows(source_config)
     if name not in workflows:
@@ -1364,7 +1413,7 @@ def run_experiment_workflow(
         )
     config = copy.deepcopy(source_config)
     workflow = workflows[name]
-    workflow_dir = RUNS_DIR / name / "workflow"
+    workflow_dir = run_directory(RUNS_DIR, name, workflow) / "workflow"
     resolved_path = workflow_dir / "resolved_catalog.json"
     manifest_path = workflow_dir / "selection_manifest.json"
     tolerance = float(workflow.get("safety_r2_tolerance", 0.005))
@@ -1548,7 +1597,8 @@ def run_experiment_workflow(
     manifest = {
         "status": "complete",
         "workflow": name,
-        "pipeline_run": name,
+        "pipeline_experiment": pipeline_owner(name, workflow)[0],
+        "pipeline_run": pipeline_run_name(name, workflow),
         "uses_locked_evaluation": False,
         "safety_r2_tolerance": tolerance,
         "selections": selections,
@@ -1578,18 +1628,27 @@ def print_status(config: dict[str, Any]) -> None:
             f"{name}: phase2_scope={_phase2_scope(experiment)}, "
             + ", ".join(stages)
         )
-    for name in sorted(_experiment_workflows(config)):
-        manifest = RUNS_DIR / name / "workflow" / "selection_manifest.json"
+    workflows = _experiment_workflows(config)
+    for name, workflow in sorted(workflows.items()):
+        manifest = (
+            run_directory(RUNS_DIR, name, workflow)
+            / "workflow"
+            / "selection_manifest.json"
+        )
         status = "complete" if manifest.is_file() else "not_started"
         print(f"{name}: workflow={status}")
-    for name in sorted(_conditional_calibration_workflows(config)):
-        manifest = RUNS_DIR / name / "conditional_calibration_manifest.json"
+    for name, workflow in sorted(_conditional_calibration_workflows(config).items()):
+        manifest = (
+            run_directory(RUNS_DIR, name, workflow)
+            / "conditional_calibration_manifest.json"
+        )
         status = "complete" if manifest.is_file() else "not_started"
         print(f"{name}: conditional_calibration={status}")
     for name, promotion in sorted(_promotions(config).items()):
+        workflow_name = str(promotion["workflow"])
+        workflow = workflows[workflow_name]
         manifest = (
-            RUNS_DIR
-            / str(promotion["workflow"])
+            run_directory(RUNS_DIR, workflow_name, workflow)
             / name
             / "locked_confirmation_manifest.json"
         )

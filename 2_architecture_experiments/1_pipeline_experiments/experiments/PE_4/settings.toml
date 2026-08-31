@@ -1,26 +1,30 @@
-# USER-EDITABLE SETTINGS FOR PE_run_4.
+# USER-EDITABLE SETTINGS FOR PE_4.
 # Run this experiment with the run.py file beside this settings file.
 # Edit the conditional workflow table for source run, quantiles, bins, and the
 # accuracy tolerance. This experiment does not retrain the source model.
 include = ["../../_internal/shared_settings.toml"]
 
+[pipeline]
+experiment = "PE_4"
+run = "run_1"
+
 [execution]
 max_workers = 6
 
-[run_definitions.PE_run_4]
+[run_definitions.PE_4]
 title = "Conditional conservative calibration"
 description = "Cross-fit quantile correction curves from q=0.50 through q=0.70 and build the selected submission."
 
-[[run_definitions.PE_run_4.steps]]
+[[run_definitions.PE_4.steps]]
 name = "conditional_safety_calibration"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
-arguments = ["--run", "PE_run_4"]
+arguments = ["--run", "PE_4"]
 script_chain = "conditional_safety_calibration"
 
 [script_chains.conditional_safety_calibration]
 scripts = ["2_architecture_experiments/1_pipeline_experiments/conditional_safety_calibration.py"]
 
-[conditional_calibration_workflows.PE_run_4]
+[conditional_calibration_workflows.PE_4]
 source_phase_3_run = 5
 quantiles = [0.50, 0.55, 0.60, 0.65, 0.70]
 prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]

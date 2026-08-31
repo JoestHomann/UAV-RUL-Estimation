@@ -1,12 +1,12 @@
 # Compatibility index for tools that need to inspect every pipeline run.
 #
-# Edit experiments/PE_run_X/settings.toml and execute that folder's run.py.
+# Edit experiments/PE_X/settings.toml and execute that folder's run.py.
 # This compatibility index intentionally owns no
 # experiment settings.
 
 include = [
-    "experiments/PE_run_1/settings.toml",
-    "experiments/PE_run_2/settings.toml",
-    "experiments/PE_run_3/settings.toml",
-    "experiments/PE_run_4/settings.toml",
+    "experiments/PE_1/settings.toml",
+    "experiments/PE_2/settings.toml",
+    "experiments/PE_3/settings.toml",
+    "experiments/PE_4/settings.toml",
 ]

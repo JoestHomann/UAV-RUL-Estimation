@@ -2,20 +2,20 @@
 settings_version = 1
 run_number = 5
 
-# Locked-confirmed PE_run_3 policy and its development-only component source.
+# Locked-confirmed PE_3 run_1 policy and its development-only component source.
 phase_2_run_number = 31
 selected_model_family = "calibrated_tree_blend"
 
 # Experiment-owned Phase 2 artifacts. Keeping these paths here makes
 # run_phase_3.py directly executable without a separate --settings argument.
-phase_2_run_root = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2"
-phase_2_specification = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
-phase_2_model_registry = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/4_model_adapters/artifacts/model_registry.json"
-tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
-sequence_manifest = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
-trajectory_manifest = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/3_trajectory_data_adapter/artifacts/trajectory_dataset_manifest.json"
-promotion_contract = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_final_ensemble/promotion_contract.json"
-promotion_manifest = "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/PE3_final_ensemble/locked_confirmation_manifest.json"
+phase_2_run_root = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2"
+phase_2_specification = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
+phase_2_model_registry = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/4_model_adapters/artifacts/model_registry.json"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+sequence_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
+trajectory_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/3_trajectory_data_adapter/artifacts/trajectory_dataset_manifest.json"
+promotion_contract = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_final_ensemble/promotion_contract.json"
+promotion_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_final_ensemble/locked_confirmation_manifest.json"
 
 [final_search]
 candidate_budget = 25

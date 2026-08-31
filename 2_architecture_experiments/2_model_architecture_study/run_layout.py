@@ -8,7 +8,7 @@ where ``n`` is the ``run_number`` recorded in the architecture study settings.
 An owning orchestrator may instead set ``PHASE2_RUN_ROOT`` so the same steps
 write beneath its own run directory. Pipeline experiments use this to keep all
 seven Phase 2 steps together under
-``2_architecture_experiments/1_pipeline_experiments/runs/<experiment>/phase2``.
+``2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/runs/run_N/<sub-experiment>/phase2``.
 
 The run number is read, never written. Nothing in the pipeline advances it, so
 interrupting Phase 2 and resuming it later resolves to the same folder and the

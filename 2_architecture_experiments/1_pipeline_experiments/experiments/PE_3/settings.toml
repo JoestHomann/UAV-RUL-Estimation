@@ -1,20 +1,24 @@
-# USER-EDITABLE SETTINGS FOR PE_run_3.
+# USER-EDITABLE SETTINGS FOR PE_3.
 # Run this experiment with the run.py file beside this settings file.
 # Edit [execution] for resources, group/cell tables for candidates, the workflow
 # table for winner rules, and the promotion table for locked confirmation.
 include = ["../../_internal/shared_settings.toml"]
 
+[pipeline]
+experiment = "PE_3"
+run = "run_1"
+
 [execution]
 max_workers = 6
 
-[run_definitions.PE_run_3]
+[run_definitions.PE_3]
 title = "Feature, target-cap, ensemble, and safety optimization"
 description = "Execute the staged workflow, propagate development winners, and run its locked confirmation gate."
 
-[[run_definitions.PE_run_3.steps]]
+[[run_definitions.PE_3.steps]]
 name = "automatic_performance_workflow"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
-arguments = ["--run", "PE_run_3"]
+arguments = ["--run", "PE_3"]
 script_chain = "automatic_performance_workflow"
 
 [script_chains.automatic_performance_workflow]
@@ -33,7 +37,6 @@ scripts = [
 ]
 
 [experiment_groups.PE3_feature_union]
-pipeline_run = "PE_run_3"
 control = "PE3_features_drift"
 experiments = [
     "PE3_features_drift",
@@ -43,13 +46,11 @@ experiments = [
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE3_cap_sensitivity]
-pipeline_run = "PE_run_3"
 control = "PE3_cap_125"
 experiments = ["PE3_cap_125", "PE3_cap_110", "PE3_cap_140", "PE3_cap_150"]
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
 [experiment_groups.PE3_ensemble_calibration]
-pipeline_run = "PE_run_3"
 control = "PE3_features_union"
 experiments = ["PE3_features_union"]
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_ensemble_calibration.py"
@@ -58,7 +59,6 @@ calibration_degree = 2
 calibration_ridge_alpha = 10.0
 
 [experiment_groups.PE3_severity_loss]
-pipeline_run = "PE_run_3"
 control = "PE3_safety_symmetric"
 experiments = [
     "PE3_safety_symmetric",
@@ -68,7 +68,7 @@ experiments = [
 ]
 reporter = "2_architecture_experiments/1_pipeline_experiments/report_experiment_group.py"
 
-[experiment_workflows.PE_run_3]
+[experiment_workflows.PE_3]
 feature_group = "PE3_feature_union"
 cap_group = "PE3_cap_sensitivity"
 ensemble_group = "PE3_ensemble_calibration"
@@ -78,13 +78,13 @@ promotion = "PE3_final_ensemble"
 # to the best observed candidate before one-sided error metrics decide.
 safety_r2_tolerance = 0.005
 
-# PE_run_4 learns a subtraction-only correction as a function of predicted RUL.
+# PE_4 learns a subtraction-only correction as a function of predicted RUL.
 # Every quantile is evaluated with outer-fold cross-fitting on Run 5 development
 # predictions. The selected curve is then fitted to all development OOF rows and
 # applied to the already verified, unlabeled Run 5 submission predictions.
 
 [promotions.PE3_final_ensemble]
-workflow = "PE_run_3"
+workflow = "PE_3"
 ensemble_group = "PE3_ensemble_calibration"
 
 # CatBoost was removed after the initial Run 6 attempt was stopped because its
@@ -92,7 +92,6 @@ ensemble_group = "PE3_ensemble_calibration"
 # remaining families can resume without rerunning their finished folds.
 
 [experiments.PE3_features_drift]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase1"
 through_stage = "phase2"
@@ -114,7 +113,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_features_signal]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -136,7 +134,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_features_union]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -157,11 +154,10 @@ target_profile = "capped_125"
 prediction_profile = "symmetric"
 phase_3_enabled = false
 
-# PE_run_3 Stage B: vary only the fitting-target cap while preserving the same
+# PE_3 Stage B: vary only the fitting-target cap while preserving the same
 # early/middle scenarios, folds, features, models, seeds, and candidate budget.
 
 [experiments.PE3_cap_125]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -183,7 +179,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_cap_110]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -205,7 +200,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_cap_140]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -227,7 +221,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_cap_150]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -248,11 +241,10 @@ target_profile = "capped_150"
 prediction_profile = "symmetric"
 phase_3_enabled = false
 
-# PE_run_3 Stage D: keep the accuracy configuration fixed and vary only the
+# PE_3 Stage D: keep the accuracy configuration fixed and vary only the
 # XGBoost loss. No scalar safety offset is mixed into these cells.
 
 [experiments.PE3_safety_symmetric]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -274,7 +266,6 @@ prediction_profile = "symmetric"
 phase_3_enabled = false
 
 [experiments.PE3_safety_severity_1_5]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -296,7 +287,6 @@ prediction_profile = "severity_1_5"
 phase_3_enabled = false
 
 [experiments.PE3_safety_severity_2_0]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -318,7 +308,6 @@ prediction_profile = "severity_2_0"
 phase_3_enabled = false
 
 [experiments.PE3_safety_severity_3_0]
-pipeline_run = "PE_run_3"
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"

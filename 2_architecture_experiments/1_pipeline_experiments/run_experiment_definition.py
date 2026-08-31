@@ -1,4 +1,4 @@
-"""Execute the ordered script plan declared by one PE_run_X definition."""
+"""Execute the ordered script plan declared by one PE_X experiment."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from experiment_config import ExperimentConfigError, read_experiment_config
-from experiment_paths import repository_path
+from experiment_paths import pipeline_owner, repository_path, run_directory
 
 
 ARCHITECTURE_EXPERIMENTS_ROOT = SCRIPT_DIR.parent
@@ -112,13 +112,18 @@ def _focused_commands(
         str(definition_path.resolve()),
     ]
     commands: dict[str, list[str]] = {}
+    definitions = config.get("run_definitions", {})
+    definition = definitions.get(run_name) if isinstance(definitions, dict) else None
+    if not isinstance(definition, dict):
+        raise DefinitionRunnerError(f"Missing run definition for {run_name}")
+    owner = pipeline_owner(run_name, definition)
     for group_name, group in config.get("experiment_groups", {}).items():
-        if isinstance(group, dict) and group.get("pipeline_run") == run_name:
+        if isinstance(group, dict) and pipeline_owner(group_name, group) == owner:
             commands[str(group_name)] = [*common, "--group", str(group_name)]
     for experiment_name, experiment in config.get("experiments", {}).items():
         if (
             isinstance(experiment, dict)
-            and experiment.get("pipeline_run") == run_name
+            and pipeline_owner(experiment_name, experiment) == owner
         ):
             commands[str(experiment_name)] = [*common, "--run", str(experiment_name)]
     for table_name in (
@@ -217,7 +222,7 @@ def main(definition_path: Path, run_name: str) -> None:
         print(f"{run_name}: {run.get('title', run_name)}", flush=True)
         print(f"Settings:  {definition_path.resolve()}", flush=True)
         print(
-            f"Artifacts: {SCRIPT_DIR / 'runs' / run_name}",
+            f"Artifacts: {run_directory(SCRIPT_DIR / 'experiments', run_name, run)}",
             flush=True,
         )
         if args.status:

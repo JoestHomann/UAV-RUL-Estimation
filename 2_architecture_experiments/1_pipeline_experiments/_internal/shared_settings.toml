@@ -1,5 +1,5 @@
 # Internal defaults shared by all pipeline experiments.
-# Users edit only experiments/PE_run_X/settings.toml.
+# Users edit only experiments/PE_X/settings.toml.
 
 settings_version = 1
 

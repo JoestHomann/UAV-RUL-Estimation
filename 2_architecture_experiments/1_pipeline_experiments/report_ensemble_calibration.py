@@ -26,6 +26,7 @@ from experiment_paths import artifact_directory
 ARCHITECTURE_EXPERIMENTS_ROOT = SCRIPT_DIR.parent
 REPOSITORY_ROOT = ARCHITECTURE_EXPERIMENTS_ROOT.parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pipeline_experiments.toml"
+EXPERIMENTS_DIR = SCRIPT_DIR / "experiments"
 PAIR_KEYS = [
     "outer_fold",
     "inner_fold",
@@ -65,7 +66,7 @@ def _paired_predictions(
     if not isinstance(source_name, str) or not isinstance(source, dict):
         raise EnsembleReportError("Ensemble group must name one source experiment")
     path = (
-        artifact_directory(SCRIPT_DIR / "runs", source_name, source)
+        artifact_directory(EXPERIMENTS_DIR, source_name, source)
         / "phase2"
         / "5_inner_model_selection"
         / "selected_inner_predictions.csv.gz"
@@ -291,8 +292,12 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     config = _read_config(args.config.resolve())
+    groups = config.get("experiment_groups", {})
+    group = groups.get(args.group) if isinstance(groups, dict) else None
+    if not isinstance(group, dict):
+        parser.error(f"Unknown experiment group {args.group!r}")
     output_dir = args.output_dir or (
-        SCRIPT_DIR / "runs" / "PE_run_3" / args.group / "reporting"
+        artifact_directory(EXPERIMENTS_DIR, args.group, group) / "reporting"
     )
     try:
         manifest = write_report(config, args.group, output_dir.resolve())

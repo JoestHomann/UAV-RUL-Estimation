@@ -256,8 +256,8 @@ __marimo__/
 # from the tracked TOML and implementation and can become large.
 3_final_model_training_and_inference/runs/
 
-# Declarative experiment-manager outputs. The catalog and scripts are tracked;
-# generated Phase 1/2/3 preparation data and manual score records are local
-# run artifacts.
-2_architecture_experiments/1_pipeline_experiments/runs/
+# Declarative experiment-manager outputs. Each PE_X keeps its generated
+# executions beside its launcher and settings, while run_N contents remain
+# local and reproducible rather than entering Git.
+2_architecture_experiments/1_pipeline_experiments/experiments/PE_*/runs/
 2_architecture_experiments/1_pipeline_experiments/experiment_comparison.csv

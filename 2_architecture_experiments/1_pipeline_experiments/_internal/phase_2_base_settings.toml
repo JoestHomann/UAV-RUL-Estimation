@@ -1,9 +1,9 @@
 # Internal Phase 2 model/search-space defaults for pipeline experiments. Users
 # select architectures, budgets, features, targets, and policies in the
-# co-located experiments/PE_run_X/settings.toml file. The pipeline experiment
+# co-located experiments/PE_X/settings.toml file. The pipeline experiment
 # manager reads this base file; the standalone Phase 2 workflow does not. Named
 # experiment values and observed Phase 1 artifact facts are resolved into the
-# generated settings under 2_architecture_experiments/1_pipeline_experiments/runs/<experiment>/phase2/.
+# generated settings under experiments/PE_X/runs/run_N/<sub-experiment>/phase2/.
 #
 # Live training progress: in a second PowerShell terminal at the repository
 # root run tensorboard_monitoring\launch_tensorboard.py, then open the printed

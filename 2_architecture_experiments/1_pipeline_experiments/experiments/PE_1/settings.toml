@@ -1,20 +1,24 @@
-# USER-EDITABLE SETTINGS FOR PE_run_1.
+# USER-EDITABLE SETTINGS FOR PE_1.
 # Run this experiment with the run.py file beside this settings file.
-# Edit [execution] for resources and [experiments.PE_run_1] for the scientific
+# Edit [execution] for resources and [experiments.PE_1] for the scientific
 # design. The run definition and script chain make execution reviewable.
 include = ["../../_internal/shared_settings.toml"]
+
+[pipeline]
+experiment = "PE_1"
+run = "run_1"
 
 [execution]
 max_workers = 6
 
-[run_definitions.PE_run_1]
+[run_definitions.PE_1]
 title = "Original architecture-study baseline"
 description = "Resume or reproduce the original drift-pruned Phase 2 baseline."
 
-[[run_definitions.PE_run_1.steps]]
+[[run_definitions.PE_1.steps]]
 name = "baseline_architecture_study"
 script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
-arguments = ["--run", "PE_run_1"]
+arguments = ["--run", "PE_1"]
 script_chain = "phase2_complete"
 
 [script_chains.phase2_complete]
@@ -28,8 +32,8 @@ scripts = [
     "2_architecture_experiments/2_model_architecture_study/7_architecture_comparison/run_architecture_comparison.py",
 ]
 
-[experiments.PE_run_1]
-pipeline_run = "PE_run_1"
+[experiments.PE_1]
+artifact_root = true
 enabled = true
 from_stage = "phase2"
 through_stage = "phase2"
@@ -61,6 +65,6 @@ phase_3_candidate_budget = 50
 phase_3_search_seed = 13
 phase_3_model_seed = 13
 
-# Target/scenario 2x2 matrix. PE_run_1 supplies the current-scenario/raw-target
+# Target/scenario 2x2 matrix. PE_1 supplies the current-scenario/raw-target
 # cell. The three cells below stop after development-only Step 5 until one is
 # selected and its phase_2_scope is deliberately changed to "complete".

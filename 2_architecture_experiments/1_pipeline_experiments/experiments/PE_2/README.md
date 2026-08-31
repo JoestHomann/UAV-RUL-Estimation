@@ -1,4 +1,4 @@
-# PE_run_2
+# PE_2
 
 Pipeline-structure and degradation-learning studies. PE1 is imported only as
 the frozen current/raw control for the target/scenario comparison.
@@ -8,7 +8,7 @@ the frozen current/raw control for the target/scenario comparison.
 Edit only `settings.toml`, then run or resume all seven studies:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_2\run.py
 ```
 
 Inspect first with `--list` or `--status`. Run selected studies by repeating
@@ -27,14 +27,16 @@ dense_prefix_training
 For example:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only signal_family_ablation
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_2\run.py --only signal_family_ablation
 ```
 
 Outputs are grouped under
-`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_2/`.
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_2/runs/run_1/`.
 
 ## Settings
 
+`[pipeline].run` selects the artifact folder. Change it from `run_1` to
+`run_2` before starting another execution; the same `run.py` is used.
 The group tables define controls, treatments, and reporting. Each
 `[experiments.*]` table defines one scientific cell. Edit
 `[execution].max_workers` once to control concurrency for the whole run.

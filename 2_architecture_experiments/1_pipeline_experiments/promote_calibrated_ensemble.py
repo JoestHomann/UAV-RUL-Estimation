@@ -22,11 +22,18 @@ from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
+from experiment_paths import (
+    artifact_directory,
+    pipeline_owner,
+    pipeline_run_name,
+    run_directory,
+)
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 ARCHITECTURE_EXPERIMENTS_ROOT = SCRIPT_DIR.parent
 REPOSITORY_ROOT = ARCHITECTURE_EXPERIMENTS_ROOT.parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pipeline_experiments.toml"
-RUNS_DIR = SCRIPT_DIR / "runs"
+EXPERIMENTS_DIR = SCRIPT_DIR / "experiments"
 LOCKED_RUNNER = (
     REPOSITORY_ROOT
     / "2_architecture_experiments"
@@ -96,7 +103,15 @@ def _selected_contract(
     workflow_name = promotion.get("workflow")
     if not isinstance(workflow_name, str) or not workflow_name:
         raise PromotionError("Promotion workflow must be a non-empty name")
-    workflow_dir = RUNS_DIR / workflow_name / "workflow"
+    workflows = config.get("experiment_workflows", {})
+    workflow = workflows.get(workflow_name) if isinstance(workflows, dict) else None
+    if not isinstance(workflow, dict):
+        raise PromotionError(f"Unknown promotion workflow {workflow_name!r}")
+    workflow_dir = run_directory(
+        EXPERIMENTS_DIR,
+        workflow_name,
+        workflow,
+    ) / "workflow"
     selection_path = workflow_dir / "selection_manifest.json"
     selection = _read_json(selection_path, "workflow selection manifest")
     if selection.get("status") != "complete" or selection.get("uses_locked_evaluation") is not False:
@@ -151,7 +166,8 @@ def _selected_contract(
     contract = {
         "contract_version": 1,
         "status": "frozen_before_locked_evaluation",
-        "pipeline_run": workflow_name,
+        "pipeline_experiment": pipeline_owner(workflow_name, workflow)[0],
+        "pipeline_run": pipeline_run_name(workflow_name, workflow),
         "promotion": promotion_name,
         "source_experiment": source_name,
         "selected_candidate": candidate,
@@ -181,10 +197,7 @@ def _selected_contract(
 
 
 def _source_paths(source_name: str, source: dict[str, Any]) -> dict[str, Path]:
-    pipeline_run = str(source.get("pipeline_run", source_name))
-    source_root = RUNS_DIR / pipeline_run
-    if pipeline_run != source_name:
-        source_root /= source_name
+    source_root = artifact_directory(EXPERIMENTS_DIR, source_name, source)
     phase2 = source_root / "phase2"
     return {
         "root": source_root,
@@ -429,7 +442,11 @@ def _write_reporting(
     axis.scatter(predictions["y_true"], predictions["y_pred"], s=8, alpha=0.18, color="#2878b5")
     maximum = float(max(predictions["y_true"].max(), predictions["y_pred"].max()))
     axis.plot([0, maximum], [0, maximum], linestyle="--", color="#333333", linewidth=1)
-    axis.set(xlabel="Observed RUL", ylabel="Calibrated ensemble RUL", title="PE_run_3 locked prediction alignment")
+    axis.set(
+        xlabel="Observed RUL",
+        ylabel="Calibrated ensemble RUL",
+        title="PE_3 locked prediction alignment",
+    )
     figure.tight_layout()
     alignment_path = figure_dir / "locked_prediction_alignment.png"
     figure.savefig(alignment_path, dpi=180)
@@ -487,9 +504,17 @@ def run_promotion(
 ) -> dict[str, Any]:
     """Freeze, resume, and report one promoted ensemble policy."""
 
+    promotion = _promotion_table(config, promotion_name)
     contract, source, _ = _selected_contract(config, promotion_name)
-    workflow_name = str(contract["pipeline_run"])
-    root = RUNS_DIR / workflow_name / promotion_name
+    workflow_name = str(promotion["workflow"])
+    workflows = config.get("experiment_workflows", {})
+    workflow = workflows.get(workflow_name) if isinstance(workflows, dict) else None
+    if not isinstance(workflow, dict):
+        raise PromotionError(f"Unknown promotion workflow {workflow_name!r}")
+    root = (
+        run_directory(EXPERIMENTS_DIR, workflow_name, workflow)
+        / promotion_name
+    )
     contract_path = root / "promotion_contract.json"
     calibrator_path = root / "frozen_policy" / "residual_calibrator.joblib"
     calibration_summary_path = root / "frozen_policy" / "calibration_fit_summary.json"
@@ -534,7 +559,8 @@ def run_promotion(
     manifest = {
         **report,
         "promotion": promotion_name,
-        "pipeline_run": workflow_name,
+        "pipeline_experiment": pipeline_owner(workflow_name, workflow)[0],
+        "pipeline_run": pipeline_run_name(workflow_name, workflow),
         "source_experiment": contract["source_experiment"],
         "contract": _repo_relative(contract_path),
         "calibration_fit_summary": _repo_relative(calibration_summary_path),

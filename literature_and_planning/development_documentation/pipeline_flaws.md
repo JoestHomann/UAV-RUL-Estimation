@@ -302,7 +302,7 @@ overall R2 confidence interval is 0.8577 to 0.9026, so a reliable R2 of at least
 
 The following sections preserve the protocol that motivated implementation.
 The cap-125 2x2 matrix and the experiments summarized above are complete.
-PE_run_3 now implements feature-union, cap-sensitivity, heterogeneous ensemble,
+PE_3 now implements feature-union, cap-sensitivity, heterogeneous ensemble,
 cross-fitted residual-calibration, and severity-shaped overprediction-loss
 experiments. Their results are pending. Quantile-loss experiments remain
 unimplemented; Kaggle confirmation of Run 4 is complete.

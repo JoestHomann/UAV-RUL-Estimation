@@ -23,6 +23,7 @@ from experiment_paths import artifact_directory
 ARCHITECTURE_EXPERIMENTS_ROOT = SCRIPT_DIR.parent
 REPOSITORY_ROOT = ARCHITECTURE_EXPERIMENTS_ROOT.parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pipeline_experiments.toml"
+EXPERIMENTS_DIR = SCRIPT_DIR / "experiments"
 RESULT_COLUMNS = {
     "mean_inner_r2": "r2",
     "mean_inner_rmse": "rmse",
@@ -114,7 +115,7 @@ def collect_results(
         feature_set = experiment.get("feature_set")
         path = (
             artifact_directory(
-                SCRIPT_DIR / "runs",
+                EXPERIMENTS_DIR,
                 experiment_name,
                 experiment,
             )
@@ -351,7 +352,15 @@ def main() -> None:
     config = _read_config(args.config.resolve())
     output_dir = args.output_dir
     if output_dir is None:
-        output_dir = SCRIPT_DIR / "runs" / args.group / "reporting"
+        groups = config.get("experiment_groups", {})
+        group = groups.get(args.group) if isinstance(groups, dict) else None
+        if not isinstance(group, dict):
+            parser.error(f"Unknown experiment group {args.group!r}")
+        output_dir = artifact_directory(
+            EXPERIMENTS_DIR,
+            args.group,
+            group,
+        ) / "reporting"
     try:
         manifest = write_report(config, args.group, output_dir.resolve())
     except AblationReportError as error:

@@ -5,26 +5,42 @@ Last updated: 2026-08-31
 ## Purpose
 
 `pipeline_experiments` contains controlled experiments that change assumptions
-across Phase 1 and Phase 2. Each pipeline run owns one directory. Its named
-sub-experiments own resolved settings, checkpoints, and results below
-`2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. Each numbered run
-has one user-editable `settings.toml` and one `run.py` entry point under
-[`experiments/PE_run_X`](../../2_architecture_experiments/1_pipeline_experiments/experiments/). The top-level
+across Phase 1 and Phase 2. Each `PE_X` owns one directory and may contain
+multiple execution folders named `run_N`. Its named sub-experiments own resolved
+settings, checkpoints, and results below
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/runs/run_N/<sub_experiment>/`.
+Each experiment has one user-editable `settings.toml` and one `run.py` entry
+point under
+[`experiments/PE_X`](../../2_architecture_experiments/1_pipeline_experiments/experiments/). The top-level
 [`pipeline_experiments.toml`](../../2_architecture_experiments/1_pipeline_experiments/pipeline_experiments.toml)
 only composes those settings for compatibility tools. Shared implementation
 defaults live under `_internal/` and are not an additional per-run edit point.
 
 | Run | Definition | Single entry point |
 | --- | --- | --- |
-| `PE_run_1` | `experiments/PE_run_1/settings.toml` | `experiments/PE_run_1/run.py` |
-| `PE_run_2` | `experiments/PE_run_2/settings.toml` | `experiments/PE_run_2/run.py` |
-| `PE_run_3` | `experiments/PE_run_3/settings.toml` | `experiments/PE_run_3/run.py` |
-| `PE_run_4` | `experiments/PE_run_4/settings.toml` | `experiments/PE_run_4/run.py` |
+| `PE_1` | `experiments/PE_1/settings.toml` | `experiments/PE_1/run.py` |
+| `PE_2` | `experiments/PE_2/settings.toml` | `experiments/PE_2/run.py` |
+| `PE_3` | `experiments/PE_3/settings.toml` | `experiments/PE_3/run.py` |
+| `PE_4` | `experiments/PE_4/settings.toml` | `experiments/PE_4/run.py` |
 
 Every launcher prints its exact script plan before execution. Use `--list` to
 review without running, `--status` to inspect saved progress, and
 `--only <name>` to rerun one declared step or sub-experiment group. Running
 without options executes or resumes the complete large experiment.
+
+The active execution is declared once in each settings file:
+
+```toml
+[pipeline]
+experiment = "PE_X"
+run = "run_1"
+```
+
+To start another execution of the same experiment, change only `pipeline.run`
+to an unused name such as `run_2`, edit the intended scientific settings, and
+invoke the same `run.py`. Existing run folders are not overwritten. A run that
+rebuilds Phase 1 or launches Phase 3 must also use unused external Phase 1/3
+identities unless reuse is an intentional part of the experiment.
 
 The current experiment sets test whether validation/target assumptions explain
 the offline-to-Kaggle gap and whether identified telemetry degradation families
@@ -56,12 +72,12 @@ experiment is later changed to `"complete"` and evaluated in Steps 6-7.
 
 | Experiment | Scenario | Fitting target | What is investigated | Status |
 | --- | --- | --- | --- | --- |
-| `PE_run_1` | Current | Raw | Baseline task and architecture performance | Complete through Step 7 |
+| `PE_1` | Current | Raw | Baseline task and architecture performance | Complete through Step 7 |
 | `PE_2x2_current_cap125` | Current | Cap 125 | Target-cap effect without changing validation scenarios | Step 5 complete; rejected |
 | `PE_2x2_early_raw` | Early/middle | Raw | Scenario-construction effect without changing the target | Step 5 complete; rejected |
 | `PE_2x2_early_cap125` | Early/middle | Cap 125 | Interaction between bounded scenarios and capped fitting | Selected; locked Steps 6-7 and Phase 3 Run 4 complete |
 
-### PE_run_1: current scenarios, raw target
+### PE_1: current scenarios, raw target
 
 This is the unchanged control. It uses current validation scenarios and raw RUL
 for fitting and evaluation. It originally compared the mean baseline, Random
@@ -74,7 +90,7 @@ overprediction under the original task.
 
 ### PE_2x2_current_cap125: current scenarios, capped target
 
-This cell reuses the `PE_run_1` Phase 1 artifacts and changes only the fitting
+This cell reuses the `PE_1` Phase 1 artifacts and changes only the fitting
 target from raw RUL to cap 125. It tests whether reducing the requirement for
 exact early-life RUL prediction helps under the existing validation
 distribution. Prediction clipping is not applied.
@@ -103,8 +119,8 @@ finish.
 
 | Experiment | Family | Inner RMSE mean | Fold SD | Inner R2 mean | Bias | Overprediction rate | Result |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `PE_run_1` | XGBoost | 29.8059 | 1.7513 | 0.7708 | +5.2165 | 67.35% | Current/raw control |
-| `PE_run_1` | ExtraTrees | 32.7578 | 2.6545 | 0.7264 | +4.4906 | 66.00% | Lower safety bias, weaker RMSE |
+| `PE_1` | XGBoost | 29.8059 | 1.7513 | 0.7708 | +5.2165 | 67.35% | Current/raw control |
+| `PE_1` | ExtraTrees | 32.7578 | 2.6545 | 0.7264 | +4.4906 | 66.00% | Lower safety bias, weaker RMSE |
 | `PE_2x2_current_cap125` | XGBoost | 36.2141 | 2.5645 | 0.6690 | -10.8488 | 46.70% | Cap harms the current-scenario task |
 | `PE_2x2_current_cap125` | ExtraTrees | 37.1100 | 2.5884 | 0.6525 | -10.7370 | 50.95% | Same failure in the independent family |
 | `PE_2x2_early_raw` | XGBoost | 23.3667 | 1.5326 | 0.4867 | +11.4973 | 71.35% | Lower RMSE from narrower targets, but poor R2 and bias |
@@ -125,7 +141,7 @@ but it was not written into this file until after the locked run completed. That
 documentation-order deviation is recorded here explicitly; no locked metric
 was used to change the selected cell.
 
-The completed `PE_run_1` locked results were XGBoost `R2 = 0.8041`,
+The completed `PE_1` locked results were XGBoost `R2 = 0.8041`,
 `RMSE = 28.4989`, and overprediction rate `70.95%`; ExtraTrees produced
 `R2 = 0.7640`, `RMSE = 31.2779`, and overprediction rate `66.60%`. Pairwise
 intervals did not establish a decisive R2 or RMSE difference. XGBoost was the
@@ -209,25 +225,25 @@ calculated from rows at or before the prefix cutoff.
 Run with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_2\run.py `
   --only signal_family_ablation
 ```
 
 Results are written to
-`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_2/PE_signal_family_ablation/reporting/`. The summary
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_2/runs/run_1/PE_signal_family_ablation/reporting/`. The summary
 reports fold-paired R2, RMSE, absolute-bias, overprediction-rate, and RMS
 overprediction improvements relative to the same model/fold control. A family
 is supported only when accuracy gains are consistent across folds and both
 models; leaderboard scores are not used to select it.
 
 For every experiment and group, all generated PNG plots are additionally
-gathered in `2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/figures/`. The original plots and
+gathered in `2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/runs/run_N/figures/`. The original plots and
 numeric artifacts remain in their stage folders; `figure_manifest.json` maps
 the flat gallery copies back to those canonical sources.
 
-## PE_run_3: Focused Performance and Safety Study
+## PE_3: Focused Performance and Safety Study
 
-PE_run_3 implements the ordered sequence
+PE_3 implements the ordered sequence
 `feature union -> cap sensitivity -> ensemble/calibration -> severity loss ->
 frozen locked confirmation`. Every model-training cell uses development Step 5
 only. Locked scenarios stay closed until the complete policy is selected and
@@ -260,7 +276,7 @@ predeclared R2/RMSE tolerance before considering safety improvements.
 Run the complete sequence with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_3\run.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_3\run.py
 ```
 
 The launcher selects feature and cap winners by highest equal-weight mean
@@ -272,7 +288,7 @@ eligible; RMS overprediction, overprediction rate, RMSE, and R2 then decide in
 that order. The chosen cap-125 feature experiment is reused as the cap control,
 and the selected cap experiment's XGBoost predictions are reused as the
 symmetric safety control. The exact choices and resolved catalog are stored in
-`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/workflow/selection_manifest.json` and
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/workflow/selection_manifest.json` and
 `resolved_catalog.json`.
 
 The selected policy is frozen in `PE3_final_ensemble/promotion_contract.json`.
@@ -281,14 +297,14 @@ the existing Step 6 evaluator opens locked data. Locked XGBoost and ExtraTrees
 family/fold checkpoints are resumable and are combined without further tuning.
 The confirmation writes seed metrics, RUL-band safety metrics, predictions, and
 figures under `PE3_final_ensemble/`; all plots are also copied into
-`2_architecture_experiments/1_pipeline_experiments/runs/PE_run_3/figures/`. Phase 3 Run 5 selected candidate
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/figures/`. Phase 3 Run 5 selected candidate
 10 of 25, reached development mean-fold R2 0.89422 and RMSE 10.5306, and
 produced a verified 100-row submission. Its public Kaggle R2 was 0.86525,
 improving on Run 4's 0.84513 while retaining a validation-to-leaderboard gap.
 
-## PE_run_4: Conditional Conservative Calibration
+## PE_4: Conditional Conservative Calibration
 
-PE_run_4 tests whether the remaining overprediction can be reduced without a
+PE_4 tests whether the remaining overprediction can be reduced without a
 global scalar offset. It starts from Phase 3 Run 5's selected development OOF
 predictions and estimates a correction as a function of predicted RUL. For each
 outer validation fold, the correction curve is fitted only on the other four
@@ -297,7 +313,7 @@ uses `max(0, prediction - interpolated_correction)`, so calibration can never
 raise a prediction.
 
 The control and quantiles 0.50, 0.55, 0.60, 0.65, and 0.70 are predeclared in
-`experiments/PE_run_4/settings.toml`. Policies must finish within 0.005 mean-fold R2 of
+`experiments/PE_4/settings.toml`. Policies must finish within 0.005 mean-fold R2 of
 the best policy before RMS overprediction, overprediction rate, RMSE, and R2
 select the winner. No locked or test targets enter fitting or selection.
 
@@ -314,13 +330,13 @@ The selected `q=0.55` policy reduces the largest systematic excess in the
 26-75 RUL region. It is fitted once on all 500 development OOF rows and applied
 to the verified, unlabeled Run 5 submission predictions. The candidate
 submission, calibrator, cross-fitted predictions, numeric reports, and four
-figures are stored under `2_architecture_experiments/1_pipeline_experiments/runs/PE_run_4/`. Leaderboard
+figures are stored under `2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/`. Leaderboard
 confirmation remains pending.
 
 Run or reproduce the complete experiment with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_4\run.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_4\run.py
 ```
 
 ## Degradation-Learning Experiment Register
@@ -406,7 +422,7 @@ worse RMS overprediction and overall accuracy.
 Run one group from the repository root with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_2\run.py `
   --only failure_cycle_target
 ```
 

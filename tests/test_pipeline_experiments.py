@@ -46,7 +46,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_catalog_has_phase1_profiles_and_named_experiments(self) -> None:
         experiments = run_experiments._experiments(self.config)
-        self.assertIn("PE_run_1", experiments)
+        self.assertIn("PE_1", experiments)
         self.assertIn("drift_ablation", self.config["profiles"])
         self.assertIn("signal_family_ablation", self.config["profiles"])
         self.assertIn("current", self.config["scenario_profiles"])
@@ -57,14 +57,17 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
         expected_steps = {1: 1, 2: 7, 3: 1, 4: 1}
         for run_number, step_count in expected_steps.items():
-            run_name = f"PE_run_{run_number}"
-            run_dir = experiments_root / run_name
-            toml_files = list(run_dir.glob("*.toml"))
-            launchers = list(run_dir.glob("*.py"))
-            self.assertEqual(toml_files, [run_dir / "settings.toml"])
-            self.assertEqual(launchers, [run_dir / "run.py"])
+            experiment_name = f"PE_{run_number}"
+            experiment_dir = experiments_root / experiment_name
+            toml_files = list(experiment_dir.glob("*.toml"))
+            launchers = list(experiment_dir.glob("*.py"))
+            self.assertEqual(toml_files, [experiment_dir / "settings.toml"])
+            self.assertEqual(launchers, [experiment_dir / "run.py"])
             config = run_experiments._read_config(toml_files[0])
-            definition = config["run_definitions"][run_name]
+            definition = config["run_definitions"][experiment_name]
+            self.assertEqual(definition["pipeline_experiment"], experiment_name)
+            self.assertEqual(definition["pipeline_run"], "run_1")
+            self.assertTrue((experiment_dir / "runs" / "run_1").is_dir())
             self.assertEqual(len(definition["steps"]), step_count)
             for step in definition["steps"]:
                 self.assertEqual(
@@ -83,8 +86,8 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
     def test_each_pipeline_run_launcher_lists_its_reviewable_plan(self) -> None:
         experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
         for run_number in range(1, 5):
-            run_name = f"PE_run_{run_number}"
-            launcher = experiments_root / run_name / "run.py"
+            experiment_name = f"PE_{run_number}"
+            launcher = experiments_root / experiment_name / "run.py"
             completed = subprocess.run(
                 [sys.executable, str(launcher), "--list"],
                 cwd=REPOSITORY_ROOT,
@@ -93,8 +96,9 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertIn(f"{run_name}:", completed.stdout)
+            self.assertIn(f"{experiment_name}:", completed.stdout)
             self.assertIn("settings.toml", completed.stdout)
+            self.assertIn(f"PE_{run_number}\\runs\\run_1", completed.stdout)
             self.assertIn("Execution plan:", completed.stdout)
 
     def test_pipeline_run_structure_has_no_legacy_definition_surface(self) -> None:
@@ -111,10 +115,42 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_each_settings_file_declares_its_run_identity_once(self) -> None:
+        experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
+        for number in range(1, 5):
+            experiment_name = f"PE_{number}"
+            settings_path = experiments_root / experiment_name / "settings.toml"
+            with settings_path.open("rb") as stream:
+                raw = tomllib.load(stream)
+            self.assertEqual(
+                raw["pipeline"],
+                {"experiment": experiment_name, "run": "run_1"},
+            )
+            for table_name in (
+                "run_definitions",
+                "experiments",
+                "experiment_groups",
+                "experiment_workflows",
+                "conditional_calibration_workflows",
+            ):
+                for specification in raw.get(table_name, {}).values():
+                    self.assertNotIn("pipeline_experiment", specification)
+                    self.assertNotIn("pipeline_run", specification)
+            config = run_experiments._read_config(settings_path)
+            definition = config["run_definitions"][experiment_name]
+            self.assertEqual(definition["pipeline_experiment"], experiment_name)
+            self.assertEqual(definition["pipeline_run"], "run_1")
+
+        pe2 = run_experiments._read_config(
+            experiments_root / "PE_2" / "settings.toml"
+        )
+        self.assertEqual(pe2["experiments"]["PE_1"]["pipeline_experiment"], "PE_1")
+        self.assertEqual(pe2["experiments"]["PE_1"]["pipeline_run"], "run_1")
+
     def test_compatibility_catalog_composes_all_run_definitions(self) -> None:
         self.assertEqual(
             set(self.config["run_definitions"]),
-            {"PE_run_1", "PE_run_2", "PE_run_3", "PE_run_4"},
+            {"PE_1", "PE_2", "PE_3", "PE_4"},
         )
         self.assertEqual(len(run_experiments._experiments(self.config)), 36)
         self.assertIn(
@@ -195,20 +231,24 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(groups))
         for group_name in expected:
-            self.assertEqual(groups[group_name]["pipeline_run"], "PE_run_3")
+            self.assertEqual(groups[group_name]["pipeline_experiment"], "PE_3")
+            self.assertEqual(groups[group_name]["pipeline_run"], "run_1")
             for name in groups[group_name]["experiments"]:
                 experiment = run_experiments._experiment(self.config, name)
-                self.assertEqual(experiment["pipeline_run"], "PE_run_3")
+                self.assertEqual(experiment["pipeline_experiment"], "PE_3")
+                self.assertEqual(experiment["pipeline_run"], "run_1")
                 self.assertEqual(
                     run_experiments._run_dir(name, experiment),
                     PIPELINE_EXPERIMENTS_ROOT
+                    / "experiments"
+                    / "PE_3"
                     / "runs"
-                    / "PE_run_3"
+                    / "run_1"
                     / name,
                 )
 
     def test_pe_run_3_is_declared_as_an_automatic_workflow(self) -> None:
-        workflow = run_experiments._experiment_workflows(self.config)["PE_run_3"]
+        workflow = run_experiments._experiment_workflows(self.config)["PE_3"]
         self.assertEqual(workflow["feature_group"], "PE3_feature_union")
         self.assertEqual(workflow["cap_group"], "PE3_cap_sensitivity")
         self.assertEqual(workflow["ensemble_group"], "PE3_ensemble_calibration")
@@ -216,12 +256,12 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertEqual(workflow["safety_r2_tolerance"], 0.005)
         self.assertEqual(workflow["promotion"], "PE3_final_ensemble")
         promotion = run_experiments._promotions(self.config)["PE3_final_ensemble"]
-        self.assertEqual(promotion["workflow"], "PE_run_3")
+        self.assertEqual(promotion["workflow"], "PE_3")
         self.assertEqual(promotion["ensemble_group"], "PE3_ensemble_calibration")
 
     def test_pe_run_4_declares_all_conditional_calibration_quantiles(self) -> None:
         workflow = run_experiments._conditional_calibration_workflows(self.config)[
-            "PE_run_4"
+            "PE_4"
         ]
         self.assertEqual(workflow["source_phase_3_run"], 5)
         self.assertEqual(workflow["quantiles"], [0.50, 0.55, 0.60, 0.65, 0.70])
@@ -316,7 +356,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         )
 
     def test_ready_experiment_uses_distinct_run_identities(self) -> None:
-        experiment = run_experiments._experiment(self.config, "PE_run_1")
+        experiment = run_experiments._experiment(self.config, "PE_1")
         self.assertEqual(experiment["phase_1_run_name"], "PE_run_1")
         self.assertEqual(experiment["phase_2_run_number"], 6)
         self.assertEqual(
@@ -328,7 +368,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_target_scenario_matrix_is_explicit_and_unconfounded(self) -> None:
         cells = {
-            "PE_run_1": ("current", "raw"),
+            "PE_1": ("current", "raw"),
             "PE_2x2_current_cap125": ("current", "capped_125"),
             "PE_2x2_early_raw": ("early_and_middle", "raw"),
             "PE_2x2_early_cap125": ("early_and_middle", "capped_125"),
@@ -343,7 +383,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             self.assertEqual(experiment["feature_set"], "screened_drift_pruned")
             self.assertEqual(experiment["candidate_budget"], 50)
 
-        for name in cells.keys() - {"PE_run_1"}:
+        for name in cells.keys() - {"PE_1"}:
             experiment = run_experiments._experiment(self.config, name)
             self.assertEqual(experiment["architectures"], ["extra_trees", "xgboost"])
         for name in ("PE_2x2_current_cap125", "PE_2x2_early_raw"):
@@ -370,7 +410,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             4,
         )
         self.assertEqual(
-            run_experiments._experiment(self.config, "PE_run_1")["phase_2_scope"],
+            run_experiments._experiment(self.config, "PE_1")["phase_2_scope"],
             "complete",
         )
 
@@ -431,11 +471,14 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertNotEqual(pipeline_settings, standalone_settings)
 
     def test_pipeline_phase2_artifacts_are_experiment_owned(self) -> None:
-        paths = run_experiments._phase2_paths("PE_run_1")
+        experiment = run_experiments._experiment(self.config, "PE_1")
+        paths = run_experiments._phase2_paths("PE_1", experiment)
         expected = (
             PIPELINE_EXPERIMENTS_ROOT
+            / "experiments"
+            / "PE_1"
             / "runs"
-            / "PE_run_1"
+            / "run_1"
             / "phase2"
         )
         self.assertEqual(paths["root"], expected)
@@ -596,7 +639,11 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 },
             }
             output_dir = test_root / "runs" / "PE_parent" / "reporting"
-            with patch.object(report_ensemble_calibration, "SCRIPT_DIR", test_root):
+            with patch.object(
+                report_ensemble_calibration,
+                "EXPERIMENTS_DIR",
+                test_root / "runs",
+            ):
                 manifest = report_ensemble_calibration.write_report(
                     config,
                     "PE_ensemble",
@@ -773,7 +820,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 patch.object(run_experiments, "run_promotion") as promotion,
             ):
                 manifest = run_experiments.run_experiment_workflow(
-                    "PE_run_3",
+                    "PE_3",
                     PIPELINE_EXPERIMENTS_ROOT / "pipeline_experiments.toml",
                     config,
                     force=False,
@@ -797,7 +844,9 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 (
                     test_root
                     / "runs"
-                    / "PE_run_3"
+                    / "PE_3"
+                    / "runs"
+                    / "run_1"
                     / "workflow"
                     / "selection_manifest.json"
                 ).is_file()
@@ -807,7 +856,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_promoted_ensemble_contract_is_frozen_from_workflow_selection(self) -> None:
         test_root = REPOSITORY_ROOT / "tmp" / "pipeline_promotion_contract_test"
-        workflow_dir = test_root / "runs" / "PE_run_3" / "workflow"
+        workflow_dir = test_root / "runs" / "PE_3" / "workflow"
         workflow_dir.mkdir(parents=True, exist_ok=True)
         selection = {
             "status": "complete",
@@ -827,7 +876,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         resolved = {
             "experiments": {
                 "PE_source": {
-                    "pipeline_run": "PE_run_3",
+                    "pipeline_run": "PE_3",
                     "feature_set": "screened_drift_pruned",
                     "target_profile": "capped_125",
                     "phase_2_scope": "selection_only",
@@ -849,9 +898,12 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             encoding="utf-8",
         )
         config = {
+            "experiment_workflows": {
+                "PE_3": {"pipeline_run": "PE_3"},
+            },
             "promotions": {
                 "PE3_final_ensemble": {
-                    "workflow": "PE_run_3",
+                    "workflow": "PE_3",
                     "ensemble_group": "PE3_ensemble_calibration",
                 }
             }
@@ -859,7 +911,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         try:
             with patch.object(
                 promote_calibrated_ensemble,
-                "RUNS_DIR",
+                "EXPERIMENTS_DIR",
                 test_root / "runs",
             ):
                 contract, source, _ = promote_calibrated_ensemble._selected_contract(
@@ -941,18 +993,19 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_pipeline_phase3_settings_reference_experiment_phase2_root(self) -> None:
         experiment = copy.deepcopy(
-            run_experiments._experiment(self.config, "PE_run_1")
+            run_experiments._experiment(self.config, "PE_1")
         )
         experiment["phase_3_selected_model_family"] = "xgboost"
         with patch.object(run_experiments, "_write_json"):
             _, payload = run_experiments._phase3_settings(
-                "PE_run_1",
+                "PE_1",
                 self.config,
                 experiment,
             )
         self.assertEqual(
             payload["phase_2_run_root"],
-            "2_architecture_experiments/1_pipeline_experiments/runs/PE_run_1/phase2",
+            "2_architecture_experiments/1_pipeline_experiments/"
+            "experiments/PE_1/runs/run_1/phase2",
         )
 
     def test_pipeline_rejects_the_standalone_phase2_toml(self) -> None:
@@ -962,7 +1015,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             "1_architecture_study_settings/"
             "architecture_study_settings.toml"
         )
-        experiment = run_experiments._experiment(config, "PE_run_1")
+        experiment = run_experiments._experiment(config, "PE_1")
         interface_path, interface = run_experiments._load_interface(experiment)
         with self.assertRaisesRegex(
             run_experiments.ExperimentManagerError,
@@ -1076,7 +1129,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         )
 
     def test_experiment_declares_default_stage_range(self) -> None:
-        experiment = run_experiments._experiment(self.config, "PE_run_1")
+        experiment = run_experiments._experiment(self.config, "PE_1")
         self.assertEqual(experiment["from_stage"], "phase2")
         self.assertEqual(experiment["through_stage"], "phase2")
         self.assertEqual(

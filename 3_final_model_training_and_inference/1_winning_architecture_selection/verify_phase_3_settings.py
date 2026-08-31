@@ -274,7 +274,7 @@ def _verify_promoted_ensemble_reference(
     settings: Phase3Settings,
     phase_2_root: Path,
 ) -> Phase2Verification:
-    """Validate the frozen PE_run_3 policy without requiring a Step 7 ranking."""
+    """Validate the frozen PE_3 run_1 policy without requiring a Step 7 ranking."""
 
     payload = settings.model_dump(mode="json")
     selection_path = (
