@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import tomllib
@@ -655,20 +656,138 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             shutil.rmtree(test_root, ignore_errors=True)
 
     def test_promoted_ensemble_contract_is_frozen_from_workflow_selection(self) -> None:
-        contract, source, _ = promote_calibrated_ensemble._selected_contract(
-            self.config,
-            "PE3_final_ensemble",
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_promotion_contract_test"
+        workflow_dir = test_root / "runs" / "PE_run_3" / "workflow"
+        workflow_dir.mkdir(parents=True, exist_ok=True)
+        selection = {
+            "status": "complete",
+            "uses_locked_evaluation": False,
+            "selections": {
+                "final": {"candidate": "ensemble:blend_xgb_0.50__calibrated"},
+                "ensemble_accuracy": {
+                    "method": "blend_xgb_0.50__calibrated",
+                    "source_experiment": "PE_source",
+                    "mean_r2": 0.88,
+                    "mean_rmse": 11.5,
+                },
+                "feature": {"feature_set": "screened_drift_pruned"},
+                "target_cap": {"target_profile": "capped_125"},
+            },
+        }
+        resolved = {
+            "experiments": {
+                "PE_source": {
+                    "pipeline_run": "PE_run_3",
+                    "feature_set": "screened_drift_pruned",
+                    "target_profile": "capped_125",
+                    "phase_2_scope": "selection_only",
+                }
+            },
+            "experiment_groups": {
+                "PE3_ensemble_calibration": {
+                    "calibration_degree": 2,
+                    "calibration_ridge_alpha": 10.0,
+                }
+            },
+        }
+        (workflow_dir / "selection_manifest.json").write_text(
+            json.dumps(selection),
+            encoding="utf-8",
         )
-        self.assertEqual(
-            contract["selected_candidate"],
-            "ensemble:blend_xgb_0.50__calibrated",
+        (workflow_dir / "resolved_catalog.json").write_text(
+            json.dumps(resolved),
+            encoding="utf-8",
         )
-        self.assertEqual(contract["component_families"], ["extra_trees", "xgboost"])
-        self.assertEqual(contract["xgboost_weight"], 0.5)
-        self.assertEqual(contract["feature_set"], "screened_drift_pruned")
-        self.assertEqual(contract["target_profile"], "capped_125")
-        self.assertFalse(contract["locked_results_used_for_selection"])
-        self.assertEqual(source["phase_2_scope"], "selection_only")
+        config = {
+            "promotions": {
+                "PE3_final_ensemble": {
+                    "workflow": "PE_run_3",
+                    "ensemble_group": "PE3_ensemble_calibration",
+                }
+            }
+        }
+        try:
+            with patch.object(
+                promote_calibrated_ensemble,
+                "RUNS_DIR",
+                test_root / "runs",
+            ):
+                contract, source, _ = promote_calibrated_ensemble._selected_contract(
+                    config,
+                    "PE3_final_ensemble",
+                )
+            self.assertEqual(
+                contract["selected_candidate"],
+                "ensemble:blend_xgb_0.50__calibrated",
+            )
+            self.assertEqual(
+                contract["component_families"],
+                ["extra_trees", "xgboost"],
+            )
+            self.assertEqual(contract["xgboost_weight"], 0.5)
+            self.assertEqual(contract["feature_set"], "screened_drift_pruned")
+            self.assertEqual(contract["target_profile"], "capped_125")
+            self.assertFalse(contract["locked_results_used_for_selection"])
+            self.assertEqual(source["phase_2_scope"], "selection_only")
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
+
+    def test_promoted_calibrator_combines_aligned_locked_components(self) -> None:
+        test_root = REPOSITORY_ROOT / "tmp" / "pipeline_promotion_combine_test"
+        test_root.mkdir(parents=True, exist_ok=True)
+        try:
+            development = pd.DataFrame(
+                {
+                    "raw_blend": [18.0, 29.0, 41.0, 52.0, 64.0, 73.0],
+                    "cutoff": [8.0, 12.0, 16.0, 20.0, 24.0, 28.0],
+                    "observed_rul": [20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
+                }
+            )
+            contract = {
+                "calibration": {"degree": 1, "ridge_alpha": 10.0},
+            }
+            model_path = test_root / "calibrator.joblib"
+            promote_calibrated_ensemble._fit_calibrator(
+                development,
+                contract,
+                model_path,
+            )
+            records = []
+            for row, target in enumerate((25.0, 45.0, 65.0)):
+                common = {
+                    "seed": 13,
+                    "outer_fold": 0,
+                    "scenario": f"locked_{row + 1:02d}",
+                    "sample_id": f"sample_{row}",
+                    "uav_id": f"UAV_{row}",
+                    "cutoff": float(10 + row * 5),
+                    "terminal_lifetime": 100.0,
+                    "lifetime_quantile": 0.5,
+                    "y_true": target,
+                }
+                records.append(
+                    {**common, "model_family": "xgboost", "y_pred": target + 4.0}
+                )
+                records.append(
+                    {**common, "model_family": "extra_trees", "y_pred": target - 2.0}
+                )
+            component_path = test_root / "components.csv.gz"
+            pd.DataFrame.from_records(records).to_csv(
+                component_path,
+                index=False,
+                compression="gzip",
+            )
+            combined = promote_calibrated_ensemble._combine_locked_predictions(
+                component_path,
+                model_path,
+                0.5,
+            )
+            self.assertEqual(len(combined), 3)
+            self.assertTrue(combined["y_pred"].notna().all())
+            self.assertTrue((combined["y_pred"] >= 0.0).all())
+            self.assertIn("calibration_correction", combined)
+        finally:
+            shutil.rmtree(test_root, ignore_errors=True)
 
     def test_pipeline_phase3_settings_reference_experiment_phase2_root(self) -> None:
         experiment = copy.deepcopy(

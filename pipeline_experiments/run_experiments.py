@@ -412,6 +412,7 @@ def _collect_figures(
 def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -> None:
     experiments = _experiments(config)
     groups = _experiment_groups(config)
+    promotions = _promotions(config)
 
     def owned_by(owner: str) -> list[dict[str, Any]]:
         return [
@@ -437,6 +438,13 @@ def _collect_existing_figures(config: dict[str, Any], name: str | None = None) -
                 name,
                 group,
                 related_experiments=owned_by(owner),
+            )
+            return
+        if name in promotions:
+            workflow = str(promotions[name]["workflow"])
+            _collect_figures(
+                workflow,
+                related_experiments=owned_by(workflow),
             )
             return
         if _run_dir(name).is_dir():

@@ -556,7 +556,12 @@ def main() -> None:
         with args.config.resolve().open("rb") as stream:
             config = tomllib.load(stream)
         configured = config.get("execution", {}).get("max_workers", 1)
-        workers = args.max_workers if args.max_workers is not None else (os.cpu_count() or 1 if configured == "auto" else int(configured))
+        if args.max_workers is not None:
+            workers = args.max_workers
+        elif configured == "auto":
+            workers = os.cpu_count() or 1
+        else:
+            workers = int(configured)
         if workers < 1:
             raise PromotionError("max_workers must be positive")
         run_promotion(config, args.promotion, force=args.force, max_workers=workers)
