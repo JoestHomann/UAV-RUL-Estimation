@@ -8,24 +8,29 @@ feature discovery and diagnostics.
 The compact scientific register, experiment rationale, and result record live
 in [`pipeline_experiments.md`](../../literature_and_planning/development_documentation/pipeline_experiments.md).
 
-## Run-owned definitions
+## One folder per experiment
 
 Every numbered pipeline experiment has one reviewable TOML and one execution
-entry point under `definitions/PE_run_X/`. The TOML owns the scientific cells,
+entry point under `experiments/PE_run_X/`. The TOML owns the scientific cells,
 groups, workflow settings, and ordered script plan. The launcher prints every
 resolved script command before execution, resumes existing artifacts, and can
 run one named step for a focused rerun.
 
 ```text
-definitions/
-  _shared.toml
-  PE_run_1/PE_run_1.toml + run_PE_run_1.py
-  PE_run_2/PE_run_2.toml + run_PE_run_2.py
-  PE_run_3/PE_run_3.toml + run_PE_run_3.py
-  PE_run_4/PE_run_4.toml + run_PE_run_4.py
+experiments/
+  PE_run_1/run.py + settings.toml + README.md
+  PE_run_2/run.py + settings.toml + README.md
+  PE_run_3/run.py + settings.toml + README.md
+  PE_run_4/run.py + settings.toml + README.md
+_internal/
+  shared_settings.toml
+  phase_2_base_settings.toml
 ```
 
-`_shared.toml` contains only paths, execution limits, and reusable profiles.
+For normal use, edit only the `settings.toml` beside the selected `run.py`.
+`_internal/` contains implementation defaults shared by the launchers and is
+not a second per-run settings surface. PE2 imports the completed PE1 baseline
+as a frozen control; new PE2 choices still belong only in PE2's settings file.
 `pipeline_experiments.toml` is an include-only compatibility index for tools
 that need to inspect all runs; it is not an editable second catalog.
 
@@ -34,25 +39,26 @@ that need to inspect all runs; it is not an editable second catalog.
 From the repository root:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_1\run_PE_run_1.py --list-steps
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_1\run_PE_run_1.py
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --list-steps
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step signal_family_ablation
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py --status
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_1\run.py --list
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_1\run.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --status
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only signal_family_ablation
 ```
 
-Run the launcher without `--step` to execute every declared step in order.
-Repeat `--step` to select several steps. `--force` is forwarded to the shared
-manager. Low-level stage overrides remain available through
-`run_experiments.py --config <run TOML>` when diagnosing one component.
+Run the launcher without options to execute or resume every declared step in
+order. Use `--list` to inspect exact commands, `--status` to inspect artifacts,
+and repeat `--only NAME` to rerun selected steps or sub-experiments. Add
+`--force` only when an existing completed target must be rebuilt. The shared
+manager remains an internal diagnostic interface; ordinary runs should start
+through the colocated `run.py`.
 
 ## Signal-family ablation
 
 Run the complete development-only degradation-signal study with one command:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py `
-  --step signal_family_ablation
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+  --only signal_family_ablation
 ```
 
 The group builds one shared `current20` Phase 1 run, then compares XGBoost and
@@ -74,11 +80,11 @@ XGBoost and ExtraTrees, a 25-candidate Step 5 search, and keeps locked Steps
 6-7 closed:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step failure_cycle_target
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step baseline_normalization
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step fault_mode
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step signal_compression
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py --step dense_prefix_training
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only failure_cycle_target
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only baseline_normalization
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only fault_mode
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only signal_compression
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py --only dense_prefix_training
 ```
 
 - `PE_failure_cycle_target` compares direct raw-RUL regression with prediction
@@ -109,7 +115,7 @@ frozen locked-confirmation gate. Run or resume the complete workflow with one
 command:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_3\run_PE_run_3.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_3\run.py
 ```
 
 1. `PE3_feature_union` compares the Run 4 drift-pruned features, all supported
@@ -168,7 +174,7 @@ Run 5. It cross-fits subtraction-only residual curves at quantiles 0.50, 0.55,
 no locked or test targets are loaded. Run or reproduce it with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_4\run_PE_run_4.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_4\run.py
 ```
 
 The automatic rule admits policies within 0.005 mean-fold R2 of the best, then
@@ -181,15 +187,14 @@ calibrator and candidate submission are under
 
 ## Target/scenario 2x2 experiment
 
-The catalog contains a predeclared four-cell comparison of current versus
-early/middle validation scenarios and raw versus cap-125 fitting targets.
-`PE_run_1` supplies the completed current/raw control. Run the other three
-development selections in this order:
+PE2 contains a predeclared four-cell comparison of current versus early/middle
+validation scenarios and raw versus cap-125 fitting targets. `PE_run_1`
+supplies the completed current/raw control. Run or resume the ordered group
+through PE2's single entry point:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py --run PE_2x2_current_cap125
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py --run PE_2x2_early_raw
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py --run PE_2x2_early_cap125
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+  --only target_scenario_2x2
 ```
 
 The early/raw run builds the shared early/middle Phase 1 artifacts; the
@@ -237,7 +242,7 @@ desired:
 
 Phase 1 creates a named run under
 `1_dataset_construction/runs/<phase_1_run_name>/`. Phase 2 reads the dedicated
-`2_architecture_experiments/1_pipeline_experiments/phase_2_settings.toml`, binds the selected experiment and
+`2_architecture_experiments/1_pipeline_experiments/_internal/phase_2_base_settings.toml`, binds the selected experiment and
 Phase 1 interface, and writes its resolved settings under
 `2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/phase2/` for grouped
 sub-experiments, while a top-level experiment uses
@@ -259,13 +264,13 @@ positive-residual P90/P95/maximum tails, and per-family prediction alignment
 before and after the six-cycle diagnostic offset. Offset plots are descriptive:
 they do not select or apply an offset to a trained model.
 
-Refresh all figure galleries without rerunning any experiment:
+Refresh one run's figure gallery without rerunning its experiment:
 
 ```powershell
-python 2_architecture_experiments/1_pipeline_experiments/run_experiments.py --collect-figures
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_3\run.py --collect-figures
 ```
 
-Add `--run <experiment>` or `--group <group>` to refresh only one gallery.
+The compatibility manager can still refresh all galleries for maintenance.
 
 The launcher resumes Phase 2 and Phase 3 checkpoints. A partial Phase 1 or
 Phase 2 run can be continued by running the same command again; an interrupted
@@ -281,17 +286,18 @@ Phase 3 range; it does not change the TOML catalog.
 Standalone Phase 2 runs use
 `2_architecture_experiments/2_model_architecture_study/1_architecture_study_settings/architecture_study_settings.toml`.
 Pipeline experiments never read or modify that file. They use the independent
-`2_architecture_experiments/1_pipeline_experiments/phase_2_settings.toml` for Phase 2 defaults and model
-search spaces, while each `definitions/PE_run_X/PE_run_X.toml` owns that run's
+`2_architecture_experiments/1_pipeline_experiments/_internal/phase_2_base_settings.toml` for Phase 2 defaults and model
+search spaces, while each `experiments/PE_run_X/settings.toml` owns that run's
 named scientific choices.
 The two workflows may therefore evolve without silently changing each other's
 runs.
 
 ## Edit the catalog
 
-Create one new `definitions/PE_run_X/` folder, copy a run TOML and launcher,
-then give its `[experiments.*]` blocks new names and run identities. Add the
-new TOML to the compatibility index only after it loads independently.
+Create one new `experiments/PE_run_X/` folder containing `run.py`,
+`settings.toml`, and a compact `README.md`. Give its `[experiments.*]` blocks
+new names and run identities. Add the settings file to the compatibility index
+only after it loads independently.
 
 - `phase_1_profile`, `scenario_profile`, and `prefix_variant` choose the data
   construction policy;
@@ -306,8 +312,8 @@ new TOML to the compatibility index only after it loads independently.
 - the Phase 3 fields enable optional final selection, training, inference,
   submission verification, and model-agnostic reporting.
 
-The global `[execution].max_workers` setting controls parallel Step 5 and Step
-6 study workers for every experiment. Set it to a positive integer or to
+Each run's `[execution].max_workers` setting controls parallel Step 5 and Step
+6 study workers for that large experiment. Set it to a positive integer or to
 `"auto"`; it is an execution setting, not a scientific model setting.
 
 The manager does not create an implicit Cartesian product. Every experiment

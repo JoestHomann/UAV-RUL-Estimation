@@ -1,5 +1,11 @@
-# Reproducible definition for prediction-dependent conservative calibration.
-include = ["../_shared.toml"]
+# USER-EDITABLE SETTINGS FOR PE_run_4.
+# Run this experiment with the run.py file beside this settings file.
+# Edit the conditional workflow table for source run, quantiles, bins, and the
+# accuracy tolerance. This experiment does not retrain the source model.
+include = ["../../_internal/shared_settings.toml"]
+
+[execution]
+max_workers = 6
 
 [run_definitions.PE_run_4]
 title = "Conditional conservative calibration"

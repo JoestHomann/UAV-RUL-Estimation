@@ -1,5 +1,7 @@
-# Pipeline-experiment-owned Phase 2 configuration. The pipeline experiment
-# manager reads this file; the standalone Phase 2 workflow does not. Named
+# Internal Phase 2 model/search-space defaults for pipeline experiments. Users
+# select architectures, budgets, features, targets, and policies in the
+# co-located experiments/PE_run_X/settings.toml file. The pipeline experiment
+# manager reads this base file; the standalone Phase 2 workflow does not. Named
 # experiment values and observed Phase 1 artifact facts are resolved into the
 # generated settings under 2_architecture_experiments/1_pipeline_experiments/runs/<experiment>/phase2/.
 #

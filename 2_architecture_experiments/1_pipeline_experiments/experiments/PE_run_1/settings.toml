@@ -1,5 +1,11 @@
-# Reproducible definition and execution plan for the original pipeline baseline.
-include = ["../_shared.toml"]
+# USER-EDITABLE SETTINGS FOR PE_run_1.
+# Run this experiment with the run.py file beside this settings file.
+# Edit [execution] for resources and [experiments.PE_run_1] for the scientific
+# design. The run definition and script chain make execution reviewable.
+include = ["../../_internal/shared_settings.toml"]
+
+[execution]
+max_workers = 6
 
 [run_definitions.PE_run_1]
 title = "Original architecture-study baseline"

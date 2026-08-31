@@ -1,6 +1,12 @@
-# Reproducible definition and ordered plan for the exploratory pipeline studies.
-# PE_run_1 is included because it is the raw/current control in the 2x2 study.
-include = ["../PE_run_1/PE_run_1.toml"]
+# USER-EDITABLE SETTINGS FOR PE_run_2.
+# Run this experiment with the run.py file beside this settings file.
+# PE_run_1 is included as the frozen raw/current control in the 2x2 study.
+# Edit [execution] once for resources. Edit [experiment_groups.*] to change
+# comparisons and [experiments.*] to change individual scientific cells.
+include = ["../PE_run_1/settings.toml"]
+
+[execution]
+max_workers = 6
 
 [run_definitions.PE_run_2]
 title = "Pipeline-structure and degradation-learning studies"

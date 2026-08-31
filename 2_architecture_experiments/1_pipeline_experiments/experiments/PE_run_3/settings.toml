@@ -1,5 +1,11 @@
-# Reproducible definition and automatic winner-propagating plan for PE_run_3.
-include = ["../_shared.toml"]
+# USER-EDITABLE SETTINGS FOR PE_run_3.
+# Run this experiment with the run.py file beside this settings file.
+# Edit [execution] for resources, group/cell tables for candidates, the workflow
+# table for winner rules, and the promotion table for locked confirmation.
+include = ["../../_internal/shared_settings.toml"]
+
+[execution]
+max_workers = 6
 
 [run_definitions.PE_run_3]
 title = "Feature, target-cap, ensemble, and safety optimization"

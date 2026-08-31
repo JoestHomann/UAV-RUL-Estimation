@@ -8,21 +8,23 @@ Last updated: 2026-08-31
 across Phase 1 and Phase 2. Each pipeline run owns one directory. Its named
 sub-experiments own resolved settings, checkpoints, and results below
 `2_architecture_experiments/1_pipeline_experiments/runs/<pipeline_run>/<sub_experiment>/`. Each numbered run
-has one source TOML and one execution entry point under
-[`definitions/PE_run_X`](../../2_architecture_experiments/1_pipeline_experiments/definitions/). The top-level
+has one user-editable `settings.toml` and one `run.py` entry point under
+[`experiments/PE_run_X`](../../2_architecture_experiments/1_pipeline_experiments/experiments/). The top-level
 [`pipeline_experiments.toml`](../../2_architecture_experiments/1_pipeline_experiments/pipeline_experiments.toml)
-only composes those definitions for compatibility tools.
+only composes those settings for compatibility tools. Shared implementation
+defaults live under `_internal/` and are not an additional per-run edit point.
 
 | Run | Definition | Single entry point |
 | --- | --- | --- |
-| `PE_run_1` | `definitions/PE_run_1/PE_run_1.toml` | `definitions/PE_run_1/run_PE_run_1.py` |
-| `PE_run_2` | `definitions/PE_run_2/PE_run_2.toml` | `definitions/PE_run_2/run_PE_run_2.py` |
-| `PE_run_3` | `definitions/PE_run_3/PE_run_3.toml` | `definitions/PE_run_3/run_PE_run_3.py` |
-| `PE_run_4` | `definitions/PE_run_4/PE_run_4.toml` | `definitions/PE_run_4/run_PE_run_4.py` |
+| `PE_run_1` | `experiments/PE_run_1/settings.toml` | `experiments/PE_run_1/run.py` |
+| `PE_run_2` | `experiments/PE_run_2/settings.toml` | `experiments/PE_run_2/run.py` |
+| `PE_run_3` | `experiments/PE_run_3/settings.toml` | `experiments/PE_run_3/run.py` |
+| `PE_run_4` | `experiments/PE_run_4/settings.toml` | `experiments/PE_run_4/run.py` |
 
-Every launcher prints its exact script plan before execution. Use
-`--list-steps` to review without running and `--step <name>` to rerun one
-declared sub-experiment group.
+Every launcher prints its exact script plan before execution. Use `--list` to
+review without running, `--status` to inspect saved progress, and
+`--only <name>` to rerun one declared step or sub-experiment group. Running
+without options executes or resumes the complete large experiment.
 
 The current experiment sets test whether validation/target assumptions explain
 the offline-to-Kaggle gap and whether identified telemetry degradation families
@@ -207,8 +209,8 @@ calculated from rows at or before the prefix cutoff.
 Run with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_2\run_PE_run_2.py `
-  --step signal_family_ablation
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+  --only signal_family_ablation
 ```
 
 Results are written to
@@ -258,7 +260,7 @@ predeclared R2/RMSE tolerance before considering safety improvements.
 Run the complete sequence with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_3\run_PE_run_3.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_3\run.py
 ```
 
 The launcher selects feature and cap winners by highest equal-weight mean
@@ -295,7 +297,7 @@ uses `max(0, prediction - interpolated_correction)`, so calibration can never
 raise a prediction.
 
 The control and quantiles 0.50, 0.55, 0.60, 0.65, and 0.70 are predeclared in
-`definitions/PE_run_4/PE_run_4.toml`. Policies must finish within 0.005 mean-fold R2 of
+`experiments/PE_run_4/settings.toml`. Policies must finish within 0.005 mean-fold R2 of
 the best policy before RMS overprediction, overprediction rate, RMSE, and R2
 select the winner. No locked or test targets enter fitting or selection.
 
@@ -318,7 +320,7 @@ confirmation remains pending.
 Run or reproduce the complete experiment with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\definitions\PE_run_4\run_PE_run_4.py
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_4\run.py
 ```
 
 ## Degradation-Learning Experiment Register
@@ -404,8 +406,8 @@ worse RMS overprediction and overall accuracy.
 Run one group from the repository root with:
 
 ```powershell
-.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\run_experiments.py `
-  --group PE_failure_cycle_target
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_run_2\run.py `
+  --only failure_cycle_target
 ```
 
 Replace the group name with any entry in the table. A treatment should advance

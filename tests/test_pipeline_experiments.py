@@ -7,6 +7,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tomllib
 import unittest
 from unittest.mock import patch
@@ -51,16 +53,16 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertIn("dense_stride_5", self.config["prefix_variants"])
         self.assertEqual(run_experiments._configured_max_workers(self.config), 6)
 
-    def test_each_pipeline_run_has_one_definition_and_one_entry_point(self) -> None:
-        definitions_root = PIPELINE_EXPERIMENTS_ROOT / "definitions"
+    def test_each_pipeline_run_has_one_settings_file_and_entry_point(self) -> None:
+        experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
         expected_steps = {1: 1, 2: 7, 3: 1, 4: 1}
         for run_number, step_count in expected_steps.items():
             run_name = f"PE_run_{run_number}"
-            run_dir = definitions_root / run_name
+            run_dir = experiments_root / run_name
             toml_files = list(run_dir.glob("*.toml"))
-            launchers = list(run_dir.glob("run_*.py"))
-            self.assertEqual(toml_files, [run_dir / f"{run_name}.toml"])
-            self.assertEqual(launchers, [run_dir / f"run_{run_name}.py"])
+            launchers = list(run_dir.glob("*.py"))
+            self.assertEqual(toml_files, [run_dir / "settings.toml"])
+            self.assertEqual(launchers, [run_dir / "run.py"])
             config = run_experiments._read_config(toml_files[0])
             definition = config["run_definitions"][run_name]
             self.assertEqual(len(definition["steps"]), step_count)
@@ -77,6 +79,37 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 self.assertGreater(len(chain["scripts"]), 0)
                 for script in chain["scripts"]:
                     self.assertTrue((REPOSITORY_ROOT / script).is_file(), script)
+
+    def test_each_pipeline_run_launcher_lists_its_reviewable_plan(self) -> None:
+        experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
+        for run_number in range(1, 5):
+            run_name = f"PE_run_{run_number}"
+            launcher = experiments_root / run_name / "run.py"
+            completed = subprocess.run(
+                [sys.executable, str(launcher), "--list"],
+                cwd=REPOSITORY_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(f"{run_name}:", completed.stdout)
+            self.assertIn("settings.toml", completed.stdout)
+            self.assertIn("Execution plan:", completed.stdout)
+
+    def test_pipeline_run_structure_has_no_legacy_definition_surface(self) -> None:
+        self.assertFalse((PIPELINE_EXPERIMENTS_ROOT / "definitions").exists())
+        self.assertFalse((PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml").exists())
+        self.assertTrue(
+            (PIPELINE_EXPERIMENTS_ROOT / "_internal" / "shared_settings.toml").is_file()
+        )
+        self.assertTrue(
+            (
+                PIPELINE_EXPERIMENTS_ROOT
+                / "_internal"
+                / "phase_2_base_settings.toml"
+            ).is_file()
+        )
 
     def test_compatibility_catalog_composes_all_run_definitions(self) -> None:
         self.assertEqual(
@@ -353,7 +386,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_catboost_search_excludes_the_slow_tail(self) -> None:
         settings_path = (
-            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml"
+            PIPELINE_EXPERIMENTS_ROOT / "_internal" / "phase_2_base_settings.toml"
         )
         with settings_path.open("rb") as settings_file:
             settings = tomllib.load(settings_file)
@@ -363,7 +396,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_hist_gradient_boosting_search_is_available_but_disabled(self) -> None:
         settings_path = (
-            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml"
+            PIPELINE_EXPERIMENTS_ROOT / "_internal" / "phase_2_base_settings.toml"
         )
         with settings_path.open("rb") as settings_file:
             settings = tomllib.load(settings_file)
@@ -391,7 +424,9 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         )
         self.assertEqual(
             pipeline_settings,
-            PIPELINE_EXPERIMENTS_ROOT / "phase_2_settings.toml",
+            PIPELINE_EXPERIMENTS_ROOT
+            / "_internal"
+            / "phase_2_base_settings.toml",
         )
         self.assertNotEqual(pipeline_settings, standalone_settings)
 

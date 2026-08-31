@@ -1,4 +1,4 @@
-"""Single execution entry point for PE_run_2."""
+"""Single execution entry point for PE_run_3."""
 
 from pathlib import Path
 import sys
@@ -11,5 +11,4 @@ from run_experiment_definition import main
 
 
 if __name__ == "__main__":
-    main(Path(__file__).with_name("PE_run_2.toml"), "PE_run_2")
-
+    main(Path(__file__).with_name("settings.toml"), "PE_run_3")

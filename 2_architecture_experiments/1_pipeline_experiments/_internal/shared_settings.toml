@@ -1,5 +1,5 @@
-# Shared mechanics for all pipeline-experiment run definitions.
-# Run-specific experiments and execution order belong in PE_run_X/PE_run_X.toml.
+# Internal defaults shared by all pipeline experiments.
+# Users edit only experiments/PE_run_X/settings.toml.
 
 settings_version = 1
 
@@ -13,7 +13,7 @@ train_csv = "data/train.csv"
 test_csv = "data/test.csv"
 phase_1_runner = "1_dataset_construction/run_all.py"
 # Pipeline-owned Phase 2 configuration; standalone Phase 2 has its own TOML.
-phase_2_settings = "2_architecture_experiments/1_pipeline_experiments/phase_2_settings.toml"
+phase_2_settings = "2_architecture_experiments/1_pipeline_experiments/_internal/phase_2_base_settings.toml"
 phase_2_settings_builder = "2_architecture_experiments/2_model_architecture_study/1_architecture_study_settings/build_architecture_study_settings.py"
 phase_2_orchestrator = "2_architecture_experiments/2_model_architecture_study/run_phase_2.py"
 tabular_adapter_builder = "2_architecture_experiments/2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py"
