@@ -55,7 +55,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_each_pipeline_run_has_one_settings_file_and_entry_point(self) -> None:
         experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
-        expected_steps = {1: 1, 2: 7, 3: 1, 4: 1}
+        expected_steps = {1: 1, 2: 7, 3: 1, 4: 1, 5: 1}
         for run_number, step_count in expected_steps.items():
             experiment_name = f"PE_{run_number}"
             experiment_dir = experiments_root / experiment_name
@@ -85,7 +85,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
 
     def test_each_pipeline_run_launcher_lists_its_reviewable_plan(self) -> None:
         experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
-        for run_number in range(1, 5):
+        for run_number in range(1, 6):
             experiment_name = f"PE_{run_number}"
             launcher = experiments_root / experiment_name / "run.py"
             completed = subprocess.run(
@@ -100,6 +100,42 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
             self.assertIn("settings.toml", completed.stdout)
             self.assertIn(f"PE_{run_number}\\runs\\run_1", completed.stdout)
             self.assertIn("Execution plan:", completed.stdout)
+
+    def test_legacy_pipeline_run_path_resolves_after_restructure(self) -> None:
+        legacy = (
+            "pipeline_experiments/runs/PE_run_3/PE3_features_drift/phase2/"
+            "2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+        )
+        resolved = run_experiments.repository_path(REPOSITORY_ROOT, legacy)
+        expected = (
+            PIPELINE_EXPERIMENTS_ROOT
+            / "experiments"
+            / "PE_3"
+            / "runs"
+            / "run_1"
+            / "PE3_features_drift"
+            / "phase2"
+            / "2_tabular_data_adapter"
+            / "artifacts"
+            / "tabular_dataset_manifest.json"
+        )
+        self.assertEqual(resolved, expected.resolve())
+        self.assertTrue(resolved.is_file())
+
+    def test_pe5_defines_exactly_four_target_submission_variants(self) -> None:
+        settings = (
+            PIPELINE_EXPERIMENTS_ROOT
+            / "experiments"
+            / "PE_5"
+            / "settings.toml"
+        )
+        config = run_experiments._read_config(settings)
+        workflows = run_experiments._target_submission_workflows(config)
+        self.assertEqual(set(workflows), {"PE_5"})
+        self.assertEqual(
+            set(workflows["PE_5"]["variants"]),
+            {"hard_cap_125", "raw", "weighted_raw", "soft_tail"},
+        )
 
     def test_pipeline_run_structure_has_no_legacy_definition_surface(self) -> None:
         self.assertFalse((PIPELINE_EXPERIMENTS_ROOT / "definitions").exists())

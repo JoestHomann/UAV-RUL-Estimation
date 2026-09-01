@@ -1,0 +1,15 @@
+{
+  "figures": [
+    {
+      "file": "figures/submission_prediction_distributions.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_5/runs/run_1/figures/submission_prediction_distributions.png"
+    },
+    {
+      "file": "figures/target_policy_development_metrics.png",
+      "source": "2_architecture_experiments/1_pipeline_experiments/experiments/PE_5/runs/run_1/figures/target_policy_development_metrics.png"
+    }
+  ],
+  "pipeline_experiment": null,
+  "pipeline_run": "PE_5",
+  "status": "complete"
+}

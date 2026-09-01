@@ -1,6 +1,6 @@
 # Pipeline Experiments
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Purpose
 
@@ -22,6 +22,7 @@ defaults live under `_internal/` and are not an additional per-run edit point.
 | `PE_2` | `experiments/PE_2/settings.toml` | `experiments/PE_2/run.py` |
 | `PE_3` | `experiments/PE_3/settings.toml` | `experiments/PE_3/run.py` |
 | `PE_4` | `experiments/PE_4/settings.toml` | `experiments/PE_4/run.py` |
+| `PE_5` | `experiments/PE_5/settings.toml` | `experiments/PE_5/run.py` |
 
 Every launcher prints its exact script plan before execution. Use `--list` to
 review without running, `--status` to inspect saved progress, and
@@ -331,12 +332,70 @@ The selected `q=0.55` policy reduces the largest systematic excess in the
 to the verified, unlabeled Run 5 submission predictions. The candidate
 submission, calibrator, cross-fitted predictions, numeric reports, and four
 figures are stored under `2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/`. Leaderboard
-confirmation remains pending.
+R2 was 0.86525, unchanged from the source Run 5 submission at displayed
+leaderboard precision. The safety calibration improved development safety
+metrics but did not produce a measurable public-score gain by itself.
 
 Run or reproduce the complete experiment with:
 
 ```powershell
 .venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_4\run.py
+```
+
+## PE_5: Target-Tail Submission Experiment
+
+PE_5 tests whether the hard cap at RUL 125 removes useful information needed
+for the hidden Kaggle distribution. It fixes the selected Run 5
+`screened_drift_pruned` features, selected ExtraTrees and XGBoost component
+configurations, 50/50 blend, UAV folds, model seed 13, and q=0.55 conditional
+calibration. Only the training-target treatment changes:
+
+| Variant | Treatment above RUL 125 | Purpose |
+| --- | --- | --- |
+| `hard_cap_125` | Replace with 125 | Current bounded-target control |
+| `raw` | Preserve the label | Test the complete observed target range |
+| `weighted_raw` | Preserve the label; multiply its row weight by 0.25 | Retain tail information with reduced influence |
+| `soft_tail` | Fit `125 + 0.50 * (RUL - 125)` and invert after prediction | Retain ordering while compressing the tail |
+
+Weighted rows are renormalized within each UAV so every UAV retains equal total
+training weight. The old polynomial residual calibrator is not reused because
+it was fitted to capped predictions. Each variant instead receives its own
+q=0.55 calibrator fitted from development OOF predictions only. The workflow
+then trains on all available training prefixes, saves and reloads the complete
+model bundle, checks prediction equivalence, and verifies submission IDs and
+RUL values. Locked labels and test targets are never loaded.
+
+### Run 1 development evidence
+
+| Variant | Mean R2 | Mean RMSE | Bias | Test prediction range | Kaggle R2 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `hard_cap_125` | **0.8802** | **11.19** | -1.75 | 6.04-122.14 | **0.85609** |
+| `soft_tail` | 0.5422 | 18.22 | +0.45 | 6.30-187.03 | 0.83609 |
+| `weighted_raw` | 0.5268 | 18.78 | +0.45 | 6.09-186.03 | 0.83482 |
+| `raw` | 0.5157 | 18.95 | +0.61 | 5.48-232.84 | 0.82866 |
+
+Hard cap 125 is decisively best on development data and the public leaderboard
+confirms the direction. Relative to the cap control, soft tail lost 0.02000,
+weighted raw lost 0.02127, and raw RUL lost 0.02743. Increasing the amount and
+range of high-RUL prediction therefore made performance progressively worse;
+the cap should remain in the current pipeline. The large uncapped errors are
+not fixed by restoring the raw target tail.
+
+The PE_5 cap control is valid for comparisons among the four PE_5 target
+policies but is not an exact reproduction of Phase 3 Run 6. PE_5 deliberately
+omits the older capped-prediction residual calibrator because it was not valid
+for uncapped variants. Phase 3 Run 6 retains the selected calibrated blend,
+uses cap 125 plus q=0.55 conditional calibration, and scored 0.86741. That is
+0.01132 above the PE_5 cap control and 0.00216 above the previous 0.86525 best.
+
+Upload-ready files are stored in
+`experiments/PE_5/runs/run_1/submissions/`. All four leaderboard scores have
+been recorded; the target-policy decision is complete.
+
+Run or resume the complete experiment with:
+
+```powershell
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_5\run.py
 ```
 
 ## Degradation-Learning Experiment Register

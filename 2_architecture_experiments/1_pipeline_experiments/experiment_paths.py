@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -23,6 +24,25 @@ def repository_path(repository_root: Path, value: str) -> Path:
     direct = (repository_root / supplied).resolve()
     if direct.exists() or not supplied.parts:
         return direct
+    if (
+        len(supplied.parts) >= 3
+        and supplied.parts[0] == "pipeline_experiments"
+        and supplied.parts[1] == "runs"
+    ):
+        match = re.fullmatch(r"PE_run_(\d+)", supplied.parts[2])
+        if match is not None:
+            migrated = (
+                repository_root
+                / "2_architecture_experiments"
+                / "1_pipeline_experiments"
+                / "experiments"
+                / f"PE_{match.group(1)}"
+                / "runs"
+                / "run_1"
+                / Path(*supplied.parts[3:])
+            ).resolve()
+            if migrated.exists():
+                return migrated
     replacement = MOVED_REPOSITORY_PREFIXES.get(supplied.parts[0])
     if replacement is None:
         return direct

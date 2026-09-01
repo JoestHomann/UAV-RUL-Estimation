@@ -29,6 +29,7 @@ experiments/
     runs/run_1/
   PE_3/...
   PE_4/...
+  PE_5/...
 _internal/
   shared_settings.toml
   phase_2_base_settings.toml
@@ -208,7 +209,28 @@ minimizes RMS overprediction, overprediction rate, and RMSE. It selected
 from 51.2% to 43.0%, and RMS overprediction from 7.255 to 6.567. The selected
 calibrator and candidate submission are under
 `2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/artifacts/`; the four plots are gathered in
-`2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/figures/`. Kaggle confirmation is pending.
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_4/runs/run_1/figures/`. Its Kaggle R2 was 0.86525, unchanged
+from the source Run 5 submission at displayed leaderboard precision.
+
+## PE_5 target-tail submissions
+
+`PE_5` holds the selected Run 5 feature set, ExtraTrees/XGBoost component
+configurations, 50/50 blend, folds, seed, and q=0.55 conditional calibration
+fixed. It trains four target treatments: hard cap 125, raw RUL, weighted raw
+RUL, and an invertible soft tail above 125. Each treatment receives a separate
+cross-fitted calibrator, frozen model bundle, verified submission, and OOF
+report.
+
+```powershell
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_5\run.py
+```
+
+Upload-ready files are gathered under
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_5/runs/run_1/submissions/`.
+The bounded development results strongly favor hard cap 125; the distinct
+Kaggle submissions rejected the unresolved high-tail hypothesis. Hard cap 125
+scored 0.85609, ahead of soft tail at 0.83609, weighted raw at 0.83482, and raw
+RUL at 0.82866. Preserve the cap for the current pipeline.
 
 ## Target/scenario 2x2 experiment
 

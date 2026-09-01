@@ -17,20 +17,46 @@ class PolicyError(ValueError):
 class TargetPolicy:
     mode: str = "raw"
     maximum_rul: float | None = None
+    tail_threshold: float | None = None
+    tail_scale: float | None = None
 
     @classmethod
     def from_settings(cls, value: dict[str, Any]) -> "TargetPolicy":
         mode = value.get("mode")
         maximum = value.get("maximum_rul")
-        if mode not in {"raw", "piecewise_cap", "failure_cycle"}:
+        threshold = value.get("tail_threshold")
+        scale = value.get("tail_scale")
+        if mode not in {"raw", "piecewise_cap", "failure_cycle", "soft_tail"}:
             raise PolicyError(f"Unknown target mode {mode!r}")
-        if mode in {"raw", "failure_cycle"} and maximum is not None:
+        if mode in {"raw", "failure_cycle", "soft_tail"} and maximum is not None:
             raise PolicyError(f"{mode} target policy cannot define maximum_rul")
         if mode == "piecewise_cap":
             if maximum is None or not np.isfinite(maximum) or float(maximum) <= 0:
                 raise PolicyError("Piecewise target cap must be finite and positive")
             maximum = float(maximum)
-        return cls(mode=mode, maximum_rul=maximum)
+        if mode == "soft_tail":
+            if (
+                threshold is None
+                or not np.isfinite(threshold)
+                or float(threshold) <= 0.0
+            ):
+                raise PolicyError("Soft-tail threshold must be finite and positive")
+            if (
+                scale is None
+                or not np.isfinite(scale)
+                or not 0.0 < float(scale) < 1.0
+            ):
+                raise PolicyError("Soft-tail scale must be strictly between zero and one")
+            threshold = float(threshold)
+            scale = float(scale)
+        elif threshold is not None or scale is not None:
+            raise PolicyError(f"{mode} target policy cannot define soft-tail fields")
+        return cls(
+            mode=mode,
+            maximum_rul=maximum,
+            tail_threshold=threshold,
+            tail_scale=scale,
+        )
 
     def transform(
         self,
@@ -41,6 +67,13 @@ class TargetPolicy:
         if self.mode == "piecewise_cap":
             assert self.maximum_rul is not None
             result = np.minimum(result, self.maximum_rul)
+        elif self.mode == "soft_tail":
+            assert self.tail_threshold is not None
+            assert self.tail_scale is not None
+            above = result > self.tail_threshold
+            result[above] = self.tail_threshold + self.tail_scale * (
+                result[above] - self.tail_threshold
+            )
         elif self.mode == "failure_cycle":
             result = result + self._validated_cutoffs(cutoffs, result)
         return result
@@ -53,7 +86,14 @@ class TargetPolicy:
         """Return raw-RUL predictions for evaluation and downstream use."""
 
         result = np.asarray(predictions, dtype=np.float64).copy()
-        if self.mode == "failure_cycle":
+        if self.mode == "soft_tail":
+            assert self.tail_threshold is not None
+            assert self.tail_scale is not None
+            above = result > self.tail_threshold
+            result[above] = self.tail_threshold + (
+                result[above] - self.tail_threshold
+            ) / self.tail_scale
+        elif self.mode == "failure_cycle":
             result = result - self._validated_cutoffs(cutoffs, result)
         return result
 
@@ -72,7 +112,11 @@ class TargetPolicy:
         return values
 
     def to_dict(self) -> dict[str, Any]:
-        return {"mode": self.mode, "maximum_rul": self.maximum_rul}
+        payload = {"mode": self.mode, "maximum_rul": self.maximum_rul}
+        if self.mode == "soft_tail":
+            payload["tail_threshold"] = self.tail_threshold
+            payload["tail_scale"] = self.tail_scale
+        return payload
 
 
 @dataclass(frozen=True)

@@ -129,6 +129,7 @@ def _focused_commands(
     for table_name in (
         "experiment_workflows",
         "conditional_calibration_workflows",
+        "target_submission_workflows",
     ):
         table = config.get(table_name, {})
         if isinstance(table, dict) and run_name in table:

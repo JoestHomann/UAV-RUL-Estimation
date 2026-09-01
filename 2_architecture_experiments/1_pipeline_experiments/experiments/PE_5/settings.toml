@@ -1,0 +1,50 @@
+# USER-EDITABLE SETTINGS FOR PE_5.
+# This experiment holds features, model configurations, blend weight, folds,
+# seed, and q-calibration fixed while changing only the target treatment.
+include = ["../../_internal/shared_settings.toml"]
+
+[pipeline]
+experiment = "PE_5"
+run = "run_1"
+
+[execution]
+max_workers = 4
+
+[run_definitions.PE_5]
+title = "Target-tail submission comparison"
+description = "Retrain one fixed tree blend under four target policies and generate four independently verified Kaggle submissions."
+
+[[run_definitions.PE_5.steps]]
+name = "target_policy_submissions"
+script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
+arguments = ["--run", "PE_5"]
+script_chain = "target_policy_submissions"
+
+[script_chains.target_policy_submissions]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/target_policy_submissions.py"]
+
+[target_submission_workflows.PE_5]
+source_phase_3_run = 5
+feature_set = "screened_drift_pruned"
+model_seed = 13
+xgboost_weight = 0.50
+calibration_quantile = 0.55
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0]
+calibration_minimum_bin_rows = 10
+
+[target_submission_workflows.PE_5.variants.hard_cap_125]
+target_mode = "piecewise_cap"
+maximum_rul = 125.0
+
+[target_submission_workflows.PE_5.variants.raw]
+target_mode = "raw"
+
+[target_submission_workflows.PE_5.variants.weighted_raw]
+target_mode = "raw"
+tail_threshold = 125.0
+high_rul_weight = 0.25
+
+[target_submission_workflows.PE_5.variants.soft_tail]
+target_mode = "soft_tail"
+tail_threshold = 125.0
+tail_scale = 0.50

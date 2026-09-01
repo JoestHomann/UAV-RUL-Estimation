@@ -271,6 +271,65 @@ def run_conditional_calibration_workflow(
     _collect_figures(name)
 
 
+def _target_submission_workflows(
+    config: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Validate fixed-architecture target-policy submission workflows."""
+
+    value = config.get("target_submission_workflows", {})
+    if not isinstance(value, dict):
+        raise ExperimentManagerError("target_submission_workflows must be a TOML table")
+    result: dict[str, dict[str, Any]] = {}
+    required_variants = {"hard_cap_125", "raw", "weighted_raw", "soft_tail"}
+    for name, workflow in value.items():
+        if not isinstance(name, str) or not name or not isinstance(workflow, dict):
+            raise ExperimentManagerError(
+                "Every target submission workflow must be a named TOML table"
+            )
+        source_run = workflow.get("source_phase_3_run")
+        if isinstance(source_run, bool) or not isinstance(source_run, int) or source_run <= 0:
+            raise ExperimentManagerError(
+                f"target_submission_workflows.{name}.source_phase_3_run "
+                "must be a positive integer"
+            )
+        variants = workflow.get("variants")
+        if not isinstance(variants, dict) or set(variants) != required_variants:
+            raise ExperimentManagerError(
+                f"target_submission_workflows.{name}.variants must define exactly "
+                f"{sorted(required_variants)}"
+            )
+        result[name] = workflow
+    return result
+
+
+def run_target_submission_workflow(
+    name: str,
+    config_path: Path,
+    config: dict[str, Any],
+    *,
+    force: bool,
+) -> None:
+    """Dispatch one fixed-architecture target-policy submission experiment."""
+
+    if name not in _target_submission_workflows(config):
+        available = ", ".join(sorted(_target_submission_workflows(config)))
+        raise ExperimentManagerError(
+            f"Unknown target submission workflow {name!r}; available: {available}"
+        )
+    command = [
+        sys.executable,
+        str(MANAGER_DIR / "target_policy_submissions.py"),
+        "--config",
+        str(config_path),
+        "--run",
+        name,
+    ]
+    if force:
+        command.append("--force")
+    _run_command(command, label=f"{name}: target-policy submissions")
+    _collect_figures(name)
+
+
 def _promotions(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     value = config.get("promotions", {})
     if not isinstance(value, dict):
@@ -1644,6 +1703,13 @@ def print_status(config: dict[str, Any]) -> None:
         )
         status = "complete" if manifest.is_file() else "not_started"
         print(f"{name}: conditional_calibration={status}")
+    for name, workflow in sorted(_target_submission_workflows(config).items()):
+        manifest = (
+            run_directory(RUNS_DIR, name, workflow)
+            / "target_submission_manifest.json"
+        )
+        status = "complete" if manifest.is_file() else "not_started"
+        print(f"{name}: target_submissions={status}")
     for name, promotion in sorted(_promotions(config).items()):
         workflow_name = str(promotion["workflow"])
         workflow = workflows[workflow_name]
@@ -1685,6 +1751,8 @@ def main() -> None:
                 print(f"{name}: automatic workflow")
             for name in sorted(_conditional_calibration_workflows(config)):
                 print(f"{name}: conditional calibration workflow")
+            for name in sorted(_target_submission_workflows(config)):
+                print(f"{name}: target submission workflow")
             for name, promotion in sorted(_promotions(config).items()):
                 print(f"{name}: locked promotion for {promotion['workflow']}")
             return
@@ -1728,6 +1796,19 @@ def main() -> None:
                 args.run_name,
                 config_path,
                 config,
+            )
+            return
+        if args.run_name in _target_submission_workflows(config):
+            if args.from_stage is not None or args.through_stage is not None:
+                parser.error(
+                    "target submission workflows do not accept "
+                    "--from-stage or --through-stage"
+                )
+            run_target_submission_workflow(
+                args.run_name,
+                config_path,
+                config,
+                force=args.force,
             )
             return
         if args.run_name in _promotions(config):

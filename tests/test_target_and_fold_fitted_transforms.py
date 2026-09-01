@@ -73,6 +73,29 @@ def signal_feature_names() -> tuple[str, ...]:
 
 
 class TargetPolicyTests(unittest.TestCase):
+    def test_soft_tail_is_invertible_and_preserves_values_below_threshold(self) -> None:
+        policy = TargetPolicy.from_settings(
+            {
+                "mode": "soft_tail",
+                "tail_threshold": 125.0,
+                "tail_scale": 0.5,
+            }
+        )
+        raw = np.asarray([25.0, 125.0, 225.0], dtype=np.float64)
+        transformed = policy.transform(raw)
+        np.testing.assert_allclose(transformed, [25.0, 125.0, 175.0])
+        np.testing.assert_allclose(policy.inverse_predictions(transformed), raw)
+
+    def test_soft_tail_rejects_noncompressive_scale(self) -> None:
+        with self.assertRaisesRegex(PolicyError, "strictly between zero and one"):
+            TargetPolicy.from_settings(
+                {
+                    "mode": "soft_tail",
+                    "tail_threshold": 125.0,
+                    "tail_scale": 1.0,
+                }
+            )
+
     def test_failure_cycle_round_trip_restores_raw_rul(self) -> None:
         policy = TargetPolicy.from_settings({"mode": "failure_cycle"})
         rul = np.asarray([90.0, 30.0, 5.0])
