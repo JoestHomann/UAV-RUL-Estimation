@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -17,11 +18,16 @@ PHASE_3_SETTINGS_DIR = (
     / "3_final_model_training_and_inference"
     / "1_winning_architecture_selection"
 )
+PHASE_1_DIR = REPOSITORY_ROOT / "1_dataset_construction"
 if str(PHASE_3_SETTINGS_DIR) not in sys.path:
     sys.path.insert(0, str(PHASE_3_SETTINGS_DIR))
+if str(PHASE_1_DIR) not in sys.path:
+    sys.path.insert(0, str(PHASE_1_DIR))
 
 from align_oof_predictions import OOFAlignmentError, align_sources  # noqa: E402
 from degradation_onset import build_personalized_targets  # noqa: E402
+from experiment_config import read_experiment_config  # noqa: E402
+from phase_1_config import load_phase_one_profile  # noqa: E402
 from stack_oof_predictions import evaluate_stacks  # noqa: E402
 from verify_phase_3_settings import Phase3Settings  # noqa: E402
 
@@ -55,6 +61,27 @@ def main() -> None:
     temporary = SCRIPT_DIR / ".r2_contract_verification"
     temporary.mkdir(exist_ok=True)
     try:
+        pe6_settings = SCRIPT_DIR / "experiments" / "PE_6" / "settings.toml"
+        resolved_pe6 = read_experiment_config(pe6_settings)
+        resolved_pe6_path = temporary / "resolved_pe6.json"
+        resolved_pe6_path.write_text(
+            json.dumps(resolved_pe6, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        pe6_profile = load_phase_one_profile(
+            "temporal_dense",
+            resolved_pe6_path,
+            "early_and_middle",
+        )
+        if pe6_profile.scenario_profile.name != "early_and_middle":
+            raise RuntimeError("Resolved PE_6 scenario profile was not preserved")
+        if {variant.name for variant in pe6_profile.prefix_variants} != {
+            "current20",
+            "dense_stride_1",
+            "dense_stride_2",
+        }:
+            raise RuntimeError("Resolved PE_6 prefix variants are incomplete")
+
         tree = _oof_table(2.0)
         temporal = _oof_table(-1.0)
         tree.to_csv(temporary / "tree.csv", index=False)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -66,6 +67,27 @@ def _require_unique_strings(value: Any, name: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _read_settings(settings_path: Path) -> dict[str, Any]:
+    if settings_path.suffix.lower() == ".json":
+        try:
+            payload = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(
+                f"Cannot read Phase 1 JSON settings at {settings_path}: {error}"
+            ) from error
+    else:
+        try:
+            with settings_path.open("rb") as stream:
+                payload = tomllib.load(stream)
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise ValueError(
+                f"Cannot read Phase 1 TOML settings at {settings_path}: {error}"
+            ) from error
+    if not isinstance(payload, dict):
+        raise ValueError("Phase 1 settings must contain an object/table")
+    return payload
+
+
 def load_phase_one_profile(
     profile_name: str,
     settings_path: Path = DEFAULT_SETTINGS_PATH,
@@ -73,8 +95,7 @@ def load_phase_one_profile(
 ) -> PhaseOneProfile:
     """Return one validated profile and its referenced prefix variants."""
 
-    with settings_path.open("rb") as stream:
-        payload = tomllib.load(stream)
+    payload = _read_settings(settings_path)
     profiles = _require_mapping(payload.get("profiles"), "profiles")
     prefix_tables = _require_mapping(
         payload.get("prefix_variants"), "prefix_variants"

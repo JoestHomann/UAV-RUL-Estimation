@@ -1011,13 +1011,26 @@ def _phase1_interface_path(experiment: dict[str, Any]) -> Path:
     return PHASE_1_ROOT / "runs" / str(phase1_run) / str(variant) / "phase_2_interface.json"
 
 
-def _run_phase1(name: str, config_path: Path, config: dict[str, Any], experiment: dict[str, Any]) -> None:
+def _run_phase1(
+    name: str,
+    config: dict[str, Any],
+    experiment: dict[str, Any],
+) -> None:
     paths = _paths(config)
+    # Phase 1 reads TOML/JSON directly and does not resolve the pipeline
+    # experiment ``include`` chain. Persist the fully merged catalog so the
+    # exact profile, scenario, and prefix definitions used by this cell remain
+    # reviewable with its artifacts.
+    resolved_settings_path = (
+        artifact_directory(RUNS_DIR, name, experiment)
+        / "resolved_phase_1_settings.json"
+    )
+    _write_json(config, resolved_settings_path)
     command = [
         sys.executable,
         str(paths["phase_1_runner"]),
         "--settings",
-        str(config_path),
+        str(resolved_settings_path),
         "--profile",
         str(experiment["phase_1_profile"]),
         "--run-name",
@@ -1238,7 +1251,6 @@ def _resolve_stage(value: Any, *, key: str, default: str) -> str:
 
 def run_experiment(
     name: str,
-    config_path: Path,
     config: dict[str, Any],
     *,
     from_stage: str,
@@ -1277,7 +1289,7 @@ def run_experiment(
         _mark_stage(name, experiment, stage, "running")
         try:
             if stage == "phase1":
-                _run_phase1(name, config_path, config, experiment)
+                _run_phase1(name, config, experiment)
             elif stage == "phase2":
                 _run_phase2(name, config, experiment)
             else:
@@ -1328,7 +1340,6 @@ def run_experiment_group(
         )
         run_experiment(
             experiment_name,
-            config_path,
             config,
             from_stage=from_stage,
             through_stage=through_stage,
@@ -1900,7 +1911,6 @@ def main() -> None:
         )
         run_experiment(
             args.run_name,
-            config_path,
             config,
             from_stage=from_stage,
             through_stage=through_stage,
