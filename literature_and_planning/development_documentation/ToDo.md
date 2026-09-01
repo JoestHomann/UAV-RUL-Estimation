@@ -14,6 +14,7 @@
 - GANs for increasing the dataset size?
 - RNN architecture? Better Transformer architecture? For architecture study
 - Increase or decrease capacity of the models? Reduce under- or overfitting?
+- Hybrid model approach: One predicts the telemetry values, the other predicts failure/RUL based on those predicted values?
 - Why is the banana curved, not straight? LG Joest
 
 
