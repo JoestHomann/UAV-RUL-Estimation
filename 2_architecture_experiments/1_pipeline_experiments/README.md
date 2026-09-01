@@ -232,6 +232,35 @@ Kaggle submissions rejected the unresolved high-tail hypothesis. Hard cap 125
 scored 0.85609, ahead of soft tail at 0.83609, weighted raw at 0.83482, and raw
 RUL at 0.82866. Preserve the cap for the current pipeline.
 
+## R2 improvement sequence
+
+The next development program is implemented as PE_6 through PE_9. Each PE has
+one `run.py`, one editable `settings.toml`, a README, and `runs/run_N` artifacts.
+
+- `PE_6` compares `current20`, dense stride 2, and dense stride 1 with a fixed
+  multiscale CNN, then propagates a gate-passing density winner into lookbacks
+  20, 30, and 50. It never opens locked Step 6.
+- Temporal architecture Run 7 is started with
+  `2_model_architecture_study/run_temporal_architecture_study.py`. It reads the
+  PE_6 winner, compares only TCN, multiscale CNN, GRU, and LSTM, and confirms
+  the winner over seeds 13, 37, and 73 on development splits.
+- `PE_7` aligns the frozen tree and temporal OOF endpoints exactly, compares
+  fixed blends plus nested nonnegative ridge and shallow XGBoost stacks, and
+  refuses to run before temporal seed confirmation passes.
+- `PE_8` compares cap 125 with two fold-fitted personalized onset targets.
+  Detector fitting uses only each active training-UAV partition; all metrics
+  retain raw RUL.
+- `PE_9` measures repeated OOF development/test domain AUC against a cutoff-only
+  control, freezes shift rankings, and recomputes target relevance inside each
+  training fold before evaluating pruned feature sets.
+
+Review the exact chain before a long run, for example:
+
+```powershell
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_6\run.py --list
+.venv\Scripts\python.exe 2_architecture_experiments\1_pipeline_experiments\experiments\PE_8\run.py --list
+```
+
 ## Target/scenario 2x2 experiment
 
 PE2 contains a predeclared four-cell comparison of current versus early/middle

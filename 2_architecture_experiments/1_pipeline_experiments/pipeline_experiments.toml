@@ -9,4 +9,9 @@ include = [
     "experiments/PE_2/settings.toml",
     "experiments/PE_3/settings.toml",
     "experiments/PE_4/settings.toml",
+    "experiments/PE_5/settings.toml",
+    "experiments/PE_6/settings.toml",
+    "experiments/PE_7/settings.toml",
+    "experiments/PE_8/settings.toml",
+    "experiments/PE_9/settings.toml",
 ]

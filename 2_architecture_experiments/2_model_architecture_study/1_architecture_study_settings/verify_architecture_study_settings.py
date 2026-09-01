@@ -126,6 +126,14 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "learning_rate",
         "weight_decay",
     },
+    "gru": {
+        "layers",
+        "hidden_units",
+        "direction",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
     "lstm": {
         "layers",
         "hidden_units",
@@ -167,6 +175,7 @@ EXPECTED_VARIANTS: dict[str, set[str]] = {
     "tcn": {"tcn"},
     "multiscale_cnn": {"multiscale_cnn"},
     "sensor_graph_tcn": {"sensor_graph_tcn"},
+    "gru": {"gru"},
     "lstm": {"lstm"},
     "transformer": {"transformer_encoder"},
     "rbf_svr": {"rbf_svr"},

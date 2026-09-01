@@ -908,6 +908,48 @@ def build_report(run_number: int) -> dict[str, Any]:
             figure_dir / "test_prediction_diagnostics.png",
         ),
     }
+    declared_policies = selection.get("submission_policies", {})
+    if isinstance(declared_policies, dict) and declared_policies:
+        policy_rows = []
+        for policy_name, payload in declared_policies.items():
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("development_metrics"), dict
+            ):
+                raise Phase3ReportingError(
+                    f"Submission policy {policy_name!r} has no development metrics"
+                )
+            policy_rows.append(
+                {
+                    "policy": str(policy_name),
+                    **payload["development_metrics"],
+                }
+            )
+        policy_metrics = pd.DataFrame(policy_rows)
+        policy_metrics.to_csv(
+            report_dir / "submission_policy_metrics.csv", index=False
+        )
+        figure, axis = plt.subplots(figsize=(7.5, 5.0))
+        axis.scatter(
+            policy_metrics["rmse"],
+            policy_metrics["root_mean_squared_overprediction"],
+            color="#386cb0",
+            s=65,
+        )
+        for row in policy_metrics.itertuples(index=False):
+            axis.annotate(
+                str(row.policy),
+                (float(row.rmse), float(row.root_mean_squared_overprediction)),
+                xytext=(5, 4),
+                textcoords="offset points",
+            )
+        axis.set_xlabel("Development RMSE")
+        axis.set_ylabel("Development RMS overprediction")
+        axis.set_title("Frozen submission-policy tradeoff")
+        figure.tight_layout()
+        policy_figure = figure_dir / "submission_policy_tradeoff.png"
+        figure.savefig(policy_figure, dpi=180, bbox_inches="tight")
+        plt.close(figure)
+        figures["submission_policy_tradeoff"] = policy_figure
     skipped: dict[str, str] = {}
     if oof_path.is_file():
         oof = _prepare_development_oof(

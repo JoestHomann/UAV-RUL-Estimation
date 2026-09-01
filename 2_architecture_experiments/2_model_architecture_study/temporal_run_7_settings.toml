@@ -1,0 +1,22 @@
+# USER-EDITABLE SETTINGS FOR TEMPORAL ARCHITECTURE RUN 7.
+# PE_6 supplies the frozen prefix density and lookback automatically.
+
+run_number = 7
+settings_version = 7
+candidate_budget = 10
+search_seed = 13
+confirmation_seeds = [13, 37, 73]
+max_workers = 2
+families = ["tcn", "multiscale_cnn", "gru", "lstm"]
+
+[neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[sources]
+pe6_settings = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_6/settings.toml"
+pe6_run_root = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_6/runs/run_1"
+tree_oof_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_ensemble_calibration/reporting/method_predictions.csv.gz"
+tree_oof_method = "blend_xgb_0.50__calibrated"

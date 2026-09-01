@@ -40,13 +40,17 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "SensorGraphTCNAdapter" fits a top-k absolute-correlation graph from the
   active training fold, performs sensor message passing, and then applies a
   causal residual TCN.
+- "GRUAdapter" uses packed valid sequence lengths in one unidirectional GRU.
 - "LSTMAdapter" uses packed valid sequence lengths in one temporal direction.
 - "TransformerAdapter" implements the conditional masked Transformer.
 - "RBFSVRAdapter" implements the optional robust-scaled RBF-SVR.
+- "HeterogeneousOOFStackAdapter" is a promotion-only adapter that retrains
+  frozen tabular and temporal components on their native representations and
+  applies a meta-model fitted only from OOF component predictions.
 
-All fifteen declared families are enabled for Run 4. Their included,
-conditional, and optional status labels preserve the study rationale; the
-separate `study.enabled` table controls what actually runs.
+The separate `study.enabled` table controls which declared families run.
+Promotion-only adapters are injected into a generated Phase 3 specification
+only after their development and locked gates pass.
 
 ## Shared interface
 
@@ -148,15 +152,17 @@ Every architecture has one implementation module below "models":
 | Neural | "models/neural/tcn.py" | "TCNAdapter" |
 | Neural | "models/neural/multiscale_cnn.py" | "MultiScaleCNNAdapter" |
 | Neural | "models/neural/sensor_graph_tcn.py" | "SensorGraphTCNAdapter" |
+| Neural | "models/neural/gru.py" | "GRUAdapter" |
 | Neural | "models/neural/lstm.py" | "LSTMAdapter" |
 | Neural | "models/neural/transformer.py" | "TransformerAdapter" |
+| Promoted ensemble | "models/ensemble/heterogeneous_oof_stack.py" | "HeterogeneousOOFStackAdapter" |
 
 The neural modules reuse only two support files:
 
 - "models/neural/neural_base.py" owns the common weighted PyTorch training,
   early-stopping, deterministic-seeding, and inference loop.
 - "models/neural/sequence_base.py" owns validation and preparation shared by
-  all five sequence-family inputs.
+all sequence-family inputs.
 
 This structure keeps architecture-specific layers and hyperparameter handling
 inside the model's own file while preventing copied training logic from
@@ -173,7 +179,7 @@ Run from the repository root:
 
     py 2_architecture_experiments\2_model_architecture_study\4_model_adapters\build_model_registry.py
 
-The command creates "artifacts/model_registry.json". It records all fifteen model
+The command creates "artifacts/model_registry.json". It records the declared model
 families, their enabled status, representation, adapter class, permitted
 configuration fields, common behavior, settings version, and installed model
 library versions. It contains no timestamp or hash and makes no performance or

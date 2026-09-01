@@ -425,10 +425,12 @@ TARGET_CAPABLE_FAMILIES = {
     "tcn",
     "multiscale_cnn",
     "sensor_graph_tcn",
+    "gru",
     "lstm",
     "transformer",
     "rbf_svr",
     "calibrated_tree_blend",
+    "heterogeneous_oof_stack",
 }
 
 LOSS_CAPABILITIES = {
@@ -443,6 +445,7 @@ LOSS_CAPABILITIES = {
     "tcn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "multiscale_cnn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "sensor_graph_tcn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
+    "gru": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "lstm": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "transformer": {"symmetric_rmse", "asymmetric_mse", "quantile"},
 }

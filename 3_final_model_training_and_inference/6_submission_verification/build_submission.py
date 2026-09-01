@@ -130,6 +130,48 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
 
     reread = pd.read_csv(submission_path(run_number))
     _validate_submission(reread, expected_ids)
+    policy_submission_artifacts: dict[str, str] = {}
+    policies = contract.get("submission_policies", {})
+    if isinstance(policies, dict):
+        for policy_name in policies:
+            policy_prediction_path = test_predictions_path(run_number).with_name(
+                f"test_predictions_{policy_name}.csv"
+            )
+            try:
+                stored_policy = pd.read_csv(policy_prediction_path)
+            except (OSError, pd.errors.ParserError) as error:
+                raise SubmissionVerificationError(
+                    f"Cannot read predictions for policy {policy_name!r}: {error}"
+                ) from error
+            regenerated_policy, _ = generate_predictions(
+                run_number,
+                policy_name=str(policy_name),
+            )
+            if not stored_policy[identity_columns].equals(
+                regenerated_policy[identity_columns]
+            ):
+                raise SubmissionVerificationError(
+                    f"Stored identities changed for policy {policy_name!r}"
+                )
+            if not np.array_equal(
+                stored_policy["RUL"].to_numpy(float),
+                _csv_round_trip(regenerated_policy)["RUL"].to_numpy(float),
+            ):
+                raise SubmissionVerificationError(
+                    f"Stored predictions changed for policy {policy_name!r}"
+                )
+            policy_submission = stored_policy[["uav_id", "RUL"]].rename(
+                columns={"uav_id": "id"}
+            ).sort_values("id", kind="stable").reset_index(drop=True)
+            _validate_submission(policy_submission, expected_ids)
+            policy_path = submission_path(run_number).with_name(
+                f"submission_{policy_name}.csv"
+            )
+            write_csv(policy_submission, ["id", "RUL"], policy_path)
+            _validate_submission(pd.read_csv(policy_path), expected_ids)
+            policy_submission_artifacts[str(policy_name)] = (
+                f"artifacts/{policy_path.name}"
+            )
     manifest = {
         "manifest_version": 1,
         "settings_version": settings_version,
@@ -145,10 +187,17 @@ def build_submission(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "regenerated_prediction_equivalence": True,
         "prediction_comparison_representation": "canonical_csv_round_trip",
         "conditional_calibration_applied": (
-            contract.get("conditional_calibrator") is not None
+            bool(contract.get("submission_policies"))
+            or contract.get("conditional_calibrator") is not None
         ),
         "test_metrics_calculated": False,
-        "artifacts": {"submission": "artifacts/submission.csv"},
+        "canonical_submission_policy": contract.get(
+            "canonical_submission_policy"
+        ),
+        "artifacts": {
+            "submission": "artifacts/submission.csv",
+            "submission_policies": policy_submission_artifacts,
+        },
     }
     write_json(manifest, manifest_path(6, run_number))
 

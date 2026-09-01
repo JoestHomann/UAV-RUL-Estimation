@@ -39,6 +39,7 @@ class TabularDataset:
     metadata: pd.DataFrame
     target: pd.Series | None
     sample_weights: pd.Series | None
+    fitting_target: pd.Series | None = None
 
     def __len__(self) -> int:
         """Return the number of observations in this dataset view."""
@@ -182,6 +183,7 @@ class TabularDataAdapter:
         metadata_columns = entry.get("metadata_columns")
         target_column = entry.get("target_column")
         weight_column = entry.get("sample_weight_column")
+        fitting_target_column = entry.get("fitting_target_column")
         if not isinstance(metadata_columns, list) or not all(
             isinstance(column, str) for column in metadata_columns
         ):
@@ -195,6 +197,8 @@ class TabularDataAdapter:
             selected_columns.append(target_column)
         if isinstance(weight_column, str):
             selected_columns.append(weight_column)
+        if isinstance(fitting_target_column, str):
+            selected_columns.append(fitting_target_column)
         selected_columns.extend(feature_columns)
 
         try:
@@ -217,11 +221,17 @@ class TabularDataAdapter:
         sample_weights = (
             table[weight_column].copy() if isinstance(weight_column, str) else None
         )
+        fitting_target = (
+            table[fitting_target_column].copy()
+            if isinstance(fitting_target_column, str)
+            else None
+        )
         return TabularDataset(
             features=features,
             metadata=metadata,
             target=target,
             sample_weights=sample_weights,
+            fitting_target=fitting_target,
         )
 
     def load_training(self, feature_set: str) -> TabularDataset:
@@ -362,11 +372,17 @@ class TabularDataAdapter:
             if dataset.sample_weights is not None
             else None
         )
+        fitting_target = (
+            dataset.fitting_target.loc[mask].reset_index(drop=True)
+            if dataset.fitting_target is not None
+            else None
+        )
         return TabularDataset(
             features=dataset.features.loc[mask].reset_index(drop=True),
             metadata=dataset.metadata.loc[mask].reset_index(drop=True),
             target=target,
             sample_weights=sample_weights,
+            fitting_target=fitting_target,
         )
 
     def get_inner_selection_split(

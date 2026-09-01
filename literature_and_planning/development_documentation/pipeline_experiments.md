@@ -489,3 +489,22 @@ Replace the group name with any entry in the table. A treatment should advance
 only when its paired R2/RMSE gains repeat across folds and model families and
 its positive bias, overprediction rate, and RMS overprediction do not violate
 the conservative-prediction objective.
+
+## R2 Above 0.9 Development Program
+
+These experiments are implemented but have not yet been run. Their locked-data
+gates remain closed.
+
+| Experiment | What changes | Why | Result |
+| --- | --- | --- | --- |
+| `PE_6` | Sparse versus stride-2 versus every-cycle sequence endpoints, followed by lookbacks 20/30/50 | Test whether temporal models need denser causal supervision than the failed stride-5 tabular experiment provided | Pending |
+| Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | Pending |
+| `PE_7` | Fixed blends, nonnegative ridge, and shallow-XGBoost OOF stacks | Test whether a complementary temporal model corrects tree residuals without meta-model leakage | Pending |
+| `PE_8` | Global cap 125 versus two fold-fitted per-UAV onset targets | Test whether a universal degradation-onset assumption causes the 51-125 RUL errors | Pending |
+| `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Pending |
+
+Each experiment has one entry point and one editable TOML under
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/`. PE_7
+cannot start until temporal Run 7 passes its three-seed confirmation. PE_8 and
+PE_9 are independent and may run while PE_6 is in progress. Exact gates and
+artifact contracts are documented in `r2_above_0_9_implementation_plan.md`.

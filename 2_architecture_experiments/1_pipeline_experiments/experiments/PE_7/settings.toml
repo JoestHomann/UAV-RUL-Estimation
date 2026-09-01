@@ -1,0 +1,47 @@
+# USER-EDITABLE SETTINGS FOR PE_7.
+
+[pipeline]
+experiment = "PE_7"
+run = "run_1"
+
+[run_definitions.PE_7]
+title = "Leakage-free temporal and tree OOF stacking"
+description = "Align frozen development predictions, cross-fit declared meta-models, and freeze a winner only when the development gate passes."
+
+[[run_definitions.PE_7.steps]]
+name = "stacking_workflow"
+script = "2_architecture_experiments/1_pipeline_experiments/run_stacking_workflow.py"
+arguments = ["--workflow", "PE_7"]
+script_chain = "stacking_workflow"
+status_artifact = "stacking/stacking_manifest.json"
+
+[script_chains.stacking_workflow]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/align_oof_predictions.py",
+    "2_architecture_experiments/1_pipeline_experiments/stack_oof_predictions.py",
+    "2_architecture_experiments/1_pipeline_experiments/promote_stacked_model.py",
+]
+
+[stacking_workflows.PE_7]
+alignment_keys = ["outer_fold", "inner_fold", "validation_row", "uav_id", "scenario", "cutoff", "observed_rul"]
+tree_source = "tree"
+temporal_source = "temporal"
+seed = 13
+temporal_winner_manifest = "2_architecture_experiments/2_model_architecture_study/runs/run_7/7_architecture_comparison/temporal_winner_manifest.json"
+
+[stacking_workflows.PE_7.oof_sources.tree]
+path = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_ensemble_calibration/reporting/method_predictions.csv.gz"
+prediction_column = "predicted_rul"
+selectors = { method = "blend_xgb_0.50__calibrated" }
+
+[stacking_workflows.PE_7.oof_sources.temporal]
+path = "2_architecture_experiments/2_model_architecture_study/runs/run_7/7_architecture_comparison/winner_oof_predictions.csv.gz"
+prediction_column = "predicted_rul"
+
+[stacking_workflows.PE_7.production_contract]
+target_policy = "piecewise_cap_125"
+prediction_policy = "symmetric"
+tree_selected_configuration = "3_final_model_training_and_inference/runs/run_6/2_final_configuration_search/artifacts/selected_configuration.json"
+temporal_winner_manifest = "2_architecture_experiments/2_model_architecture_study/runs/run_7/7_architecture_comparison/temporal_winner_manifest.json"
+temporal_selected_configurations = "2_architecture_experiments/2_model_architecture_study/runs/run_7/5_inner_model_selection/selected_configurations.csv"
+temporal_phase_2_specification = "2_architecture_experiments/2_model_architecture_study/runs/run_7/1_architecture_study_settings/artifacts/experiment_specification.json"

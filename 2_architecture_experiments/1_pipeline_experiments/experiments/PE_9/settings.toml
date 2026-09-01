@@ -1,0 +1,54 @@
+# USER-EDITABLE SETTINGS FOR PE_9.
+
+[pipeline]
+experiment = "PE_9"
+run = "run_1"
+
+[run_definitions.PE_9]
+title = "Domain robustness"
+description = "Measure development/test shift and test deterministic shift-pruned feature sets with fold-local target relevance."
+
+[[run_definitions.PE_9.steps]]
+name = "domain_diagnostic"
+script = "2_architecture_experiments/1_pipeline_experiments/domain_shift_diagnostic.py"
+arguments = ["--workflow", "PE_9"]
+script_chain = "domain_workflow"
+status_artifact = "domain_diagnostic/domain_manifest.json"
+
+[[run_definitions.PE_9.steps]]
+name = "build_feature_sets"
+script = "2_architecture_experiments/1_pipeline_experiments/build_domain_feature_sets.py"
+arguments = ["--workflow", "PE_9"]
+script_chain = "domain_workflow"
+status_artifact = "feature_sets/domain_feature_sets.json"
+
+[[run_definitions.PE_9.steps]]
+name = "evaluate_feature_sets"
+script = "2_architecture_experiments/1_pipeline_experiments/run_domain_robustness.py"
+arguments = ["--workflow", "PE_9"]
+script_chain = "domain_workflow"
+status_artifact = "evaluation/domain_oof_predictions.csv.gz"
+
+[[run_definitions.PE_9.steps]]
+name = "report_domain_robustness"
+script = "2_architecture_experiments/1_pipeline_experiments/report_domain_robustness.py"
+arguments = ["--workflow", "PE_9"]
+script_chain = "domain_workflow"
+status_artifact = "reporting/domain_winner_manifest.json"
+
+[script_chains.domain_workflow]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/domain_shift_diagnostic.py",
+    "2_architecture_experiments/1_pipeline_experiments/build_domain_feature_sets.py",
+    "2_architecture_experiments/1_pipeline_experiments/run_domain_robustness.py",
+    "2_architecture_experiments/1_pipeline_experiments/report_domain_robustness.py",
+]
+
+[domain_workflows.PE_9]
+feature_set = "screened_drift_pruned"
+families = ["xgboost", "extra_trees"]
+seeds = [13, 37, 73]
+competition_rules_allow_unlabelled_test_adaptation = true
+source_specification = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+selected_configurations = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/5_inner_model_selection/selected_configurations.csv"

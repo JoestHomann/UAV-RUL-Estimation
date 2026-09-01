@@ -45,6 +45,7 @@ from phase_3_common import (  # noqa: E402
     write_json,
 )
 from phase_3_run_layout import SETTINGS_PATH  # noqa: E402
+from phase_3_data import HeterogeneousDataset  # noqa: E402
 
 
 EARLY_STOPPED_FAMILIES = {
@@ -54,6 +55,7 @@ EARLY_STOPPED_FAMILIES = {
     "tcn",
     "multiscale_cnn",
     "sensor_graph_tcn",
+    "gru",
     "lstm",
     "transformer",
 }
@@ -71,6 +73,7 @@ def _training_view(
     tabular_manifest_path: Path | None = None,
     sequence_manifest_path: Path | None = None,
     trajectory_manifest_path: Path | None = None,
+    hyperparameters: dict[str, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Load training-only metadata and ordered inputs for the selected family."""
 
@@ -120,6 +123,45 @@ def _training_view(
             "lookback": None,
             "channel_names": list(dataset.channel_names),
             "side_feature_names": list(dataset.side_feature_names),
+        }
+        return dataset, schema
+    if representation == "heterogeneous":
+        if not isinstance(hyperparameters, dict):
+            raise FinalTrainingContractError(
+                "Heterogeneous configuration has no component contract"
+            )
+        tree = hyperparameters.get("tree_component")
+        temporal = hyperparameters.get("temporal_component")
+        if not isinstance(tree, dict) or not isinstance(temporal, dict):
+            raise FinalTrainingContractError(
+                "Heterogeneous configuration components are invalid"
+            )
+        if tabular_manifest_path is None or sequence_manifest_path is None:
+            raise FinalTrainingContractError(
+                "Heterogeneous configuration requires tabular and sequence manifests"
+            )
+        feature_set = str(tree.get("feature_set"))
+        lookback_value = int(temporal.get("lookback"))
+        tabular = TabularDataAdapter(tabular_manifest_path).load_training(feature_set)
+        sequence = SequenceDataAdapter(sequence_manifest_path).load_training(
+            lookback_value
+        )
+        dataset = HeterogeneousDataset(
+            tabular,
+            sequence,
+            require_alignment=False,
+        )
+        schema = {
+            "representation": representation,
+            "tabular": {
+                "feature_set": feature_set,
+                "feature_names": list(tabular.features.columns),
+            },
+            "sequence": {
+                "lookback": lookback_value,
+                "channel_names": list(sequence.channel_names),
+                "side_feature_names": list(sequence.side_feature_names),
+            },
         }
         return dataset, schema
     raise FinalTrainingContractError(
@@ -250,6 +292,7 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
         tabular_manifest_path=tabular_manifest_path,
         sequence_manifest_path=sequence_manifest_path,
         trajectory_manifest_path=trajectory_manifest_path,
+        hyperparameters=hyperparameters,
     )
     training_uav_ids = _verify_training_rows(dataset, expected_rows, expected_uavs)
 
@@ -296,24 +339,28 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
             ),
         ),
         "conditional_calibrator": configuration.get("conditional_calibrator"),
+        "submission_policies": configuration.get("submission_policies", {}),
+        "canonical_submission_policy": configuration.get(
+            "canonical_submission_policy"
+        ),
         "preprocessing": {
             "algorithm": (
                 "robust_channel_scaler"
-                if representation in {"sequence", "trajectory"}
+                if representation in {"sequence", "trajectory", "heterogeneous"}
                 else "selected_model_adapter"
             ),
             "telemetry_algorithm": (
                 "robust_channel_scaler"
-                if representation in {"sequence", "trajectory"}
+                if representation in {"sequence", "trajectory", "heterogeneous"}
                 else None
             ),
             "side_feature_algorithm": (
                 "model_adapter_robust_scaler"
-                if representation == "sequence"
+                if representation in {"sequence", "heterogeneous"}
                 else None
             ),
             "fit_scope": "all_training_uavs",
-            "separate_artifact": representation in {"sequence", "trajectory"},
+            "separate_artifact": representation in {"sequence", "trajectory", "heterogeneous"},
         },
         "training": {
             "row_count": expected_rows,
@@ -331,7 +378,7 @@ def build_contract(run_number: int, *, force: bool = False) -> dict[str, Any]:
             "model_filename": "final_model.joblib",
             "preprocessor_filename": (
                 "final_preprocessor.joblib"
-                if representation in {"sequence", "trajectory"}
+                if representation in {"sequence", "trajectory", "heterogeneous"}
                 else None
             ),
         },

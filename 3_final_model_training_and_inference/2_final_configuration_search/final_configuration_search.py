@@ -67,6 +67,7 @@ from phase_3_common import (  # noqa: E402
     write_csv,
     write_json,
 )
+from phase_3_data import HeterogeneousDataset, HeterogeneousSplit  # noqa: E402
 from phase_3_run_layout import tensorboard_log_root  # noqa: E402
 
 
@@ -78,6 +79,7 @@ EARLY_STOPPED_FAMILIES = {
     "tcn",
     "multiscale_cnn",
     "sensor_graph_tcn",
+    "gru",
     "lstm",
     "transformer",
 }
@@ -262,6 +264,14 @@ class FinalSearchSplitRepository:
             return self._sequence().outer_fold_labels()
         if representation == "trajectory":
             return self._trajectory().outer_fold_labels()
+        if representation == "heterogeneous":
+            tabular = self._tabular().outer_fold_labels()
+            sequence = self._sequence().outer_fold_labels()
+            if tabular != sequence:
+                raise FinalConfigurationSearchError(
+                    "Heterogeneous component outer folds differ"
+                )
+            return tabular
         return self._tabular().outer_fold_labels()
 
     def get(
@@ -308,6 +318,42 @@ class FinalSearchSplitRepository:
                 key,
                 5,
                 lambda: self._trajectory().get_final_search_split(outer_fold),
+            )
+        elif representation == "heterogeneous":
+            tree = candidate.hyperparameters.get("tree_component")
+            temporal = candidate.hyperparameters.get("temporal_component")
+            if not isinstance(tree, dict) or not isinstance(temporal, dict):
+                raise FinalConfigurationSearchError(
+                    "Heterogeneous candidate has no frozen components"
+                )
+            feature_set = str(tree.get("feature_set"))
+            lookback = int(temporal.get("lookback"))
+            tabular_split = self._cached(
+                self._tabular_cache,
+                (outer_fold, feature_set),
+                15,
+                lambda: self._tabular().get_final_search_split(
+                    outer_fold, feature_set
+                ),
+            )
+            sequence_split = self._cached(
+                self._sequence_cache,
+                (outer_fold, lookback),
+                5,
+                lambda: self._sequence().get_final_search_split(
+                    outer_fold, lookback
+                ),
+            )
+            split = HeterogeneousSplit(
+                training=HeterogeneousDataset(
+                    tabular_split.training,
+                    sequence_split.training,
+                    require_alignment=False,
+                ),
+                validation=HeterogeneousDataset(
+                    tabular_split.validation,
+                    sequence_split.validation,
+                ),
             )
         else:
             raise FinalConfigurationSearchError(
@@ -397,6 +443,19 @@ class FinalConfigurationSearchRunner:
         if isinstance(calibration_override, dict):
             prediction_settings.update(calibration_override)
         self.prediction_policy = PredictionPolicy.from_settings(prediction_settings)
+        declared_policies = self.settings.get("submission_policies", [])
+        self.submission_policies: dict[str, PredictionPolicy] = {}
+        if isinstance(declared_policies, list):
+            for declared in declared_policies:
+                if not isinstance(declared, dict) or not isinstance(declared.get("name"), str):
+                    raise FinalConfigurationSearchError("Invalid submission policy settings")
+                policy_settings = dict(self.phase_2_settings["prediction_policy"])
+                policy_settings.update(
+                    {key: value for key, value in declared.items() if key != "name"}
+                )
+                self.submission_policies[str(declared["name"])] = (
+                    PredictionPolicy.from_settings(policy_settings)
+                )
         self.prediction_minimum = float(
             self.phase_2_settings["evaluation"]["prediction_minimum"]
         )
@@ -884,6 +943,62 @@ class FinalConfigurationSearchRunner:
                 ),
                 self.prediction_policy,
             ).to_dict()
+        submission_policy_payloads: dict[str, dict[str, Any]] = {}
+        for name, policy in self.submission_policies.items():
+            calibrator = None
+            if policy.calibration == "conditional_quantile":
+                calibrator_object = ConditionalQuantileCalibrator.fit(
+                    np.asarray(
+                        [record["observed_rul"] for record in selected_oof],
+                        dtype=float,
+                    ),
+                    np.asarray(
+                        [record["uncalibrated_predicted_rul"] for record in selected_oof],
+                        dtype=float,
+                    ),
+                    policy,
+                )
+                calibrator = calibrator_object.to_dict()
+                policy_predictions, _ = cross_fit_conditional_calibration(
+                    np.asarray(
+                        [record["observed_rul"] for record in selected_oof],
+                        dtype=float,
+                    ),
+                    np.asarray(
+                        [record["uncalibrated_predicted_rul"] for record in selected_oof],
+                        dtype=float,
+                    ),
+                    np.asarray(
+                        [record["outer_fold"] for record in selected_oof]
+                    ),
+                    policy,
+                    prediction_minimum=self.prediction_minimum,
+                )
+            else:
+                policy_predictions = np.asarray(
+                    [record["uncalibrated_predicted_rul"] for record in selected_oof],
+                    dtype=float,
+                )
+            policy_metrics = calculate_regression_metrics(
+                np.asarray(
+                    [record["observed_rul"] for record in selected_oof], dtype=float
+                ),
+                policy_predictions,
+            )
+            submission_policy_payloads[name] = {
+                "prediction_policy": policy.to_dict(),
+                "conditional_calibrator": calibrator,
+                "development_metrics": {
+                    key: float(policy_metrics[key])
+                    for key in (
+                        "r2",
+                        "rmse",
+                        "bias",
+                        "overprediction_rate",
+                        "root_mean_squared_overprediction",
+                    )
+                },
+            }
         selected_payload = {
             "selection_version": 1,
             "settings_version": self.settings_version,
@@ -912,6 +1027,10 @@ class FinalConfigurationSearchRunner:
             ),
             "prediction_policy": self.prediction_policy.to_dict(),
             "conditional_calibrator": conditional_calibrator,
+            "submission_policies": submission_policy_payloads,
+            "canonical_submission_policy": self.settings.get(
+                "canonical_submission_policy"
+            ),
             "selection_metric": "mean_fold_rmse",
             "selection_direction": "minimize",
             "tie_breaker": "candidate_number",

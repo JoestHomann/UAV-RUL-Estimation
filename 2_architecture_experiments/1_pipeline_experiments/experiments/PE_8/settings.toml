@@ -1,0 +1,36 @@
+# USER-EDITABLE SETTINGS FOR PE_8.
+
+[pipeline]
+experiment = "PE_8"
+run = "run_1"
+
+[run_definitions.PE_8]
+title = "Personalized degradation onset"
+description = "Compare global cap 125 with two fold-fitted per-UAV onset targets using fixed tree configurations."
+
+[[run_definitions.PE_8.steps]]
+name = "fit_onset_cells"
+script = "2_architecture_experiments/1_pipeline_experiments/run_onset_experiment.py"
+arguments = ["--workflow", "PE_8"]
+script_chain = "onset_workflow"
+status_artifact = "onset/onset_oof_predictions.csv.gz"
+
+[[run_definitions.PE_8.steps]]
+name = "report_onset_cells"
+script = "2_architecture_experiments/1_pipeline_experiments/report_onset_experiment.py"
+arguments = ["--workflow", "PE_8"]
+script_chain = "onset_workflow"
+status_artifact = "reporting/onset_winner_manifest.json"
+
+[script_chains.onset_workflow]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/degradation_onset.py",
+    "2_architecture_experiments/1_pipeline_experiments/run_onset_experiment.py",
+    "2_architecture_experiments/1_pipeline_experiments/report_onset_experiment.py",
+]
+
+[onset_workflows.PE_8]
+families = ["xgboost", "extra_trees"]
+source_specification = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+selected_configurations = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/5_inner_model_selection/selected_configurations.csv"

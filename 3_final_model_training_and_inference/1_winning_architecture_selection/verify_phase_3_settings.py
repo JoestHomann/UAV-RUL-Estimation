@@ -33,6 +33,7 @@ from phase_3_common import (  # noqa: E402
 DEFAULT_SETTINGS_PATH = STEP_DIR / "phase_3_settings.toml"
 MAX_SEED = 2**32 - 1
 PROMOTED_ENSEMBLE_FAMILY = "calibrated_tree_blend"
+PROMOTED_STACK_FAMILY = "heterogeneous_oof_stack"
 
 
 class SettingsError(Phase3Error):
@@ -71,6 +72,12 @@ class PredictionCalibrationSettings(StrictModel):
         return self
 
 
+class SubmissionPolicySettings(PredictionCalibrationSettings):
+    """Name one frozen post-model policy produced from the same base model."""
+
+    name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_]*$")
+
+
 class Phase3Settings(StrictModel):
     settings_version: int = Field(gt=0)
     run_number: int = Field(gt=0)
@@ -86,6 +93,8 @@ class Phase3Settings(StrictModel):
     promotion_manifest: str | None = None
     final_search: FinalSearchSettings
     prediction_calibration: PredictionCalibrationSettings | None = None
+    submission_policies: list[SubmissionPolicySettings] | None = None
+    canonical_submission_policy: str | None = None
 
     @model_validator(mode="after")
     def family_name_is_normalized(self) -> "Phase3Settings":
@@ -93,12 +102,27 @@ class Phase3Settings(StrictModel):
             raise ValueError(
                 "selected_model_family must use the normalized registry name"
             )
-        if self.selected_model_family == PROMOTED_ENSEMBLE_FAMILY:
+        if self.selected_model_family in {
+            PROMOTED_ENSEMBLE_FAMILY,
+            PROMOTED_STACK_FAMILY,
+        }:
             if self.promotion_contract is None or self.promotion_manifest is None:
                 raise ValueError(
-                    "calibrated_tree_blend requires promotion_contract and "
-                    "promotion_manifest"
+                    f"{self.selected_model_family} requires promotion_contract "
+                    "and promotion_manifest"
                 )
+        names = [policy.name for policy in (self.submission_policies or [])]
+        if len(names) != len(set(names)):
+            raise ValueError("submission policy names must be unique")
+        if names:
+            if self.canonical_submission_policy not in names:
+                raise ValueError(
+                    "canonical_submission_policy must name one submission policy"
+                )
+        elif self.canonical_submission_policy is not None:
+            raise ValueError(
+                "canonical_submission_policy requires submission_policies"
+            )
         return self
 
 
@@ -189,6 +213,8 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
     )
     if settings.selected_model_family == PROMOTED_ENSEMBLE_FAMILY:
         return _verify_promoted_ensemble_reference(settings, phase_2_root)
+    if settings.selected_model_family == PROMOTED_STACK_FAMILY:
+        return _verify_promoted_stack_reference(settings, phase_2_root)
 
     manifest_files = phase_2_manifest_paths(
         settings.phase_2_run_number,
@@ -303,6 +329,8 @@ def _verify_promoted_ensemble_reference(
     selection_path = (
         phase_2_root / "5_inner_model_selection" / "selection_manifest.json"
     )
+
+
     promotion_contract_path = configured_repository_path(
         payload,
         "promotion_contract",
@@ -393,6 +421,68 @@ def _verify_promoted_ensemble_reference(
             "promotion_contract": promotion_contract_path,
             "promotion": promotion_manifest_path,
             "component_locked_evaluation": component_manifest_path,
+        },
+    )
+
+
+def _verify_promoted_stack_reference(
+    settings: Phase3Settings,
+    phase_2_root: Path,
+) -> Phase2Verification:
+    """Require a locked-confirmed PE_7 stack without reopening its search."""
+
+    del phase_2_root
+    payload = settings.model_dump(mode="json")
+    contract_path = configured_repository_path(
+        payload, "promotion_contract", Path("promotion_contract.json")
+    )
+    confirmation_path = configured_repository_path(
+        payload, "promotion_manifest", Path("locked_confirmation_manifest.json")
+    )
+    contract = read_json(contract_path, "promoted stack contract")
+    confirmation = read_json(confirmation_path, "promoted stack confirmation")
+    if contract.get("family") != PROMOTED_STACK_FAMILY:
+        raise SettingsError("Promotion contract identifies another stack family")
+    if contract.get("meta_model_fitted_from_oof_only") is not True:
+        raise SettingsError("Promoted stack meta-model is not proven OOF-only")
+    if not isinstance(contract.get("adapter_hyperparameters"), dict):
+        raise SettingsError("Promoted stack has no adapter hyperparameters")
+    if (
+        confirmation.get("status") != "complete"
+        or confirmation.get("uses_locked_evaluation") is not True
+        or confirmation.get("locked_results_used_for_tuning") is not False
+        or confirmation.get("development_gate_passed") is not True
+    ):
+        raise SettingsError("Promoted stack has no valid locked confirmation")
+
+    specification_path = configured_repository_path(
+        payload, "phase_2_specification", PHASE_2_SPECIFICATION_PATH
+    )
+    specification = read_json(specification_path, "stack source specification")
+    phase_2_settings = specification.get("settings")
+    if not isinstance(phase_2_settings, dict):
+        raise SettingsError("Stack source specification has no settings")
+    settings_version = int(phase_2_settings["settings_version"])
+    registry_path = configured_repository_path(
+        payload, "phase_2_model_registry", PHASE_2_MODEL_REGISTRY_PATH
+    )
+    registry = read_json(registry_path, "stack source registry")
+    if registry.get("settings_version") != settings_version:
+        raise SettingsError("Stack source registry uses another settings version")
+    return Phase2Verification(
+        settings_version=settings_version,
+        run_number=settings.phase_2_run_number,
+        selected_family=PROMOTED_STACK_FAMILY,
+        representation="heterogeneous",
+        phase_2_specification=specification,
+        model_registry=registry,
+        manifests={
+            "promotion_contract": contract,
+            "promotion": confirmation,
+        },
+        manifest_paths={
+            "promotion_contract": contract_path,
+            "promotion": confirmation_path,
         },
     )
 

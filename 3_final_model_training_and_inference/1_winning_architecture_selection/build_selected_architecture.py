@@ -33,6 +33,7 @@ from verify_phase_3_settings import (  # noqa: E402
     SettingsError,
     load_and_verify_settings,
     PROMOTED_ENSEMBLE_FAMILY,
+    PROMOTED_STACK_FAMILY,
 )
 
 
@@ -148,6 +149,37 @@ def _promoted_ensemble_specification(
     return phase_2_specification, repository_relative(generated_path)
 
 
+def _promoted_stack_specification(
+    verification: object,
+    artifact_dir: Path,
+) -> tuple[dict[str, object], str]:
+    """Inject one fully frozen heterogeneous stack candidate."""
+
+    phase_2_specification = copy.deepcopy(verification.phase_2_specification)
+    phase_2_settings = phase_2_specification["settings"]
+    contract = verification.manifests["promotion_contract"]
+    hyperparameters = contract.get("adapter_hyperparameters")
+    if not isinstance(hyperparameters, dict):
+        raise Phase3Error("Promoted stack adapter hyperparameters are missing")
+    architecture = {
+        "status": "included",
+        "representation": "heterogeneous",
+        "feature_sets": [],
+        "lookbacks": [],
+        "variants": [str(contract.get("method"))],
+        "early_stopping_patience": None,
+        "search": {
+            name: {"kind": "fixed", "value": value}
+            for name, value in hyperparameters.items()
+        },
+    }
+    phase_2_settings["architectures"][PROMOTED_STACK_FAMILY] = architecture
+    phase_2_settings["study"]["enabled"][PROMOTED_STACK_FAMILY] = True
+    generated_path = artifact_dir / "promoted_stack_phase_2_specification.json"
+    write_json(phase_2_specification, generated_path)
+    return phase_2_specification, repository_relative(generated_path)
+
+
 def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, object]:
     settings, verification = load_and_verify_settings(settings_path)
     run_number = settings.run_number
@@ -159,6 +191,10 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
     if settings.selected_model_family == PROMOTED_ENSEMBLE_FAMILY:
         phase_2_specification, generated_specification_path = (
             _promoted_ensemble_specification(settings, verification, artifact_dir)
+        )
+    elif settings.selected_model_family == PROMOTED_STACK_FAMILY:
+        phase_2_specification, generated_specification_path = (
+            _promoted_stack_specification(verification, artifact_dir)
         )
     phase_2_settings = phase_2_specification["settings"]
     architecture = phase_2_settings["architectures"][settings.selected_model_family]

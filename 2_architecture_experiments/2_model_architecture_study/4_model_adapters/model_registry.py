@@ -15,6 +15,8 @@ from typing import Any
 from base import ModelAdapter, ModelAdapterError
 from models.baselines.cycle_only_baseline import CycleOnlyBaselineAdapter
 from models.baselines.mean_baseline import MeanBaselineAdapter
+from models.ensemble.heterogeneous_oof_stack import HeterogeneousOOFStackAdapter
+from models.neural.gru import GRUAdapter
 from models.neural.lstm import LSTMAdapter
 from models.neural.mlp import MLPAdapter
 from models.neural.multiscale_cnn import MultiScaleCNNAdapter
@@ -62,18 +64,14 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "tcn": TCNAdapter,
     "multiscale_cnn": MultiScaleCNNAdapter,
     "sensor_graph_tcn": SensorGraphTCNAdapter,
+    "gru": GRUAdapter,
     "lstm": LSTMAdapter,
     "transformer": TransformerAdapter,
     "rbf_svr": RBFSVRAdapter,
     "trajectory_dtw_knn": TrajectoryDTWKNNAdapter,
     "calibrated_tree_blend": CalibratedTreeBlendAdapter,
+    "heterogeneous_oof_stack": HeterogeneousOOFStackAdapter,
 }
-
-OPTIONAL_ADAPTER_FAMILIES = {
-    "calibrated_tree_blend",
-    "hist_gradient_boosting",
-}
-
 
 # Exact parameter-name checks catch misspelled or incomplete resolved candidates
 # before a third-party estimator silently accepts an unintended configuration.
@@ -158,6 +156,14 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "learning_rate",
         "weight_decay",
     },
+    "gru": {
+        "layers",
+        "hidden_units",
+        "direction",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
     "lstm": {
         "layers",
         "hidden_units",
@@ -191,6 +197,12 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "residual_calibrator_path",
         "xgboost_weight",
     },
+    "heterogeneous_oof_stack": {
+        "tree_component",
+        "temporal_component",
+        "meta_model_path",
+        "alignment_keys",
+    },
 }
 
 
@@ -215,13 +227,9 @@ def load_experiment_specification(
         raise ModelAdapterError(
             f"Experiment specification is missing required field {error}"
         ) from error
-    required_families = set(ADAPTER_CLASSES) - OPTIONAL_ADAPTER_FAMILIES
-    if not (
-        required_families.issubset(architectures)
-        and set(architectures).issubset(ADAPTER_CLASSES)
-    ):
+    if not architectures or not set(architectures).issubset(ADAPTER_CLASSES):
         raise ModelAdapterError(
-            "Settings architecture names do not match implemented adapter names"
+            "Settings contain no architectures or reference an unknown adapter"
         )
     return payload
 
@@ -311,7 +319,7 @@ class ModelAdapterFactory:
         }
         adapter_class = ADAPTER_CLASSES[family]
         adapter: ModelAdapter
-        if family == "calibrated_tree_blend":
+        if family in {"calibrated_tree_blend", "heterogeneous_oof_stack"}:
             adapter = adapter_class(**common_arguments)
         elif family in {"xgboost", "catboost"}:
             adapter = adapter_class(
@@ -324,6 +332,7 @@ class ModelAdapterFactory:
             "tcn",
             "multiscale_cnn",
             "sensor_graph_tcn",
+            "gru",
             "lstm",
             "transformer",
         }:

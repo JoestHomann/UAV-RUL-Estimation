@@ -78,6 +78,35 @@ freezes that curve in the training contract, and Steps 5-6 apply and regenerate
 the same subtraction-only transformation. Test labels are never loaded, and
 both the policy parameters and learned curve remain inspectable JSON data.
 
+New Phase 3 runs can freeze two named policies from the same selected OOF
+predictions and base model. Add the following to the new run's TOML; do not
+edit a completed run's settings:
+
+```toml
+canonical_submission_policy = "accuracy_q50"
+
+[[submission_policies]]
+name = "accuracy_q50"
+calibration = "conditional_quantile"
+safety_offset = 0.0
+non_overprediction_coverage = 0.50
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10
+
+[[submission_policies]]
+name = "conservative_q55"
+calibration = "conditional_quantile"
+safety_offset = 0.0
+non_overprediction_coverage = 0.55
+calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
+calibration_minimum_bin_rows = 10
+```
+
+Steps 5-6 then produce and independently regenerate
+`submission_accuracy_q50.csv` and `submission_conservative_q55.csv` in
+addition to canonical `submission.csv`. The canonical choice is fixed in the
+TOML, never selected from repeated leaderboard feedback.
+
 Test features remain inaccessible until Steps 1-4 are complete. Step 5 never
 loads a test target or calculates a test metric. Step 6 emits exactly the
 columns `id,RUL`, sorted by `id`; each Kaggle `id` is copied from the internal

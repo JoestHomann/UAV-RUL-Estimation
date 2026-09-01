@@ -237,6 +237,25 @@ def main(definition_path: Path, run_name: str) -> None:
                 ],
                 label=f"{run_name} status",
             )
+            artifact_root = run_directory(
+                SCRIPT_DIR / "experiments", run_name, run
+            ).resolve()
+            for step in steps:
+                status_artifact = step.get("status_artifact")
+                if not isinstance(status_artifact, str) or not status_artifact:
+                    continue
+                status_path = (artifact_root / status_artifact).resolve()
+                try:
+                    status_path.relative_to(artifact_root)
+                except ValueError as error:
+                    raise DefinitionRunnerError(
+                        f"{step['name']}.status_artifact escapes the run folder"
+                    ) from error
+                state = "complete" if status_path.is_file() else "pending"
+                print(
+                    f"  {step['name']}: {state} ({status_path})",
+                    flush=True,
+                )
             return
         if args.collect_figures:
             _run_manager_command(

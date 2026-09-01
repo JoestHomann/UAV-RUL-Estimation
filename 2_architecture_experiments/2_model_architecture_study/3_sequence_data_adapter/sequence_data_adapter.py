@@ -57,6 +57,7 @@ class SequenceDataset:
     side_feature_names: tuple[str, ...]
     lookback: int
     scaled: bool
+    fitting_target: pd.Series | None = None
 
     def __post_init__(self) -> None:
         """Reject misaligned arrays before they reach a model adapter."""
@@ -84,6 +85,10 @@ class SequenceDataset:
             raise SequenceAdapterError("Target row count does not match sequences")
         if self.sample_weights is not None and len(self.sample_weights) != row_count:
             raise SequenceAdapterError("Weight row count does not match sequences")
+        if self.fitting_target is not None and len(self.fitting_target) != row_count:
+            raise SequenceAdapterError(
+                "Fitting-target row count does not match sequences"
+            )
 
     def __len__(self) -> int:
         """Return the number of prediction endpoints represented."""
@@ -499,6 +504,7 @@ class SequenceDataAdapter:
 
         target_name = entry.get("target_column")
         weight_name = entry.get("sample_weight_column")
+        fitting_target_name = entry.get("fitting_target_column")
         target = (
             endpoints[target_name].copy()
             if isinstance(target_name, str) and target_name in endpoints.columns
@@ -507,6 +513,12 @@ class SequenceDataAdapter:
         sample_weights = (
             endpoints[weight_name].copy()
             if isinstance(weight_name, str) and weight_name in endpoints.columns
+            else None
+        )
+        fitting_target = (
+            endpoints[fitting_target_name].copy()
+            if isinstance(fitting_target_name, str)
+            and fitting_target_name in endpoints.columns
             else None
         )
         if isinstance(target_name, str) and target is None:
@@ -530,6 +542,7 @@ class SequenceDataAdapter:
             side_feature_names=self.side_feature_names,
             lookback=lookback,
             scaled=False,
+            fitting_target=fitting_target,
         )
 
     def load_training(self, lookback: int) -> SequenceDataset:

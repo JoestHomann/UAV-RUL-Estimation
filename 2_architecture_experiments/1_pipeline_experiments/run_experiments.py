@@ -765,6 +765,75 @@ def _phase2_settings(
     settings["tuning"]["retraining_seeds"] = list(
         experiment.get("retraining_seeds", settings["tuning"]["retraining_seeds"])
     )
+
+    sequence_lookbacks = experiment.get("sequence_lookbacks")
+    if sequence_lookbacks is not None:
+        if (
+            not isinstance(sequence_lookbacks, list)
+            or not sequence_lookbacks
+            or not all(
+                isinstance(value, int) and not isinstance(value, bool) and value > 0
+                for value in sequence_lookbacks
+            )
+            or len(set(sequence_lookbacks)) != len(sequence_lookbacks)
+        ):
+            raise ExperimentManagerError(
+                "sequence_lookbacks must be a non-empty list of unique positive integers"
+            )
+        settings["representations"]["sequence_lookbacks"] = list(sequence_lookbacks)
+        for architecture in settings["architectures"].values():
+            if architecture.get("representation") == "sequence":
+                architecture["lookbacks"] = list(sequence_lookbacks)
+
+    sequence_channels = experiment.get("sequence_channels")
+    if sequence_channels is not None:
+        if (
+            not isinstance(sequence_channels, list)
+            or not sequence_channels
+            or not all(isinstance(value, str) and value for value in sequence_channels)
+            or len(set(sequence_channels)) != len(sequence_channels)
+        ):
+            raise ExperimentManagerError(
+                "sequence_channels must be a non-empty list of unique names"
+            )
+        settings["representations"]["sequence_channels"] = list(sequence_channels)
+        settings["representations"]["sequence_channel_count"] = len(sequence_channels)
+
+    neural_override = experiment.get("neural_training")
+    if neural_override is not None:
+        expected_neural_fields = {
+            "batch_size",
+            "maximum_epochs",
+            "early_stopping_patience",
+            "gradient_clip_global_norm",
+        }
+        if not isinstance(neural_override, dict) or set(neural_override) - expected_neural_fields:
+            raise ExperimentManagerError(
+                "neural_training contains unsupported fields"
+            )
+        settings["neural_training"].update(copy.deepcopy(neural_override))
+
+    fixed_hyperparameters = experiment.get("fixed_hyperparameters", {})
+    if not isinstance(fixed_hyperparameters, dict):
+        raise ExperimentManagerError("fixed_hyperparameters must be a table")
+    for family, values in fixed_hyperparameters.items():
+        architecture = settings["architectures"].get(family)
+        if not isinstance(architecture, dict) or family not in models:
+            raise ExperimentManagerError(
+                f"Fixed hyperparameters reference unavailable family {family!r}"
+            )
+        search = architecture.get("search")
+        if not isinstance(values, dict) or not isinstance(search, dict):
+            raise ExperimentManagerError(
+                f"fixed_hyperparameters.{family} must be a table"
+            )
+        unknown = sorted(set(values) - set(search))
+        if unknown:
+            raise ExperimentManagerError(
+                f"Unknown fixed hyperparameters for {family}: {unknown}"
+            )
+        for parameter, value in values.items():
+            search[parameter] = {"kind": "fixed", "value": copy.deepcopy(value)}
     strategy_defaults = {
         "fault_mode_strategy": "none",
         "signal_compression_strategy": "none",

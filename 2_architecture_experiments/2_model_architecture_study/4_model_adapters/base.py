@@ -22,7 +22,7 @@ import pandas as pd
 from policies import PredictionPolicy, TargetPolicy
 
 
-Representation = Literal["none", "tabular", "sequence", "trajectory"]
+Representation = Literal["none", "tabular", "sequence", "trajectory", "heterogeneous"]
 
 
 class ModelAdapterError(ValueError):
@@ -126,6 +126,18 @@ class ModelAdapter(ABC):
     def fitting_target_values(self, dataset: Any) -> NDArray[np.float64]:
         """Return the transformed model-fitting target for this run."""
 
+        precomputed = getattr(dataset, "fitting_target", None)
+        if precomputed is not None:
+            values = np.asarray(precomputed, dtype=np.float64).reshape(-1)
+            if len(values) != len(dataset):
+                raise ModelAdapterError(
+                    "Precomputed fitting-target length does not match dataset length"
+                )
+            if not np.isfinite(values).all() or np.any(values < 0.0):
+                raise ModelAdapterError(
+                    "Precomputed fitting targets must be finite and nonnegative"
+                )
+            return values
         return self.target_policy.transform(
             target_values(dataset),
             cutoff_values(dataset),

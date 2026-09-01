@@ -51,7 +51,11 @@ class TestInferenceError(Phase3Error):
     """Explain a broken frozen-model or test-prediction contract."""
 
 
-def generate_predictions(run_number: int) -> tuple[pd.DataFrame, dict[str, Any]]:
+def generate_predictions(
+    run_number: int,
+    *,
+    policy_name: str | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Regenerate test predictions in memory from frozen artifacts."""
 
     contract = read_json(training_contract_path(run_number), "final training contract")
@@ -84,7 +88,21 @@ def generate_predictions(run_number: int) -> tuple[pd.DataFrame, dict[str, Any]]
         )
 
     predictions = model.predict(test_data)
-    calibrator_payload = contract.get("conditional_calibrator")
+    submission_policies = contract.get("submission_policies", {})
+    if isinstance(submission_policies, dict) and submission_policies:
+        selected_policy = policy_name or contract.get("canonical_submission_policy")
+        policy_payload = submission_policies.get(selected_policy)
+        if not isinstance(selected_policy, str) or not isinstance(policy_payload, dict):
+            raise TestInferenceError(
+                f"Frozen submission policy {selected_policy!r} is unavailable"
+            )
+        calibrator_payload = policy_payload.get("conditional_calibrator")
+    elif policy_name is not None:
+        raise TestInferenceError(
+            "This legacy contract does not define named submission policies"
+        )
+    else:
+        calibrator_payload = contract.get("conditional_calibrator")
     calibration_applied = calibrator_payload is not None
     if calibration_applied:
         if not isinstance(calibrator_payload, dict):
@@ -135,12 +153,32 @@ def run_inference(run_number: int, *, force: bool = False) -> dict[str, Any]:
             raise TestInferenceError(f"Phase 3 Step {prerequisite} is not complete")
 
     table, contract = generate_predictions(run_number)
-    calibration_applied = contract.get("conditional_calibrator") is not None
+    submission_policies = contract.get("submission_policies", {})
+    calibration_applied = (
+        bool(submission_policies)
+        or contract.get("conditional_calibrator") is not None
+    )
     write_csv(
         table,
         contract["test_contract"]["prediction_columns"],
         test_predictions_path(run_number),
     )
+    policy_artifacts: dict[str, str] = {}
+    if isinstance(submission_policies, dict):
+        for policy_name in submission_policies:
+            policy_table, _ = generate_predictions(
+                run_number,
+                policy_name=str(policy_name),
+            )
+            policy_path = test_predictions_path(run_number).with_name(
+                f"test_predictions_{policy_name}.csv"
+            )
+            write_csv(
+                policy_table,
+                contract["test_contract"]["prediction_columns"],
+                policy_path,
+            )
+            policy_artifacts[str(policy_name)] = f"artifacts/{policy_path.name}"
     manifest = {
         "manifest_version": 1,
         "settings_version": settings_version,
@@ -158,7 +196,13 @@ def run_inference(run_number: int, *, force: bool = False) -> dict[str, Any]:
         "test_data_loaded": True,
         "test_target_loaded": False,
         "test_metrics_calculated": False,
-        "artifacts": {"test_predictions": "artifacts/test_predictions.csv"},
+        "canonical_submission_policy": contract.get(
+            "canonical_submission_policy"
+        ),
+        "artifacts": {
+            "test_predictions": "artifacts/test_predictions.csv",
+            "submission_policies": policy_artifacts,
+        },
     }
     write_json(manifest, manifest_path(5, run_number))
     return manifest

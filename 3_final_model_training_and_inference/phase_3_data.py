@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,61 @@ from trajectory_data_adapter import (
 )
 
 from phase_3_common import Phase3Error, REPOSITORY_ROOT, repository_path
+
+
+@dataclass(frozen=True)
+class HeterogeneousDataset:
+    """Keep exactly aligned tabular and sequence views for a promoted stack."""
+
+    tabular: TabularDataset
+    sequence: SequenceDataset
+    require_alignment: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.require_alignment:
+            return
+        if len(self.tabular) != len(self.sequence):
+            raise Phase3Error("Heterogeneous component row counts differ")
+        keys = [key for key in ("uav_id", "scenario", "cutoff") if key in self.tabular.metadata]
+        if not keys or keys != [key for key in keys if key in self.sequence.metadata]:
+            raise Phase3Error("Heterogeneous components have incompatible metadata keys")
+        left = self.tabular.metadata[keys].reset_index(drop=True).astype(str)
+        right = self.sequence.metadata[keys].reset_index(drop=True).astype(str)
+        if not left.equals(right):
+            raise Phase3Error("Heterogeneous component endpoint order differs")
+        if self.tabular.target is None and self.sequence.target is not None:
+            raise Phase3Error("Heterogeneous component targets disagree")
+        if self.tabular.target is not None:
+            if self.sequence.target is None or not self.tabular.target.reset_index(drop=True).equals(
+                self.sequence.target.reset_index(drop=True)
+            ):
+                raise Phase3Error("Heterogeneous component target values differ")
+
+    def __len__(self) -> int:
+        return len(self.tabular)
+
+    @property
+    def metadata(self):
+        return self.tabular.metadata
+
+    @property
+    def target(self):
+        return self.tabular.target
+
+    @property
+    def sample_weights(self):
+        return self.tabular.sample_weights
+
+
+@dataclass(frozen=True)
+class HeterogeneousPreprocessor:
+    sequence_scaler: RobustChannelScaler
+
+
+@dataclass(frozen=True)
+class HeterogeneousSplit:
+    training: HeterogeneousDataset
+    validation: HeterogeneousDataset
 
 
 def _manifest_path(contract: dict[str, Any], name: str) -> Path:
@@ -43,7 +99,13 @@ def _tabular_feature_set(contract: dict[str, Any]) -> str:
 
 def load_final_training_data(
     contract: dict[str, Any],
-) -> tuple[Any, RobustChannelScaler | TrajectoryChannelScaler | None]:
+) -> tuple[
+    Any,
+    RobustChannelScaler
+    | TrajectoryChannelScaler
+    | HeterogeneousPreprocessor
+    | None,
+]:
     """Load all training prefixes and fit only permitted preprocessing."""
 
     representation = contract["representation"]
@@ -70,12 +132,31 @@ def load_final_training_data(
             raise Phase3Error("Final trajectory channel order changed")
         scaler = adapter.fit_channel_scaler(contract["training"]["uav_ids"])
         return scaler.transform(dataset), scaler
+    if representation == "heterogeneous":
+        schema = contract["input_schema"]
+        tabular_schema = schema.get("tabular", {})
+        sequence_schema = schema.get("sequence", {})
+        feature_set = str(tabular_schema.get("feature_set"))
+        tabular = TabularDataAdapter(_manifest_path(contract, "tabular")).load_training(feature_set)
+        expected_features = list(tabular_schema.get("feature_names", []))
+        if list(tabular.features.columns) != expected_features:
+            raise Phase3Error("Heterogeneous tabular feature order changed")
+        sequence_adapter = SequenceDataAdapter(_manifest_path(contract, "sequence"))
+        sequence = sequence_adapter.load_training(int(sequence_schema["lookback"]))
+        if list(sequence.channel_names) != list(sequence_schema["channel_names"]):
+            raise Phase3Error("Heterogeneous sequence channel order changed")
+        scaler = sequence_adapter.fit_channel_scaler(contract["training"]["uav_ids"])
+        return HeterogeneousDataset(
+            tabular,
+            scaler.transform(sequence),
+            require_alignment=False,
+        ), HeterogeneousPreprocessor(scaler)
     raise Phase3Error(f"Unsupported representation {representation!r}")
 
 
 def load_final_test_data(
     contract: dict[str, Any],
-    preprocessor: RobustChannelScaler | TrajectoryChannelScaler | None,
+    preprocessor: RobustChannelScaler | TrajectoryChannelScaler | HeterogeneousPreprocessor | None,
 ) -> Any:
     """Load test endpoints only after the frozen contract gate passes."""
 
@@ -106,6 +187,22 @@ def load_final_test_data(
         if list(dataset.channel_names) != contract["input_schema"]["channel_names"]:
             raise Phase3Error("Final test trajectory channel order differs from the contract")
         return preprocessor.transform(dataset)
+    if representation == "heterogeneous":
+        if not isinstance(preprocessor, HeterogeneousPreprocessor):
+            raise Phase3Error("Heterogeneous inference requires its sequence scaler")
+        schema = contract["input_schema"]
+        tabular_schema = schema.get("tabular", {})
+        sequence_schema = schema.get("sequence", {})
+        tabular = TabularDataAdapter(_manifest_path(contract, "tabular")).load_test(
+            str(tabular_schema.get("feature_set"))
+        )
+        sequence = SequenceDataAdapter(_manifest_path(contract, "sequence")).load_test(
+            int(sequence_schema["lookback"])
+        )
+        return HeterogeneousDataset(
+            tabular,
+            preprocessor.sequence_scaler.transform(sequence),
+        )
     raise Phase3Error(f"Unsupported representation {representation!r}")
 
 
@@ -124,11 +221,17 @@ def first_rows(dataset: Any, count: int) -> Any:
             if dataset.sample_weights is not None
             else None
         )
+        fitting_target = (
+            dataset.fitting_target.iloc[:size].reset_index(drop=True)
+            if dataset.fitting_target is not None
+            else None
+        )
         return TabularDataset(
             features=dataset.features.iloc[:size].reset_index(drop=True),
             metadata=dataset.metadata.iloc[:size].reset_index(drop=True),
             target=target,
             sample_weights=weights,
+            fitting_target=fitting_target,
         )
     if isinstance(dataset, SequenceDataset):
         target = (
@@ -141,6 +244,11 @@ def first_rows(dataset: Any, count: int) -> Any:
             if dataset.sample_weights is not None
             else None
         )
+        fitting_target = (
+            dataset.fitting_target.iloc[:size].reset_index(drop=True)
+            if dataset.fitting_target is not None
+            else None
+        )
         return replace(
             dataset,
             sequences=dataset.sequences[:size].copy(),
@@ -149,6 +257,7 @@ def first_rows(dataset: Any, count: int) -> Any:
             metadata=dataset.metadata.iloc[:size].reset_index(drop=True),
             target=target,
             sample_weights=weights,
+            fitting_target=fitting_target,
         )
     if isinstance(dataset, TrajectoryDataset):
         target = (
@@ -169,5 +278,10 @@ def first_rows(dataset: Any, count: int) -> Any:
             metadata=dataset.metadata.iloc[:size].reset_index(drop=True),
             target=target,
             sample_weights=weights,
+        )
+    if isinstance(dataset, HeterogeneousDataset):
+        return HeterogeneousDataset(
+            first_rows(dataset.tabular, size),
+            first_rows(dataset.sequence, size),
         )
     raise Phase3Error(f"Unsupported dataset type {type(dataset).__name__}")

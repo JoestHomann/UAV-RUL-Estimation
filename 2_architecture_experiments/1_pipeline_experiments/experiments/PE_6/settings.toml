@@ -1,0 +1,263 @@
+# USER-EDITABLE SETTINGS FOR PE_6.
+# This experiment isolates training-endpoint density, then causal lookback.
+include = ["../../_internal/shared_settings.toml"]
+
+[pipeline]
+experiment = "PE_6"
+run = "run_1"
+
+[execution]
+max_workers = 2
+
+[run_definitions.PE_6]
+title = "Dense temporal sample construction"
+description = "Compare sparse and dense sequence supervision, propagate the development winner, and compare causal lookbacks without opening locked data."
+
+[[run_definitions.PE_6.steps]]
+name = "temporal_sampling_workflow"
+script = "2_architecture_experiments/1_pipeline_experiments/run_temporal_sampling_workflow.py"
+arguments = ["--workflow", "PE_6"]
+script_chain = "temporal_sampling_workflow"
+status_artifact = "lookback_comparison/winner_manifest.json"
+
+[script_chains.temporal_sampling_workflow]
+scripts = [
+    "1_dataset_construction/run_all.py",
+    "2_architecture_experiments/2_model_architecture_study/3_sequence_data_adapter/build_sequence_data_adapter.py",
+    "2_architecture_experiments/2_model_architecture_study/5_inner_model_selection/run_inner_model_selection.py",
+    "2_architecture_experiments/1_pipeline_experiments/report_temporal_sampling.py",
+]
+
+[profiles.temporal_dense]
+feature_profile = "extended"
+scenario_profile = "early_and_middle"
+feature_sets = ["screened_drift_pruned"]
+prefix_variants = ["current20", "dense_stride_1", "dense_stride_2"]
+
+[prefix_variants.dense_stride_1]
+strategy = "dense_all"
+minimum_cutoff = 1
+seed = 20260814
+
+[prefix_variants.dense_stride_2]
+strategy = "dense_stride"
+stride = 2
+minimum_cutoff = 1
+seed = 20260814
+
+[temporal_sampling_workflows.PE_6]
+family = "multiscale_cnn"
+sampling_control = "PE6_sparse_l30"
+sampling_cells = ["PE6_sparse_l30", "PE6_dense2_l30", "PE6_dense1_l30"]
+lookback_cells = ["PE6_w20", "PE6_w30", "PE6_w50"]
+
+[experiments.PE6_sparse_l30]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_sparse"
+phase_1_mode = "rebuild"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 60
+phase_2_settings_version = 60
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [30]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE6_sparse_l30.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[experiments.PE6_sparse_l30.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+[experiments.PE6_dense2_l30]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_dense2"
+phase_1_mode = "rebuild"
+prefix_variant = "dense_stride_2"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 61
+phase_2_settings_version = 61
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [30]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE6_dense2_l30.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[experiments.PE6_dense2_l30.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+[experiments.PE6_dense1_l30]
+enabled = true
+from_stage = "phase1"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_dense1"
+phase_1_mode = "rebuild"
+prefix_variant = "dense_stride_1"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 62
+phase_2_settings_version = 62
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [30]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE6_dense1_l30.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[experiments.PE6_dense1_l30.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+# The workflow replaces the placeholder Phase 1 source below with the sampling
+# winner before these cells are dispatched.
+
+[experiments.PE6_w20]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_DYNAMIC"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 63
+phase_2_settings_version = 63
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [20]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE6_w30]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_DYNAMIC"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 64
+phase_2_settings_version = 64
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [30]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+[experiments.PE6_w50]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "temporal_dense"
+phase_1_run_name = "PE6_DYNAMIC"
+phase_1_mode = "reuse"
+prefix_variant = "current20"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 65
+phase_2_settings_version = 65
+architectures = ["multiscale_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [50]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "symmetric"
+phase_3_enabled = false
+
+# Inherit the identical fixed optimizer/model contract for every lookback cell.
+[experiments.PE6_w20.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+[experiments.PE6_w20.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+[experiments.PE6_w30.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+[experiments.PE6_w30.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+[experiments.PE6_w50.neural_training]
+batch_size = 128
+maximum_epochs = 250
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+[experiments.PE6_w50.fixed_hyperparameters.multiscale_cnn]
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
