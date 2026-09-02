@@ -23,12 +23,8 @@ for path in (STUDY_DIR / "2_tabular_data_adapter", STUDY_DIR / "4_model_adapters
         sys.path.insert(0, str(path))
 
 from model_registry import ModelAdapterFactory  # noqa: E402
+from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter, TabularDataset  # noqa: E402
-
-
-class _NullMonitor:
-    def log_training_step(self, **_: object) -> bool:
-        return False
 
 
 def main() -> None:
@@ -86,7 +82,7 @@ def main() -> None:
                         family,
                         hyperparameters,
                         seed=int(configuration["model_seed"]),
-                        training_monitor=_NullMonitor(),
+                        training_monitor=NoOpTrainingMonitor(),
                     )
                     model.fit(training, split.validation)
                     predicted = model.predict(split.validation)

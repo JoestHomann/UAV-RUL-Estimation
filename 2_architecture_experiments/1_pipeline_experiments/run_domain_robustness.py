@@ -22,12 +22,8 @@ STUDY_DIR = SCRIPT_DIR.parent / "2_model_architecture_study"
 for path in (STUDY_DIR / "2_tabular_data_adapter", STUDY_DIR / "4_model_adapters"):
     sys.path.insert(0, str(path))
 from model_registry import ModelAdapterFactory  # noqa: E402
+from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter, TabularDataset  # noqa: E402
-
-
-class _NullMonitor:
-    def log_training_step(self, **_: object) -> bool:
-        return False
 
 
 def _subset(dataset: TabularDataset, names: list[str]) -> TabularDataset:
@@ -68,7 +64,7 @@ def main() -> None:
                         raise ValueError(f"PE_9 {cell} removed every feature")
                     training = _subset(split.training, names)
                     validation = _subset(split.validation, names)
-                    model = factory.create(family, json.loads(selected_row["hyperparameters_json"]), seed=int(selected_row["model_seed"]), training_monitor=_NullMonitor())
+                    model = factory.create(family, json.loads(selected_row["hyperparameters_json"]), seed=int(selected_row["model_seed"]), training_monitor=NoOpTrainingMonitor())
                     model.fit(training, validation)
                     predicted = model.predict(validation)
                     selection_records.append({"cell": cell, "model_family": family, "outer_fold": int(outer_fold), "inner_fold": int(inner_fold), "feature_count": len(names), "removed_features": json.dumps(sorted(set(base_names) - set(names)))})

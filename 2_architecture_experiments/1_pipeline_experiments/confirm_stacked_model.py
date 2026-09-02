@@ -18,12 +18,8 @@ STUDY_DIR = SCRIPT_DIR.parent / "2_model_architecture_study"
 for path in (STUDY_DIR / "3_sequence_data_adapter", STUDY_DIR / "4_model_adapters"):
     sys.path.insert(0, str(path))
 from model_registry import ModelAdapterFactory  # noqa: E402
+from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
 from sequence_data_adapter import SequenceDataAdapter  # noqa: E402
-
-
-class _NullMonitor:
-    def log_training_step(self, **_: object) -> bool:
-        return False
 
 
 class StackConfirmationError(ValueError):
@@ -78,7 +74,7 @@ def main() -> None:
                 temporal["hyperparameters"],
                 seed=seed,
                 training_iterations=int(temporal["training_iterations"]),
-                training_monitor=_NullMonitor(),
+                training_monitor=NoOpTrainingMonitor(),
             )
             model.fit(split.training, split.validation)
             temporal_prediction = model.predict(split.validation)
