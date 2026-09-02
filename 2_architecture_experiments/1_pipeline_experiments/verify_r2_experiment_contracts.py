@@ -19,16 +19,25 @@ PHASE_3_SETTINGS_DIR = (
     / "1_winning_architecture_selection"
 )
 PHASE_1_DIR = REPOSITORY_ROOT / "1_dataset_construction"
+ARCHITECTURE_SETTINGS_DIR = (
+    REPOSITORY_ROOT
+    / "2_architecture_experiments"
+    / "2_model_architecture_study"
+    / "1_architecture_study_settings"
+)
 if str(PHASE_3_SETTINGS_DIR) not in sys.path:
     sys.path.insert(0, str(PHASE_3_SETTINGS_DIR))
 if str(PHASE_1_DIR) not in sys.path:
     sys.path.insert(0, str(PHASE_1_DIR))
+if str(ARCHITECTURE_SETTINGS_DIR) not in sys.path:
+    sys.path.insert(0, str(ARCHITECTURE_SETTINGS_DIR))
 
 from align_oof_predictions import OOFAlignmentError, align_sources  # noqa: E402
 from degradation_onset import build_personalized_targets  # noqa: E402
 from experiment_config import read_experiment_config  # noqa: E402
 from phase_1_config import load_phase_one_profile  # noqa: E402
 from stack_oof_predictions import evaluate_stacks  # noqa: E402
+from verify_architecture_study_settings import FixedParameter  # noqa: E402
 from verify_phase_3_settings import Phase3Settings  # noqa: E402
 
 
@@ -81,6 +90,11 @@ def main() -> None:
             "dense_stride_2",
         }:
             raise RuntimeError("Resolved PE_6 prefix variants are incomplete")
+        fixed_kernels = FixedParameter.model_validate(
+            {"kind": "fixed", "value": [3, 7, 15]}
+        )
+        if fixed_kernels.value != [3, 7, 15]:
+            raise RuntimeError("Fixed neural integer sequence was not preserved")
 
         tree = _oof_table(2.0)
         temporal = _oof_table(-1.0)

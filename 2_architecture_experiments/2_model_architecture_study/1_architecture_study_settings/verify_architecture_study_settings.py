@@ -234,6 +234,7 @@ class StrictModel(BaseModel):
 
 
 ScalarValue: TypeAlias = str | int | float | bool
+FixedValue: TypeAlias = ScalarValue | list[PositiveInt]
 
 
 class FixedParameter(StrictModel):
@@ -244,7 +245,16 @@ class FixedParameter(StrictModel):
     """
 
     kind: Literal["fixed"]
-    value: ScalarValue
+    value: FixedValue
+
+    @field_validator("value")
+    @classmethod
+    def sequence_must_not_be_empty(cls, value: FixedValue) -> FixedValue:
+        """Require fixed neural layouts to contain at least one width/kernel."""
+
+        if isinstance(value, list) and not value:
+            raise ValueError("fixed integer sequences must not be empty")
+        return value
 
 
 class CategoricalParameter(StrictModel):
