@@ -2,7 +2,7 @@
 # PE_6 supplies the frozen prefix density and lookback automatically.
 
 run_number = 7
-settings_version = 7
+settings_version = 8
 candidate_budget = 10
 search_seed = 13
 confirmation_seeds = [13, 37, 73]

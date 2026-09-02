@@ -86,6 +86,10 @@ def _paths_for_run(run_root: Path) -> dict[str, Path]:
 
 def _materialize(settings: dict[str, Any], run_root: Path) -> tuple[dict[str, Path], dict[str, Any]]:
     config, experiment = _winner_experiment(settings)
+    # PE_6 fixes the multiscale CNN while isolating sampling density/lookback.
+    # Run 7 is an architecture search, so all families must recover their
+    # declared search spaces rather than inheriting that sampling-only freeze.
+    experiment.pop("fixed_hyperparameters", None)
     experiment.update(
         {
             "architectures": list(settings["families"]),
@@ -104,6 +108,19 @@ def _materialize(settings: dict[str, Any], run_root: Path) -> tuple[dict[str, Pa
     config["execution"] = {"max_workers": int(settings["max_workers"])}
     interface_path, interface = _load_interface(experiment)
     resolved = _phase2_settings(config, experiment, interface, interface_path)
+    fixed_families = [
+        family
+        for family in settings["families"]
+        if not any(
+            definition.get("kind") != "fixed"
+            for definition in resolved["architectures"][family]["search"].values()
+        )
+    ]
+    if fixed_families:
+        raise TemporalArchitectureError(
+            "Run 7 families unexpectedly have no tunable hyperparameters: "
+            + ", ".join(fixed_families)
+        )
     paths = _paths_for_run(run_root)
     paths["settings"].parent.mkdir(parents=True, exist_ok=True)
     paths["settings"].write_text(
@@ -117,6 +134,11 @@ def main() -> None:
     parser.add_argument("--settings", type=Path, default=STUDY_DIR / "temporal_run_7_settings.toml")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--status", action="store_true")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an incompatible or interrupted Run 7 selection.",
+    )
     args = parser.parse_args()
     settings = _load_settings(args.settings.resolve())
     run_root = STUDY_DIR / "runs" / f"run_{int(settings['run_number'])}"
@@ -139,7 +161,10 @@ def main() -> None:
     _run([sys.executable, str(shared["sequence_adapter_builder"]), "--specification", str(paths["specification"]), "--output-dir", str(paths["sequence"].parent)], "Run 7 Step 3 sequence adapter")
     _run([sys.executable, str(shared["trajectory_adapter_builder"]), "--specification", str(paths["specification"]), "--sequence-manifest", str(paths["sequence"]), "--sequence-report", str(paths["sequence"].parent / "copy_verification.json"), "--output-dir", str(paths["trajectory"].parent)], "Run 7 Step 3b trajectory adapter")
     _run([sys.executable, str(shared["model_registry_builder"]), "--specification", str(paths["specification"]), "--output-dir", str(paths["registry"].parent)], "Run 7 Step 4 model registry")
-    _run([sys.executable, str(shared["phase_2_orchestrator"]), "--specification", str(paths["specification"]), "--from-step", "5", "--through-step", "5", "--tabular-manifest", str(paths["tabular"]), "--sequence-manifest", str(paths["sequence"]), "--trajectory-manifest", str(paths["trajectory"]), "--model-registry", str(paths["registry"]), "--run-root", str(run_root), "--max-workers", str(settings["max_workers"])], "Run 7 development selection")
+    selection_command = [sys.executable, str(shared["phase_2_orchestrator"]), "--specification", str(paths["specification"]), "--from-step", "5", "--through-step", "5", "--tabular-manifest", str(paths["tabular"]), "--sequence-manifest", str(paths["sequence"]), "--trajectory-manifest", str(paths["trajectory"]), "--model-registry", str(paths["registry"]), "--run-root", str(run_root), "--max-workers", str(settings["max_workers"])]
+    if args.force:
+        selection_command.append("--force")
+    _run(selection_command, "Run 7 development selection")
     _run([sys.executable, str(STUDY_DIR / "7_architecture_comparison" / "report_temporal_run.py"), "--settings", str(args.settings.resolve()), "--run-root", str(run_root)], "Run 7 temporal report")
     _run([sys.executable, str(STUDY_DIR / "7_architecture_comparison" / "confirm_temporal_winner.py"), "--settings", str(args.settings.resolve()), "--run-root", str(run_root)], "Run 7 seed confirmation")
 
