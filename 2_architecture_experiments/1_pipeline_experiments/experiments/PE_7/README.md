@@ -2,11 +2,10 @@
 
 ## Status: blocked
 
-Do not run PE_7. Temporal architecture Run 7 failed its development promotion
-gate: after 19/20 studies, even an impossible zero-RMSE result for the remaining
-LSTM fold could not bring its mean below the required 10.7. The run was stopped
-for mathematical futility, not because of a software failure, and no eligible
-temporal winner exists to stack. See
+Do not run PE_7. Temporal architecture Run 7 completed all 20 studies but
+failed its development promotion gate. The best family, LSTM, reached mean OOF
+R2 0.6531 and RMSE 19.57 against required values of at least 0.89 and at most
+10.7. No eligible temporal winner exists to stack. See
 `2_architecture_experiments/2_model_architecture_study/7_architecture_comparison/run_7_conclusion.md`.
 
 The workflow is retained for review and possible reuse by a future qualifying

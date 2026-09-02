@@ -498,7 +498,7 @@ pending work are distinguished below; their locked-data gates remain closed.
 | Experiment | What changes | Why | Result |
 | --- | --- | --- | --- |
 | `PE_6` | Sparse versus stride-2 versus every-cycle sequence endpoints, followed by lookbacks 20/30/50 | Test whether temporal models need denser causal supervision than the failed stride-5 tabular experiment provided | Dense stride 1 selected; lookback 20 selected |
-| Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | Failed promotion; stopped for mathematical futility at 19/20 studies. Best complete family was GRU at mean inner RMSE 19.56 versus the required 10.7 |
+| Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | Complete; no promotion. LSTM was best at mean OOF R2 0.6531 and RMSE 19.57 versus required values of 0.89 and 10.7 |
 | `PE_7` | Fixed blends, nonnegative ridge, and shallow-XGBoost OOF stacks | Test whether a complementary temporal model corrects tree residuals without meta-model leakage | Blocked; Run 7 produced no eligible temporal component, so stacking was not run |
 | `PE_8` | Global cap 125 versus two fold-fitted per-UAV onset targets | Test whether a universal degradation-onset assumption causes the 51-125 RUL errors | Pending |
 | `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Pending |
