@@ -17,6 +17,7 @@ from models.baselines.cycle_only_baseline import CycleOnlyBaselineAdapter
 from models.baselines.mean_baseline import MeanBaselineAdapter
 from models.ensemble.heterogeneous_oof_stack import HeterogeneousOOFStackAdapter
 from models.neural.gru import GRUAdapter
+from models.neural.hybrid import HybridCNNAdapter, HybridGRUAdapter
 from models.neural.lstm import LSTMAdapter
 from models.neural.mlp import MLPAdapter
 from models.neural.multiscale_cnn import MultiScaleCNNAdapter
@@ -65,6 +66,8 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "multiscale_cnn": MultiScaleCNNAdapter,
     "sensor_graph_tcn": SensorGraphTCNAdapter,
     "gru": GRUAdapter,
+    "hybrid_cnn": HybridCNNAdapter,
+    "hybrid_gru": HybridGRUAdapter,
     "lstm": LSTMAdapter,
     "transformer": TransformerAdapter,
     "rbf_svr": RBFSVRAdapter,
@@ -160,6 +163,31 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "layers",
         "hidden_units",
         "direction",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "hybrid_cnn": {
+        "history_mode",
+        "recent_lookback",
+        "history_bins",
+        "branch_channels",
+        "kernel_sizes",
+        "tabular_hidden_units",
+        "fusion_hidden_units",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "hybrid_gru": {
+        "history_mode",
+        "recent_lookback",
+        "history_bins",
+        "layers",
+        "hidden_units",
+        "direction",
+        "tabular_hidden_units",
+        "fusion_hidden_units",
         "dropout",
         "learning_rate",
         "weight_decay",
@@ -333,6 +361,8 @@ class ModelAdapterFactory:
             "multiscale_cnn",
             "sensor_graph_tcn",
             "gru",
+            "hybrid_cnn",
+            "hybrid_gru",
             "lstm",
             "transformer",
         }:

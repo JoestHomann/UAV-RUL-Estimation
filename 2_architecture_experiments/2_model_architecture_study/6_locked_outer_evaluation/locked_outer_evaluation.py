@@ -36,6 +36,7 @@ for dependency_dir in DEPENDENCY_DIRS:
         sys.path.insert(0, str(dependency_dir))
 
 from base import ModelAdapter, target_values  # noqa: E402
+from heterogeneous_data import align_split  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
 from policies import (  # noqa: E402
     ConditionalQuantileCalibrator,
@@ -654,6 +655,22 @@ class LockedOuterEvaluationRunner:
         if representation == "trajectory":
             return self._trajectory().get_locked_outer_evaluation_split(
                 selected.outer_fold,
+            )
+        if representation == "heterogeneous":
+            if selected.feature_set is None or selected.lookback is None:
+                raise LockedOuterEvaluationError(
+                    f"Heterogeneous family {selected.model_family!r} needs "
+                    "a feature set and lookback"
+                )
+            return align_split(
+                self._tabular().get_locked_outer_evaluation_split(
+                    selected.outer_fold,
+                    selected.feature_set,
+                ),
+                self._sequence().get_locked_outer_evaluation_split(
+                    selected.outer_fold,
+                    selected.lookback,
+                ),
             )
         raise LockedOuterEvaluationError(
             f"Unsupported representation {representation!r}"

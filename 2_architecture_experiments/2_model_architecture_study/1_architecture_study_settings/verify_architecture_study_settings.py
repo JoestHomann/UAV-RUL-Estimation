@@ -134,6 +134,31 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "learning_rate",
         "weight_decay",
     },
+    "hybrid_cnn": {
+        "history_mode",
+        "recent_lookback",
+        "history_bins",
+        "branch_channels",
+        "kernel_sizes",
+        "tabular_hidden_units",
+        "fusion_hidden_units",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
+    "hybrid_gru": {
+        "history_mode",
+        "recent_lookback",
+        "history_bins",
+        "layers",
+        "hidden_units",
+        "direction",
+        "tabular_hidden_units",
+        "fusion_hidden_units",
+        "dropout",
+        "learning_rate",
+        "weight_decay",
+    },
     "lstm": {
         "layers",
         "hidden_units",
@@ -176,6 +201,8 @@ EXPECTED_VARIANTS: dict[str, set[str]] = {
     "multiscale_cnn": {"multiscale_cnn"},
     "sensor_graph_tcn": {"sensor_graph_tcn"},
     "gru": {"gru"},
+    "hybrid_cnn": {"hybrid_cnn"},
+    "hybrid_gru": {"hybrid_gru"},
     "lstm": {"lstm"},
     "transformer": {"transformer_encoder"},
     "rbf_svr": {"rbf_svr"},
@@ -615,14 +642,16 @@ class NeuralTrainingSpecification(StrictModel):
 class ArchitectureSpecification(StrictModel):
     """Describe one executable architecture and its tuning alternatives.
 
-    "feature_sets" and "lookbacks" are mutually exclusive because tabular
-    and sequence adapters expose different input structures.  The optional
+    "feature_sets" and "lookbacks" are both required only by heterogeneous
+    models. The optional
     early-stopping field is currently used by XGBoost; neural early stopping is
     shared through "NeuralTrainingSpecification".
     """
 
     status: Literal["included", "conditional", "optional"]
-    representation: Literal["none", "tabular", "sequence", "trajectory"]
+    representation: Literal[
+        "none", "tabular", "sequence", "trajectory", "heterogeneous"
+    ]
     feature_sets: list[str] = Field(default_factory=list)
     lookbacks: list[PositiveInt] = Field(default_factory=list)
     variants: list[str]
@@ -646,6 +675,11 @@ class ArchitectureSpecification(StrictModel):
         if self.representation == "sequence":
             if not self.lookbacks or self.feature_sets:
                 raise ValueError("sequence models need lookbacks and no feature_sets")
+        if self.representation == "heterogeneous":
+            if not self.lookbacks or not self.feature_sets:
+                raise ValueError(
+                    "heterogeneous models need both feature_sets and lookbacks"
+                )
         if self.representation == "trajectory" and (
             self.feature_sets or self.lookbacks
         ):

@@ -1,0 +1,144 @@
+# USER-EDITABLE SETTINGS FOR PE_10.
+# This experiment changes only the temporal view supplied to one fixed hybrid CNN.
+include = ["../../_internal/shared_settings.toml"]
+
+[pipeline]
+experiment = "PE_10"
+run = "run_1"
+
+[execution]
+max_workers = 2
+
+[run_definitions.PE_10]
+title = "Hybrid temporal representation"
+description = "Compare recent raw telemetry with recent raw plus pooled long-history telemetry using one fixed hybrid CNN and identical engineered features."
+
+[[run_definitions.PE_10.steps]]
+name = "recent_control"
+script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
+arguments = ["--run", "PE10_recent"]
+script_chain = "hybrid_representation_cell"
+status_artifact = "PE10_recent/phase2/5_inner_model_selection/selection_manifest.json"
+
+[[run_definitions.PE_10.steps]]
+name = "multiresolution_treatment"
+script = "2_architecture_experiments/1_pipeline_experiments/run_experiments.py"
+arguments = ["--run", "PE10_multiresolution"]
+script_chain = "hybrid_representation_cell"
+status_artifact = "PE10_multiresolution/phase2/5_inner_model_selection/selection_manifest.json"
+
+[[run_definitions.PE_10.steps]]
+name = "select_representation"
+script = "2_architecture_experiments/1_pipeline_experiments/report_hybrid_representation.py"
+arguments = ["--workflow", "PE_10"]
+script_chain = "hybrid_representation_report"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.hybrid_representation_cell]
+scripts = [
+    "2_architecture_experiments/2_model_architecture_study/2_tabular_data_adapter/build_tabular_data_adapter.py",
+    "2_architecture_experiments/2_model_architecture_study/3_sequence_data_adapter/build_sequence_data_adapter.py",
+    "2_architecture_experiments/2_model_architecture_study/5_inner_model_selection/run_inner_model_selection.py",
+]
+
+[script_chains.hybrid_representation_report]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/report_hybrid_representation.py",
+]
+
+[profiles.hybrid_dense]
+feature_profile = "extended"
+scenario_profile = "early_and_middle"
+feature_sets = ["screened_drift_pruned"]
+prefix_variants = ["dense_stride_1"]
+
+[prefix_variants.dense_stride_1]
+strategy = "dense_all"
+minimum_cutoff = 1
+seed = 20260814
+
+[hybrid_representation_workflows.PE_10]
+control = "PE10_recent"
+treatment = "PE10_multiresolution"
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.01
+
+[experiments.PE10_recent]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "hybrid_dense"
+phase_1_run_name = "PE6_dense1"
+phase_1_mode = "reuse"
+prefix_variant = "dense_stride_1"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 100
+phase_2_settings_version = 100
+architectures = ["hybrid_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [20]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "conditional_q55"
+phase_3_enabled = false
+
+[experiments.PE10_recent.neural_training]
+batch_size = 128
+maximum_epochs = 200
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[experiments.PE10_recent.fixed_hyperparameters.hybrid_cnn]
+history_mode = "recent_only"
+recent_lookback = 20
+history_bins = 20
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+tabular_hidden_units = 128
+fusion_hidden_units = 128
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001
+
+[experiments.PE10_multiresolution]
+enabled = true
+from_stage = "phase2"
+through_stage = "phase2"
+phase_2_scope = "selection_only"
+phase_1_profile = "hybrid_dense"
+phase_1_run_name = "PE6_dense1"
+phase_1_mode = "reuse"
+prefix_variant = "dense_stride_1"
+scenario_profile = "early_and_middle"
+phase_2_run_number = 101
+phase_2_settings_version = 101
+architectures = ["hybrid_cnn"]
+feature_set = "screened_drift_pruned"
+sequence_lookbacks = [100]
+candidate_budget = 1
+search_seed = 13
+retraining_seeds = [13]
+target_profile = "capped_125"
+prediction_profile = "conditional_q55"
+phase_3_enabled = false
+
+[experiments.PE10_multiresolution.neural_training]
+batch_size = 128
+maximum_epochs = 200
+early_stopping_patience = 20
+gradient_clip_global_norm = 1.0
+
+[experiments.PE10_multiresolution.fixed_hyperparameters.hybrid_cnn]
+history_mode = "multiresolution"
+recent_lookback = 20
+history_bins = 20
+branch_channels = 32
+kernel_sizes = [3, 7, 15]
+tabular_hidden_units = 128
+fusion_hidden_units = 128
+dropout = 0.20
+learning_rate = 0.001
+weight_decay = 0.0001

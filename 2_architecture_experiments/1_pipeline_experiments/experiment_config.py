@@ -21,6 +21,7 @@ PIPELINE_OWNED_TABLES = (
     "experiment_workflows",
     "conditional_calibration_workflows",
     "target_submission_workflows",
+    "hybrid_representation_workflows",
 )
 
 

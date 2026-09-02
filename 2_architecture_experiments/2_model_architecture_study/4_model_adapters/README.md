@@ -153,6 +153,7 @@ Every architecture has one implementation module below "models":
 | Neural | "models/neural/multiscale_cnn.py" | "MultiScaleCNNAdapter" |
 | Neural | "models/neural/sensor_graph_tcn.py" | "SensorGraphTCNAdapter" |
 | Neural | "models/neural/gru.py" | "GRUAdapter" |
+| Hybrid neural | "models/neural/hybrid.py" | "HybridCNNAdapter", "HybridGRUAdapter" |
 | Neural | "models/neural/lstm.py" | "LSTMAdapter" |
 | Neural | "models/neural/transformer.py" | "TransformerAdapter" |
 | Promoted ensemble | "models/ensemble/heterogeneous_oof_stack.py" | "HeterogeneousOOFStackAdapter" |
@@ -163,6 +164,8 @@ The neural modules reuse only two support files:
   early-stopping, deterministic-seeding, and inference loop.
 - "models/neural/sequence_base.py" owns validation and preparation shared by
 all sequence-family inputs.
+- "heterogeneous_data.py" verifies exact tabular/sequence endpoint alignment;
+  the hybrid adapters then scale engineered features inside each training fold.
 
 This structure keeps architecture-specific layers and hyperparameter handling
 inside the model's own file while preventing copied training logic from

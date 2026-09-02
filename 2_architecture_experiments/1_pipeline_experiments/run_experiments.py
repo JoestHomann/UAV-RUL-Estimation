@@ -782,7 +782,7 @@ def _phase2_settings(
             )
         settings["representations"]["sequence_lookbacks"] = list(sequence_lookbacks)
         for architecture in settings["architectures"].values():
-            if architecture.get("representation") == "sequence":
+            if architecture.get("representation") in {"sequence", "heterogeneous"}:
                 architecture["lookbacks"] = list(sequence_lookbacks)
 
     sequence_channels = experiment.get("sequence_channels")

@@ -216,3 +216,18 @@ Its only editable settings are in `temporal_run_7_settings.toml`. The launcher
 materializes artifacts under `runs/run_7`, searches TCN, multiscale CNN, GRU,
 and LSTM on development folds, then confirms a gate-passing winner over seeds
 13, 37, and 73. It does not call locked Step 6.
+
+# Hybrid Run 8
+
+After PE_10 freezes the recent-only or multi-resolution temporal view, run:
+
+```powershell
+.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_hybrid_architecture_study.py --list
+.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_hybrid_architecture_study.py
+```
+
+Edit only `hybrid_run_8_settings.toml`. Run 8 searches XGBoost, a hybrid
+multi-scale CNN, and a hybrid GRU on the dense data. Its report also loads the
+frozen PE_3 calibrated-tree OOF predictions and promotes a hybrid only when it
+beats that stronger current-pipeline control on paired RMSE, fold-win, and
+overprediction gates. It never calls locked Step 6.

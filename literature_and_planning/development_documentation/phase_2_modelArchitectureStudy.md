@@ -263,6 +263,7 @@ The following table separates the available families from the models that should
 | Multi-scale CNN | Raw telemetry sequence | Parallel temporal receptive fields | Required |
 | Sensor-graph TCN | Raw telemetry sequence | Cross-sensor graph plus temporal convolution | Required |
 | LSTM | Raw telemetry sequence | Recurrent temporal model | Required |
+| Hybrid CNN / GRU | Raw telemetry sequence plus engineered prefix features | Joint temporal-tabular fusion model | Conditional extension |
 | Small Transformer encoder | Raw telemetry sequence | Attention-based temporal model | Conditional extension |
 | RBF-SVR | Engineered features | Kernel-based nonlinear reference | Optional extension |
 | KNN | Engineered features | Local distance-based reference | Not in the core study |

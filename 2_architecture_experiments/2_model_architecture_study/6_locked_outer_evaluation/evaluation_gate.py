@@ -81,6 +81,8 @@ EARLY_STOPPED_FAMILIES = {
     "multiscale_cnn",
     "sensor_graph_tcn",
     "lstm",
+    "hybrid_cnn",
+    "hybrid_gru",
     "transformer",
 }
 

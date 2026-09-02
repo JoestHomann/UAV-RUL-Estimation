@@ -426,6 +426,8 @@ TARGET_CAPABLE_FAMILIES = {
     "multiscale_cnn",
     "sensor_graph_tcn",
     "gru",
+    "hybrid_cnn",
+    "hybrid_gru",
     "lstm",
     "transformer",
     "rbf_svr",
@@ -446,6 +448,8 @@ LOSS_CAPABILITIES = {
     "multiscale_cnn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "sensor_graph_tcn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "gru": {"symmetric_rmse", "asymmetric_mse", "quantile"},
+    "hybrid_cnn": {"symmetric_rmse", "asymmetric_mse", "quantile"},
+    "hybrid_gru": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "lstm": {"symmetric_rmse", "asymmetric_mse", "quantile"},
     "transformer": {"symmetric_rmse", "asymmetric_mse", "quantile"},
 }

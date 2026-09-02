@@ -55,6 +55,7 @@ from base import (  # noqa: E402
     ModelAdapterError,
     target_values,
 )
+from heterogeneous_data import align_split  # noqa: E402
 from model_registry import (  # noqa: E402
     ModelAdapterFactory,
     load_experiment_specification,
@@ -91,6 +92,8 @@ EARLY_STOPPED_FAMILIES = {
     "multiscale_cnn",
     "sensor_graph_tcn",
     "lstm",
+    "hybrid_cnn",
+    "hybrid_gru",
     "transformer",
 }
 
@@ -369,6 +372,32 @@ class InnerSplitRepository:
                     inner_fold,
                 ),
             )
+        elif representation == "heterogeneous":
+            if candidate.feature_set is None or candidate.lookback is None:
+                raise InnerModelSelectionError(
+                    f"Heterogeneous family {family!r} needs a feature set and lookback"
+                )
+            tabular_split = self._from_cache(
+                self._tabular_cache,
+                (outer_fold, inner_fold, candidate.feature_set),
+                maximum_entries=16,
+                loader=lambda: self._tabular().get_inner_selection_split(
+                    outer_fold,
+                    inner_fold,
+                    candidate.feature_set,
+                ),
+            )
+            sequence_split = self._from_cache(
+                self._sequence_cache,
+                (outer_fold, inner_fold, candidate.lookback),
+                maximum_entries=4,
+                loader=lambda: self._sequence().get_inner_selection_split(
+                    outer_fold,
+                    inner_fold,
+                    candidate.lookback,
+                ),
+            )
+            split = align_split(tabular_split, sequence_split)
         else:
             raise InnerModelSelectionError(
                 f"Family {family!r} has unsupported representation {representation!r}"
@@ -384,7 +413,7 @@ class InnerSplitRepository:
     ) -> tuple[int, ...]:
         """Read fold labels from the adapter that owns the requested data."""
 
-        if representation == "sequence":
+        if representation in {"sequence", "heterogeneous"}:
             return self._sequence().inner_fold_labels(outer_fold)
         if representation == "trajectory":
             return self._trajectory().inner_fold_labels(outer_fold)

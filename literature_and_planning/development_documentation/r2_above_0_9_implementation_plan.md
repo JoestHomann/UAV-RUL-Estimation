@@ -682,3 +682,30 @@ The program is complete when either:
 Failure to reach `R2 > 0.9` is not itself an implementation failure. Opening
 locked data repeatedly, selecting from public leaderboard feedback, or using
 external NASA test labels would be protocol failures.
+
+## Hybrid Representation Extension
+
+The standalone temporal screen exposed a representation bottleneck: recent raw
+windows do not contain the full-prefix summaries available to the tree models.
+Two development-only stages therefore extend the program without reopening
+locked data:
+
+1. `PE_10` compares one fixed hybrid CNN using the latest 20 raw cycles against
+   the same network using 20 pooled older-history bins followed by the latest
+   20 raw cycles. Both variants also receive `screened_drift_pruned` engineered
+   features. The treatment advances only with at least four fold wins and at
+   least 1% mean RMSE improvement; otherwise the recent-only control is frozen.
+2. Architecture Run 8 reads the PE_10 winner and compares XGBoost, hybrid CNN,
+   and hybrid GRU. Promotion is paired against the frozen PE_3 calibrated-tree
+   OOF control, rather than only the dense-data XGBoost diagnostic. A hybrid
+   advances only with at least four fold wins, at least 2% paired RMSE
+   improvement, and no material RMS-overprediction regression.
+
+Entry points and editable settings are:
+
+```text
+2_architecture_experiments/1_pipeline_experiments/experiments/PE_10/run.py
+2_architecture_experiments/1_pipeline_experiments/experiments/PE_10/settings.toml
+2_architecture_experiments/2_model_architecture_study/run_hybrid_architecture_study.py
+2_architecture_experiments/2_model_architecture_study/hybrid_run_8_settings.toml
+```

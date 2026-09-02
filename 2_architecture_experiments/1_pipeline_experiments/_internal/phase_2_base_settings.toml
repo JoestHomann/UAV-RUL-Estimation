@@ -38,6 +38,8 @@ architectures_to_run = [    # Options: any declared architecture name
     "sensor_graph_tcn",
     "gru",
     "lstm",
+    "hybrid_cnn",
+    "hybrid_gru",
 ]
 # Held back on a prerequisite, not on results: promote the transformer once TCN
 # and LSTM prove out, since 100 UAVs make attention an overfitting risk.
@@ -63,6 +65,8 @@ multiscale_cnn = true
 sensor_graph_tcn = true
 gru = false
 lstm = false
+hybrid_cnn = false
+hybrid_gru = false
 transformer = false
 rbf_svr = false
 trajectory_dtw_knn = true
@@ -822,6 +826,93 @@ value = 8
 [architectures.trajectory_dtw_knn.search.distance_power]
 kind = "fixed"
 value = 1.0
+
+# Joint models fuse a causal telemetry encoder with the selected engineered
+# prefix features at exactly aligned prediction endpoints.
+[architectures.hybrid_cnn]
+status = "included"
+representation = "heterogeneous"
+feature_sets = ["screened_drift_pruned"]
+lookbacks = [50, 100]
+variants = ["hybrid_cnn"]
+
+[architectures.hybrid_cnn.search.history_mode]
+kind = "categorical"
+values = ["recent_only", "multiresolution"]
+[architectures.hybrid_cnn.search.recent_lookback]
+kind = "fixed"
+value = 20
+[architectures.hybrid_cnn.search.history_bins]
+kind = "categorical"
+values = [10, 20]
+[architectures.hybrid_cnn.search.branch_channels]
+kind = "categorical"
+values = [16, 32, 64]
+[architectures.hybrid_cnn.search.kernel_sizes]
+kind = "categorical_integer_sequences"
+values = [[3, 5, 9], [3, 7, 15]]
+[architectures.hybrid_cnn.search.tabular_hidden_units]
+kind = "categorical"
+values = [64, 128]
+[architectures.hybrid_cnn.search.fusion_hidden_units]
+kind = "categorical"
+values = [64, 128]
+[architectures.hybrid_cnn.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.4
+[architectures.hybrid_cnn.search.learning_rate]
+kind = "log_uniform"
+low = 0.0001
+high = 0.003
+[architectures.hybrid_cnn.search.weight_decay]
+kind = "log_uniform"
+low = 0.000001
+high = 0.001
+
+[architectures.hybrid_gru]
+status = "included"
+representation = "heterogeneous"
+feature_sets = ["screened_drift_pruned"]
+lookbacks = [50, 100]
+variants = ["hybrid_gru"]
+
+[architectures.hybrid_gru.search.history_mode]
+kind = "categorical"
+values = ["recent_only", "multiresolution"]
+[architectures.hybrid_gru.search.recent_lookback]
+kind = "fixed"
+value = 20
+[architectures.hybrid_gru.search.history_bins]
+kind = "categorical"
+values = [10, 20]
+[architectures.hybrid_gru.search.layers]
+kind = "categorical"
+values = [1, 2]
+[architectures.hybrid_gru.search.hidden_units]
+kind = "categorical"
+values = [32, 64, 96]
+[architectures.hybrid_gru.search.direction]
+kind = "fixed"
+value = "unidirectional"
+[architectures.hybrid_gru.search.tabular_hidden_units]
+kind = "categorical"
+values = [64, 128]
+[architectures.hybrid_gru.search.fusion_hidden_units]
+kind = "categorical"
+values = [64, 128]
+[architectures.hybrid_gru.search.dropout]
+kind = "uniform"
+low = 0.1
+high = 0.4
+[architectures.hybrid_gru.search.learning_rate]
+kind = "log_uniform"
+low = 0.0001
+high = 0.003
+[architectures.hybrid_gru.search.weight_decay]
+kind = "log_uniform"
+low = 0.000001
+high = 0.001
 
 # Phase 1 inputs =============================================================
 # Phase 2 consumes the folds, prefix samples, features, preprocessing and
