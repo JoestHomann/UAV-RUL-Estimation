@@ -1,4 +1,7 @@
 # USER-EDITABLE SETTINGS FOR PE_7.
+# STATUS: BLOCKED. Architecture Run 7 did not produce an eligible temporal
+# winner, so this workflow's required temporal_winner_manifest does not exist.
+# Retain these settings for review or reuse with a future qualified component.
 
 [pipeline]
 experiment = "PE_7"

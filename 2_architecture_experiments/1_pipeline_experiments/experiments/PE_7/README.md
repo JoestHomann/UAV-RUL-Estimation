@@ -1,5 +1,17 @@
 # PE_7: Leakage-Free OOF Stacking
 
+## Status: blocked
+
+Do not run PE_7. Temporal architecture Run 7 failed its development promotion
+gate: after 19/20 studies, even an impossible zero-RMSE result for the remaining
+LSTM fold could not bring its mean below the required 10.7. The run was stopped
+for mathematical futility, not because of a software failure, and no eligible
+temporal winner exists to stack. See
+`2_architecture_experiments/2_model_architecture_study/7_architecture_comparison/run_7_conclusion.md`.
+
+The workflow is retained for review and possible reuse by a future qualifying
+temporal or hybrid model. Its original execution contract follows.
+
 Prerequisites are a completed PE_6 and temporal architecture Run 7. Review the
 exact chain with `run.py --list`, then run from the repository root:
 

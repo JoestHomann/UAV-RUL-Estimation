@@ -687,6 +687,11 @@ external NASA test labels would be protocol failures.
 
 The standalone temporal screen exposed a representation bottleneck: recent raw
 windows do not contain the full-prefix summaries available to the tree models.
+Run 7 was stopped for mathematical futility after 19/20 studies: GRU completed
+at mean inner RMSE 19.56, while an impossible zero-RMSE final LSTM fold would
+still leave LSTM at 15.41, both above the 10.7 promotion threshold. No temporal
+winner was frozen, so PE_7 is blocked and was not executed. This is a failed
+development hypothesis rather than a software failure.
 Two development-only stages therefore extend the program without reopening
 locked data:
 

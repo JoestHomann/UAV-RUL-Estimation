@@ -498,16 +498,17 @@ pending work are distinguished below; their locked-data gates remain closed.
 | Experiment | What changes | Why | Result |
 | --- | --- | --- | --- |
 | `PE_6` | Sparse versus stride-2 versus every-cycle sequence endpoints, followed by lookbacks 20/30/50 | Test whether temporal models need denser causal supervision than the failed stride-5 tabular experiment provided | Dense stride 1 selected; lookback 20 selected |
-| Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | In progress; provisional models remain below the promotion gate |
-| `PE_7` | Fixed blends, nonnegative ridge, and shallow-XGBoost OOF stacks | Test whether a complementary temporal model corrects tree residuals without meta-model leakage | Pending |
+| Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | Failed promotion; stopped for mathematical futility at 19/20 studies. Best complete family was GRU at mean inner RMSE 19.56 versus the required 10.7 |
+| `PE_7` | Fixed blends, nonnegative ridge, and shallow-XGBoost OOF stacks | Test whether a complementary temporal model corrects tree residuals without meta-model leakage | Blocked; Run 7 produced no eligible temporal component, so stacking was not run |
 | `PE_8` | Global cap 125 versus two fold-fitted per-UAV onset targets | Test whether a universal degradation-onset assumption causes the 51-125 RUL errors | Pending |
 | `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Pending |
 | `PE_10` | Fixed hybrid CNN with recent-only versus pooled long-history plus recent raw telemetry | Determine whether multi-resolution history improves a joint sequence/engineered representation | Pending |
 | Hybrid architecture `run_8` | Dense-data XGBoost, hybrid CNN, and hybrid GRU using the frozen PE_10 representation, promoted against frozen PE_3 tree OOF predictions | Test whether temporal information adds value when the model also receives all 298 engineered full-history features | Pending |
 
 Each experiment has one entry point and one editable TOML under
-`2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/`. PE_7
-cannot start until temporal Run 7 passes its three-seed confirmation. PE_8 and
+`2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/`. PE_7 is
+blocked because temporal Run 7 failed its development gate and did not enter
+three-seed confirmation. PE_8 and
 PE_9 are independent and may run while PE_6 is in progress. Exact gates and
 artifact contracts are documented in `r2_above_0_9_implementation_plan.md`.
 
