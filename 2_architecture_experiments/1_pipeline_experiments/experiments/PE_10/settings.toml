@@ -7,7 +7,9 @@ experiment = "PE_10"
 run = "run_1"
 
 [execution]
-max_workers = 2
+# Multiresolution hybrid fits are GPU-memory intensive. One worker avoids the
+# hard CUDA/driver termination observed with two concurrent folds.
+max_workers = 1
 
 [run_definitions.PE_10]
 title = "Hybrid temporal representation"
