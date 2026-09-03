@@ -16,6 +16,21 @@ from models.neural.neural_base import NeuralInputs, NeuralModelAdapter
 
 
 HISTORY_MODES = {"recent_only", "multiresolution"}
+ROBUST_SCALE_RELATIVE_FLOOR = 1e-8
+
+
+def stabilize_robust_scaler(scaler: RobustScaler) -> RobustScaler:
+    """Treat numerically near-zero IQRs as constant-feature scales."""
+
+    if scaler.center_ is None or scaler.scale_ is None:
+        raise ModelAdapterError("Robust scaler must be fitted before stabilization")
+    center = np.asarray(scaler.center_, dtype=np.float64)
+    scale = np.asarray(scaler.scale_, dtype=np.float64)
+    threshold = ROBUST_SCALE_RELATIVE_FLOOR * np.maximum(1.0, np.abs(center))
+    near_constant = scale < threshold
+    scaler.scale_ = scale.copy()
+    scaler.scale_[near_constant] = 1.0
+    return scaler
 
 
 def build_resolution_view(
@@ -112,8 +127,10 @@ class HybridNeuralAdapter(NeuralModelAdapter):
                 quantile_range=(25.0, 75.0),
                 unit_variance=True,
             )
-            scaled_tabular = self.tabular_scaler.fit_transform(tabular)
-            scaled_side = self.side_scaler.fit_transform(side)
+            stabilize_robust_scaler(self.tabular_scaler.fit(tabular))
+            stabilize_robust_scaler(self.side_scaler.fit(side))
+            scaled_tabular = self.tabular_scaler.transform(tabular)
+            scaled_side = self.side_scaler.transform(side)
         else:
             if feature_names != self.feature_names:
                 raise ModelAdapterError("Hybrid tabular feature order differs")

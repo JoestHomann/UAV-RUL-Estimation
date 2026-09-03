@@ -7,6 +7,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import RobustScaler
 import torch
 
 
@@ -24,6 +25,7 @@ from models.neural.hybrid import (  # noqa: E402
     HybridCNNRegressor,
     HybridGRURegressor,
     build_resolution_view,
+    stabilize_robust_scaler,
 )
 from sequence_data_adapter import SequenceDataset  # noqa: E402
 from tabular_data_adapter import TabularDataset  # noqa: E402
@@ -83,6 +85,20 @@ def main() -> None:
     assert multi.shape == (2, 6, 4)
     assert multi_mask.shape == (2, 6)
     assert np.all(multi[multi_mask] == 0.0)
+
+    # A nearly constant feature previously retained a tiny nonzero IQR and
+    # expanded an ordinary held-out deviation into a 1e12-scale network input.
+    training_feature = np.array(
+        [[140.59127544376975], [140.59127544376975], [140.5912754437698]]
+    )
+    validation_feature = np.array([[140.67722414279535]])
+    scaler = stabilize_robust_scaler(
+        RobustScaler(quantile_range=(25.0, 75.0), unit_variance=True).fit(
+            training_feature
+        )
+    )
+    transformed = scaler.transform(validation_feature)
+    assert float(np.abs(transformed).max()) < 1.0
 
     tensors = (
         torch.as_tensor(multi),
