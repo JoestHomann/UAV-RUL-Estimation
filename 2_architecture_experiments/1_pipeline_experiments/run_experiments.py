@@ -1063,7 +1063,13 @@ def _phase2_paths(
     }
 
 
-def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -> None:
+def _run_phase2(
+    name: str,
+    config: dict[str, Any],
+    experiment: dict[str, Any],
+    *,
+    force: bool,
+) -> None:
     paths = _paths(config)
     interface_path, interface = _load_interface(experiment)
     phase2 = _phase2_paths(name, experiment)
@@ -1112,27 +1118,30 @@ def _run_phase2(name: str, config: dict[str, Any], experiment: dict[str, Any]) -
     step6 = run_root / "6_locked_outer_evaluation"
     step7 = run_root / "7_architecture_comparison"
     through_step = "5" if scope == "selection_only" else "6"
+    phase_2_command = [
+        sys.executable,
+        str(paths["phase_2_orchestrator"]),
+        "--specification",
+        str(phase2["specification"]),
+        "--from-step",
+        "5",
+        "--through-step",
+        through_step,
+        "--tabular-manifest",
+        str(phase2["tabular_manifest"]),
+        "--sequence-manifest",
+        str(phase2["sequence_manifest"]),
+        "--trajectory-manifest",
+        str(phase2["trajectory_manifest"]),
+        "--model-registry",
+        str(phase2["registry"]),
+        "--run-root",
+        str(run_root),
+    ]
+    if force:
+        phase_2_command.append("--force")
     _run_command(
-        [
-            sys.executable,
-            str(paths["phase_2_orchestrator"]),
-            "--specification",
-            str(phase2["specification"]),
-            "--from-step",
-            "5",
-            "--through-step",
-            through_step,
-            "--tabular-manifest",
-            str(phase2["tabular_manifest"]),
-            "--sequence-manifest",
-            str(phase2["sequence_manifest"]),
-            "--trajectory-manifest",
-            str(phase2["trajectory_manifest"]),
-            "--model-registry",
-            str(phase2["registry"]),
-            "--run-root",
-            str(run_root),
-        ],
+        phase_2_command,
         label=(
             f"{name}: Phase 2 Step 5 development selection"
             if scope == "selection_only"
@@ -1291,7 +1300,7 @@ def run_experiment(
             if stage == "phase1":
                 _run_phase1(name, config, experiment)
             elif stage == "phase2":
-                _run_phase2(name, config, experiment)
+                _run_phase2(name, config, experiment, force=force)
             else:
                 _run_phase3(name, config, experiment, force)
         except KeyboardInterrupt:
