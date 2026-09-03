@@ -116,12 +116,18 @@ def _verify_settings_and_selection() -> tuple[int, str]:
     )
     resolved = load_resolved_phase_3_settings(settings.run_number)
     expected_resolved = settings.model_dump(mode="json", exclude_none=True)
-    if settings.selected_model_family == "calibrated_tree_blend":
+    if settings.selected_model_family in {
+        "calibrated_tree_blend",
+        "residual_corrected_tree_ensemble",
+    }:
         promoted_specification = resolved.get("phase_2_specification")
         _require(
             isinstance(promoted_specification, str)
             and Path(promoted_specification).name
-            == "promoted_phase_2_specification.json",
+            in {
+                "promoted_phase_2_specification.json",
+                "residual_ensemble_phase_2_specification.json",
+            },
             "Promoted ensemble did not resolve its generated Phase 2 specification",
         )
         expected_resolved["phase_2_specification"] = promoted_specification

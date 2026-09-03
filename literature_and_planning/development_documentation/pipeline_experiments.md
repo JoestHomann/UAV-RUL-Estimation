@@ -506,10 +506,10 @@ not reopen locked evaluation.
 | `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Complete; no promotion. Domain AUC was 0.8565, but no pruning treatment passed the accuracy and high-propensity gates |
 | `PE_10` | Fixed hybrid CNN with recent-only versus pooled long-history plus recent raw telemetry | Determine whether multi-resolution history improves a joint sequence/engineered representation | Complete; recent-only retained. Multi-resolution RMSE 20.332 versus 18.336, 0/5 wins, 10.89% worse |
 | Hybrid architecture `run_8` | XGBoost, hybrid CNN, and hybrid GRU using the frozen PE_10 representation, promoted against frozen PE_3 tree OOF predictions | Test whether temporal information adds value when the model also receives all 298 engineered full-history features | Complete; no promotion. Hybrid GRU RMSE 14.618 and hybrid CNN 17.671 versus tree-blend 11.508; neither won a fold |
-| `PE_11` | Three-seed XGBoost/ExtraTrees members, mean/median/trimmed aggregation, nested blend fitting, and shallow residual correction | Test variance reduction and systematic residual learnability without changing data or opening locked scenarios | Implemented; pending execution |
-| Architecture `run_9` | Raw scalar XGBoost, right-censored XGBoost AFT, and discrete failure-horizon XGBoost | Test whether the cap should represent censoring or a survival curve rather than an exact scalar target | Implemented; pending execution |
-| `PE_12` | Propensity-weighted ranking of PE_3, PE_11, and Run 9 OOF predictions | Test whether candidate choice changes in the part of development data most similar to the unlabeled test endpoints | Implemented; pending PE_11 and Run 9 |
-| `PE_13` | Prediction-band and ensemble-uncertainty-dependent conservative subtraction | Reduce near-failure overprediction more selectively than a global scalar or prediction-only quantile curve | Implemented; pending PE_11 |
+| `PE_11` | Three-seed XGBoost/ExtraTrees members, mean/median/trimmed aggregation, nested blend fitting, and shallow residual correction | Test variance reduction and systematic residual learnability without changing data or opening locked scenarios | Promoted. Residual correction won all five folds, improved RMSE by 4.20%, and raised mean development R2 from 0.87955 to 0.88959 |
+| Architecture `run_9` | Raw scalar XGBoost, right-censored XGBoost AFT, and discrete failure-horizon XGBoost | Test whether the cap should represent censoring or a survival curve rather than an exact scalar target | Complete; no promotion. Horizon XGBoost RMSE was 16.22 and AFT RMSE was 24.26 versus 11.51 for the current tree blend |
+| `PE_12` | Propensity-weighted ranking of PE_3, PE_11, and Run 9 OOF predictions | Test whether candidate choice changes in the part of development data most similar to the unlabeled test endpoints | Complete. Test-like weighting selected `PE11::residual_corrected`; no test labels or locked evaluation were used |
+| `PE_13` | Prediction-band and ensemble-uncertainty-dependent conservative subtraction | Reduce near-failure overprediction more selectively than a global scalar or prediction-only quantile curve | Complete; no promotion. Near-failure RMS overprediction improved 11.31%, but RMSE regressed 1.71%, above the 0.5% guard |
 
 Each experiment has one entry point and one editable TOML under
 `2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/`. PE_7 is
@@ -554,6 +554,12 @@ PE_3 blend and at least 1% mean RMSE improvement. Artifacts are checkpointed
 after every member fit, so an interrupted run resumes rather than restarting
 completed fits.
 
+The residual-corrected method passed: it won all five folds, reduced mean RMSE
+from `11.5080` to `11.0243` (`4.20%`), and increased mean development R2 from
+`0.87955` to `0.88959`. Simple six-member means and nonnegative blends did not
+produce this gain, so the improvement is attributed to the cross-fitted
+residual model rather than bagging alone.
+
 ```powershell
 & .\.venv\Scripts\python.exe `
   .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_11\run.py
@@ -574,6 +580,11 @@ stops after Step 5 and its dedicated report. A treatment needs four fold wins
 and 2% lower RMSE than the current tree blend before locked confirmation could
 be considered.
 
+Neither treatment passed. `horizon_xgboost` was the better alternative but
+still produced mean RMSE `16.223` and R2 `0.7619`; `xgboost_aft` produced RMSE
+`24.257` and R2 `0.4680`. Both lost every fold to the `11.508` tree-blend
+control, so capped scalar regression remains the retained target formulation.
+
 ```powershell
 & .\.venv\Scripts\python.exe `
   .\2_architecture_experiments\2_model_architecture_study\run_censored_architecture_study.py
@@ -588,6 +599,12 @@ predictions by weighted RMSE. It also reports ordinary RMSE, highest-propensity
 quintile RMSE, and effective sample size. A weighted winner is ineligible if
 ordinary RMSE regresses by more than 0.5% or effective sample size falls below
 50% of the fold rows.
+
+The weighted ranking retained the PE_11 result as its winner. Its mean
+test-like RMSE was `10.8673`, compared with `11.2319` for the PE_3 blend, while
+ordinary RMSE also remained best. The high-propensity-only slice favored PE_3,
+so this supports PE_11 overall but does not eliminate the known domain-shift
+risk.
 
 Run PE_11 and Run 9 first:
 
@@ -611,6 +628,12 @@ at least 5% while mean RMSE regresses by no more than 0.5%. It is a safety varia
 accuracy-discovery shortcut, and remains separate from the canonical Phase 3
 submission unless it passes that gate.
 
+The cross-fitted policy reduced near-failure RMS overprediction by `11.31%`,
+but increased RMSE by `1.71%` and reduced R2 from `0.88959` to `0.88574`.
+Therefore the control was retained. A fixed strength of `0.25` was a useful
+diagnostic (`0.42%` RMSE regression and `6.86%` near-failure improvement), but
+it was not independently selected and is not promoted from this run.
+
 ```powershell
 & .\.venv\Scripts\python.exe `
   .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_13\run.py
@@ -618,9 +641,16 @@ submission unless it passes that gate.
 
 ### Execution order
 
-1. Run PE_11 and architecture Run 9; they are independent and may run in
-   separate terminals if GPU/CPU contention is acceptable.
-2. Run PE_12 after both upstream OOF tables exist.
-3. Run PE_13 after PE_11.
-4. Compare the development manifests. Do not open locked evaluation unless one
-   candidate passes its declared promotion gate.
+PE_11, Run 9, PE_12, and PE_13 are complete. PE_11 is the only promoted
+accuracy treatment, PE_12 confirms it under test-like weighting, and PE_13's
+safety overlay is rejected. The next execution is Phase 3 Run 7:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\3_final_model_training_and_inference\run_phase_3.py
+```
+
+This fits the residual correction from internally cross-fitted predictions,
+refits all six tree members on the available training side, verifies the final
+submission, and writes the Run 7 report. Its Kaggle score is the next external
+confirmation; no remaining implemented experiment needs to precede it.

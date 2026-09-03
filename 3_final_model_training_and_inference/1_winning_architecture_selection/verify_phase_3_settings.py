@@ -34,6 +34,7 @@ DEFAULT_SETTINGS_PATH = STEP_DIR / "phase_3_settings.toml"
 MAX_SEED = 2**32 - 1
 PROMOTED_ENSEMBLE_FAMILY = "calibrated_tree_blend"
 PROMOTED_STACK_FAMILY = "heterogeneous_oof_stack"
+RESIDUAL_ENSEMBLE_FAMILY = "residual_corrected_tree_ensemble"
 
 
 class SettingsError(Phase3Error):
@@ -78,6 +79,15 @@ class SubmissionPolicySettings(PredictionCalibrationSettings):
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_]*$")
 
 
+class ResidualCorrectedEnsembleSettings(StrictModel):
+    """Freeze the component choices used to deploy the PE_11 winner."""
+
+    experiment_definition: str = Field(min_length=1)
+    extra_trees_configuration_index: int = Field(ge=0, le=4)
+    xgboost_configuration_index: int = Field(ge=0, le=4)
+    internal_folds: int = Field(ge=2, le=10)
+
+
 class Phase3Settings(StrictModel):
     settings_version: int = Field(gt=0)
     run_number: int = Field(gt=0)
@@ -95,6 +105,7 @@ class Phase3Settings(StrictModel):
     prediction_calibration: PredictionCalibrationSettings | None = None
     submission_policies: list[SubmissionPolicySettings] | None = None
     canonical_submission_policy: str | None = None
+    residual_corrected_ensemble: ResidualCorrectedEnsembleSettings | None = None
 
     @model_validator(mode="after")
     def family_name_is_normalized(self) -> "Phase3Settings":
@@ -105,12 +116,21 @@ class Phase3Settings(StrictModel):
         if self.selected_model_family in {
             PROMOTED_ENSEMBLE_FAMILY,
             PROMOTED_STACK_FAMILY,
+            RESIDUAL_ENSEMBLE_FAMILY,
         }:
             if self.promotion_contract is None or self.promotion_manifest is None:
                 raise ValueError(
                     f"{self.selected_model_family} requires promotion_contract "
                     "and promotion_manifest"
                 )
+        if (
+            self.selected_model_family == RESIDUAL_ENSEMBLE_FAMILY
+            and self.residual_corrected_ensemble is None
+        ):
+            raise ValueError(
+                "residual_corrected_tree_ensemble requires "
+                "residual_corrected_ensemble settings"
+            )
         names = [policy.name for policy in (self.submission_policies or [])]
         if len(names) != len(set(names)):
             raise ValueError("submission policy names must be unique")
@@ -215,6 +235,8 @@ def verify_phase_2_reference(settings: Phase3Settings) -> Phase2Verification:
         return _verify_promoted_ensemble_reference(settings, phase_2_root)
     if settings.selected_model_family == PROMOTED_STACK_FAMILY:
         return _verify_promoted_stack_reference(settings, phase_2_root)
+    if settings.selected_model_family == RESIDUAL_ENSEMBLE_FAMILY:
+        return _verify_residual_ensemble_reference(settings, phase_2_root)
 
     manifest_files = phase_2_manifest_paths(
         settings.phase_2_run_number,
@@ -483,6 +505,97 @@ def _verify_promoted_stack_reference(
         manifest_paths={
             "promotion_contract": contract_path,
             "promotion": confirmation_path,
+        },
+    )
+
+
+def _verify_residual_ensemble_reference(
+    settings: Phase3Settings,
+    phase_2_root: Path,
+) -> Phase2Verification:
+    """Require PE_11 promotion and PE_12's independent test-like ranking."""
+
+    del phase_2_root
+    payload = settings.model_dump(mode="json")
+    pe11_path = configured_repository_path(
+        payload,
+        "promotion_contract",
+        Path("winner_manifest.json"),
+    )
+    pe12_path = configured_repository_path(
+        payload,
+        "promotion_manifest",
+        Path("winner_manifest.json"),
+    )
+    pe11 = read_json(pe11_path, "PE_11 winner manifest")
+    pe12 = read_json(pe12_path, "PE_12 winner manifest")
+    if (
+        pe11.get("status") != "promoted"
+        or pe11.get("promoted") is not True
+        or pe11.get("winner") != "residual_corrected"
+        or pe11.get("uses_locked_evaluation") is not False
+        or pe11.get("member_count") != 6
+    ):
+        raise SettingsError("PE_11 does not contain the promoted six-member residual policy")
+    if (
+        pe12.get("status") != "complete"
+        or pe12.get("winner") != "PE11::residual_corrected"
+        or pe12.get("uses_locked_evaluation") is not False
+        or pe12.get("uses_test_labels") is not False
+    ):
+        raise SettingsError("PE_12 did not confirm PE_11 without test labels")
+
+    specification_path = configured_repository_path(
+        payload,
+        "phase_2_specification",
+        PHASE_2_SPECIFICATION_PATH,
+    )
+    specification = read_json(specification_path, "PE_11 source specification")
+    phase_2_settings = specification.get("settings")
+    if not isinstance(phase_2_settings, dict):
+        raise SettingsError("PE_11 source specification has no settings object")
+    if phase_2_settings.get("run_number") != settings.phase_2_run_number:
+        raise SettingsError("PE_11 source specification identifies another run")
+    settings_version = int(phase_2_settings["settings_version"])
+
+    registry_path = configured_repository_path(
+        payload,
+        "phase_2_model_registry",
+        PHASE_2_MODEL_REGISTRY_PATH,
+    )
+    registry = read_json(registry_path, "PE_11 source model registry")
+    families = registry.get("families")
+    if registry.get("settings_version") != settings_version or not isinstance(
+        families, dict
+    ):
+        raise SettingsError("PE_11 source model registry is incompatible")
+    for family in ("extra_trees", "xgboost"):
+        details = families.get(family)
+        if not isinstance(details, dict) or details.get("enabled") is not True:
+            raise SettingsError(f"PE_11 component {family!r} is unavailable")
+
+    ensemble_settings = settings.residual_corrected_ensemble
+    assert ensemble_settings is not None
+    definition_path = configured_repository_path(
+        {"definition": ensemble_settings.experiment_definition},
+        "definition",
+        Path("settings.toml"),
+    )
+    if not definition_path.is_file():
+        raise SettingsError("PE_11 experiment definition is unavailable")
+
+    return Phase2Verification(
+        settings_version=settings_version,
+        run_number=settings.phase_2_run_number,
+        selected_family=RESIDUAL_ENSEMBLE_FAMILY,
+        representation="tabular",
+        phase_2_specification=specification,
+        model_registry=registry,
+        manifests={"pe11_promotion": pe11, "pe12_confirmation": pe12},
+        manifest_paths={
+            "pe11_promotion": pe11_path,
+            "pe12_confirmation": pe12_path,
+            "experiment_definition": definition_path,
         },
     )
 

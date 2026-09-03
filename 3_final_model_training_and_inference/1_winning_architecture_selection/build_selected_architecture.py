@@ -7,6 +7,7 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tomllib
 
 import pandas as pd
 
@@ -34,6 +35,7 @@ from verify_phase_3_settings import (  # noqa: E402
     load_and_verify_settings,
     PROMOTED_ENSEMBLE_FAMILY,
     PROMOTED_STACK_FAMILY,
+    RESIDUAL_ENSEMBLE_FAMILY,
 )
 
 
@@ -180,6 +182,136 @@ def _promoted_stack_specification(
     return phase_2_specification, repository_relative(generated_path)
 
 
+def _residual_ensemble_specification(
+    settings: object,
+    verification: object,
+    artifact_dir: Path,
+) -> tuple[dict[str, object], str]:
+    """Build the frozen, internally cross-fitted PE_11 deployment contract."""
+
+    phase_2_specification = copy.deepcopy(verification.phase_2_specification)
+    phase_2_settings = phase_2_specification["settings"]
+    definition_path = verification.manifest_paths["experiment_definition"]
+    try:
+        with definition_path.open("rb") as stream:
+            definition = tomllib.load(stream)
+        workflow = definition["bagging_residual_workflows"]["PE_11"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+        raise Phase3Error(f"Cannot read the PE_11 experiment definition: {error}") from error
+
+    selected_path = configured_repository_path(
+        {"selected": workflow["selected_configurations"]},
+        "selected",
+        Path("selected_configurations.csv"),
+    )
+    try:
+        selected = pd.read_csv(selected_path)
+    except (OSError, pd.errors.ParserError) as error:
+        raise Phase3Error(f"Cannot read PE_11 component configurations: {error}") from error
+
+    ensemble_settings = settings.residual_corrected_ensemble
+    if ensemble_settings is None:
+        raise Phase3Error("Residual ensemble settings are missing")
+
+    components: dict[str, dict[str, object]] = {}
+    feature_set: str | None = None
+    choices = {
+        "extra_trees": ensemble_settings.extra_trees_configuration_index,
+        "xgboost": ensemble_settings.xgboost_configuration_index,
+    }
+    for family, outer_fold in choices.items():
+        rows = selected.loc[
+            selected["model_family"].astype(str).eq(family)
+            & selected["outer_fold"].astype(int).eq(int(outer_fold))
+        ]
+        if len(rows) != 1:
+            raise Phase3Error(
+                f"PE_11 source has no unique {family} configuration for fold {outer_fold}"
+            )
+        row = rows.iloc[0]
+        try:
+            hyperparameters = json.loads(str(row["hyperparameters_json"]))
+        except (json.JSONDecodeError, TypeError) as error:
+            raise Phase3Error(f"Cannot parse the selected {family} configuration") from error
+        row_feature_set = str(row["feature_set"])
+        if feature_set is None:
+            feature_set = row_feature_set
+        elif row_feature_set != feature_set:
+            raise Phase3Error("PE_11 component feature sets disagree")
+        component: dict[str, object] = {
+            "source_outer_fold": int(outer_fold),
+            "source_configuration_id": str(row["configuration_id"]),
+            "hyperparameters": hyperparameters,
+        }
+        if family == "xgboost":
+            iterations = row.get("outer_retraining_iterations")
+            if pd.isna(iterations) or int(iterations) <= 0:
+                raise Phase3Error("Selected PE_11 XGBoost configuration has no duration")
+            component["training_iterations"] = int(iterations)
+        components[family] = component
+
+    development = (
+        phase_2_specification.get("phase_1_verification", {})
+        .get("artifacts", {})
+        .get("development_features", {})
+    )
+    calibration_path = development.get("path")
+    if not isinstance(calibration_path, str):
+        raise Phase3Error("PE_11 source has no development calibration table")
+    contract = {
+        "contract_version": 1,
+        "method": "residual_corrected",
+        "source_experiment": "PE_11",
+        "member_seeds": [int(value) for value in workflow["seeds"]],
+        "internal_folds": int(ensemble_settings.internal_folds),
+        "xgboost_weight_grid": [
+            float(value) for value in workflow["xgboost_weight_grid"]
+        ],
+        "residual_features": [str(value) for value in workflow["residual_features"]],
+        "residual_model": {
+            "maximum_iterations": int(workflow["residual_maximum_iterations"]),
+            "maximum_leaf_nodes": int(workflow["residual_maximum_leaf_nodes"]),
+            "minimum_samples_leaf": 20,
+            "l2_regularization": float(workflow["residual_l2_regularization"]),
+            "learning_rate": 0.05,
+            "seed": 13,
+        },
+        "calibration_features_path": calibration_path,
+        "components": components,
+        "provenance": {
+            "pe11_winner_manifest": repository_relative(
+                verification.manifest_paths["pe11_promotion"]
+            ),
+            "pe12_winner_manifest": repository_relative(
+                verification.manifest_paths["pe12_confirmation"]
+            ),
+            "experiment_definition": repository_relative(definition_path),
+            "selected_configurations": repository_relative(selected_path),
+        },
+    }
+    contract_path = artifact_dir / "residual_ensemble_contract.json"
+    write_json(contract, contract_path)
+    architecture = {
+        "status": "included",
+        "representation": "tabular",
+        "feature_sets": [feature_set],
+        "lookbacks": [],
+        "variants": ["pe11_residual_corrected"],
+        "early_stopping_patience": None,
+        "search": {
+            "ensemble_contract_path": {
+                "kind": "fixed",
+                "value": repository_relative(contract_path),
+            }
+        },
+    }
+    phase_2_settings["architectures"][RESIDUAL_ENSEMBLE_FAMILY] = architecture
+    phase_2_settings["study"]["enabled"][RESIDUAL_ENSEMBLE_FAMILY] = True
+    generated_path = artifact_dir / "residual_ensemble_phase_2_specification.json"
+    write_json(phase_2_specification, generated_path)
+    return phase_2_specification, repository_relative(generated_path)
+
+
 def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, object]:
     settings, verification = load_and_verify_settings(settings_path)
     run_number = settings.run_number
@@ -196,6 +328,10 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
         phase_2_specification, generated_specification_path = (
             _promoted_stack_specification(verification, artifact_dir)
         )
+    elif settings.selected_model_family == RESIDUAL_ENSEMBLE_FAMILY:
+        phase_2_specification, generated_specification_path = (
+            _residual_ensemble_specification(settings, verification, artifact_dir)
+        )
     phase_2_settings = phase_2_specification["settings"]
     architecture = phase_2_settings["architectures"][settings.selected_model_family]
     selection = {
@@ -210,7 +346,9 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
         "lookbacks": architecture["lookbacks"],
         "primary_metric": "mean_fold_rmse",
         "prediction_minimum": phase_2_settings["evaluation"]["prediction_minimum"],
-        "locked_results_used_for_architecture_selection": True,
+        "locked_results_used_for_architecture_selection": (
+            settings.selected_model_family != RESIDUAL_ENSEMBLE_FAMILY
+        ),
         "locked_results_used_for_configuration_tuning": False,
         "test_data_loaded": False,
         "selection_status": "approved",
@@ -253,7 +391,9 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
         "phase_2_run_number": settings.phase_2_run_number,
         "phase_3_run_number": run_number,
         "status": "complete",
-        "locked_results_used_for_architecture_selection": True,
+        "locked_results_used_for_architecture_selection": (
+            settings.selected_model_family != RESIDUAL_ENSEMBLE_FAMILY
+        ),
         "locked_results_used_for_configuration_tuning": False,
         "test_data_loaded": False,
         "artifacts": {

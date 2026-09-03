@@ -432,6 +432,7 @@ TARGET_CAPABLE_FAMILIES = {
     "transformer",
     "rbf_svr",
     "calibrated_tree_blend",
+    "residual_corrected_tree_ensemble",
     "heterogeneous_oof_stack",
 }
 

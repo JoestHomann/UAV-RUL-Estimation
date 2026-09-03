@@ -61,22 +61,23 @@ The current TOML must exactly match the settings resolved by Step 1. Once Step
 2 has written any output, a settings change requires a new settings version and
 Phase 3 run number.
 
-Run numbers are phase-local. The current default TOML reads the locked-confirmed
-`PE3_final_ensemble` policy and its development-only `PE3_features_drift`
-component source, then writes Phase 3 Run 6 under
-`3_final_model_training_and_inference/runs/run_6/`. The promoted policy keeps
-the 50/50 blend and residual calibrator frozen. Step 2 searches the complete
-`5 ExtraTrees x 5 XGBoost` grid of development-selected component
-configurations, for 25 candidates total. Its repository-relative artifact
-paths make the no-argument entry point sufficient. A future standalone Phase 3
-TOML may omit those optional paths and use the numbered Phase 2 default.
+Run numbers are phase-local. The current default TOML writes Phase 3 Run 7
+under `3_final_model_training_and_inference/runs/run_7/` and deploys the
+development-selected `PE_11::residual_corrected` method confirmed by PE_12's
+test-like ranking. The base component pair is frozen to the configuration
+selected by the preceding Run 6 search. There is consequently one Phase 3
+candidate rather than another search over the same component grid.
 
-Run 6 additionally enables the PE4 `q=0.55` conditional conservative
-calibration. Step 2 evaluates it cross-fold and fits the final correction curve
-only from the selected candidate's complete development OOF residuals. Step 3
-freezes that curve in the training contract, and Steps 5-6 apply and regenerate
-the same subtraction-only transformation. Test labels are never loaded, and
-both the policy parameters and learned curve remain inspectable JSON data.
+For every development fold, the Run 7 adapter partitions only that fold's
+training UAVs into four internal groups. Each internal fit uses all available
+training prefixes from three groups and predicts the established five
+development endpoints for the fourth. Those leakage-safe OOF predictions fit
+the XGBoost/ExtraTrees blend weight and shallow residual model. The six base
+members are then refitted on the complete fold training side. Final training
+repeats the same procedure across all 100 training UAVs before fitting the six
+deployable members. Run 7 applies no additional quantile calibration because
+PE_13 rejected the tested uncertainty-dependent safety policy for excessive
+RMSE regression.
 
 New Phase 3 runs can freeze two named policies from the same selected OOF
 predictions and base model. Add the following to the new run's TOML; do not

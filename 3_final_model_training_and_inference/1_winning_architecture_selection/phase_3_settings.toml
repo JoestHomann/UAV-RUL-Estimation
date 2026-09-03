@@ -1,10 +1,12 @@
-# Increment the version when changing this run after Step 2 has produced output.
+# PE_11 residual-corrected ensemble deployment.
+# Increment the version only when changing this run after Step 2 has produced output.
 settings_version = 1
-run_number = 6
+run_number = 7
 
-# Locked-confirmed PE_3 run_1 policy and its development-only component source.
+# PE_11 won development validation and PE_12's test-like ranking. Its base
+# component data and configurations come from the PE_3 run_1 source study.
 phase_2_run_number = 31
-selected_model_family = "calibrated_tree_blend"
+selected_model_family = "residual_corrected_tree_ensemble"
 
 # Experiment-owned Phase 2 artifacts. Keeping these paths here makes
 # run_phase_3.py directly executable without a separate --settings argument.
@@ -14,17 +16,26 @@ phase_2_model_registry = "2_architecture_experiments/1_pipeline_experiments/expe
 tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
 sequence_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
 trajectory_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/3_trajectory_data_adapter/artifacts/trajectory_dataset_manifest.json"
-promotion_contract = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_final_ensemble/promotion_contract.json"
-promotion_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_final_ensemble/locked_confirmation_manifest.json"
+promotion_contract = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/winner_manifest.json"
+promotion_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_12/runs/run_1/reporting/winner_manifest.json"
+
+[residual_corrected_ensemble]
+experiment_definition = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/settings.toml"
+# These component configurations won the most recent complete Phase 3 search
+# in Run 6. PE_11's seeds, blend grid, residual features, and residual-model
+# settings remain frozen in its own experiment definition.
+extra_trees_configuration_index = 3
+xgboost_configuration_index = 1
+internal_folds = 4
 
 [final_search]
-candidate_budget = 25
+candidate_budget = 1
 search_seed = 13
 model_seed = 13
 
 [prediction_calibration]
-calibration = "conditional_quantile"
+calibration = "none"
 safety_offset = 0.0
-non_overprediction_coverage = 0.55
+non_overprediction_coverage = 0.5
 calibration_prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0]
 calibration_minimum_bin_rows = 10

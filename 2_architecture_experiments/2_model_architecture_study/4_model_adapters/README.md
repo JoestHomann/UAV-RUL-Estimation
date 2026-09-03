@@ -51,6 +51,11 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
 - "HeterogeneousOOFStackAdapter" is a promotion-only adapter that retrains
   frozen tabular and temporal components on their native representations and
   applies a meta-model fitted only from OOF component predictions.
+- "ResidualCorrectedTreeEnsembleAdapter" is the PE_11 promotion adapter. It
+  fits three seeded XGBoost and three seeded ExtraTrees members, chooses their
+  family blend from UAV-disjoint OOF development predictions, fits a shallow
+  residual model on those same OOF rows, and refits all six members on the
+  complete supplied training side before prediction.
 
 The separate `study.enabled` table controls which declared families run.
 Promotion-only adapters are injected into a generated Phase 3 specification

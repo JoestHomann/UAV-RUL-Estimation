@@ -33,6 +33,9 @@ from models.tabular.hist_gradient_boosting import HistGradientBoostingAdapter
 from models.tabular.random_forest import RandomForestAdapter
 from models.tabular.rbf_svr import RBFSVRAdapter
 from models.tabular.regularized_linear import RegularizedLinearAdapter
+from models.tabular.residual_corrected_tree_ensemble import (
+    ResidualCorrectedTreeEnsembleAdapter,
+)
 from models.tabular.xgboost import XGBoostAdapter
 from models.trajectory.trajectory_dtw_knn import TrajectoryDTWKNNAdapter
 from policies import (
@@ -76,6 +79,7 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "rbf_svr": RBFSVRAdapter,
     "trajectory_dtw_knn": TrajectoryDTWKNNAdapter,
     "calibrated_tree_blend": CalibratedTreeBlendAdapter,
+    "residual_corrected_tree_ensemble": ResidualCorrectedTreeEnsembleAdapter,
     "heterogeneous_oof_stack": HeterogeneousOOFStackAdapter,
 }
 
@@ -252,6 +256,7 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "residual_calibrator_path",
         "xgboost_weight",
     },
+    "residual_corrected_tree_ensemble": {"ensemble_contract_path"},
     "heterogeneous_oof_stack": {
         "tree_component",
         "temporal_component",
@@ -374,7 +379,11 @@ class ModelAdapterFactory:
         }
         adapter_class = ADAPTER_CLASSES[family]
         adapter: ModelAdapter
-        if family in {"calibrated_tree_blend", "heterogeneous_oof_stack"}:
+        if family in {
+            "calibrated_tree_blend",
+            "residual_corrected_tree_ensemble",
+            "heterogeneous_oof_stack",
+        }:
             adapter = adapter_class(**common_arguments)
         elif family in {"xgboost", "xgboost_aft", "catboost"}:
             adapter = adapter_class(
