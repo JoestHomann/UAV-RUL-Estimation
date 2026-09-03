@@ -1,0 +1,35 @@
+# USER-EDITABLE SETTINGS FOR PE_13.
+
+[pipeline]
+experiment = "PE_13"
+run = "run_1"
+
+[run_definitions.PE_13]
+title = "Uncertainty-dependent conservative correction"
+description = "Subtract more RUL where independently seeded tree members disagree, with correction strength selected on disjoint inner folds."
+
+[[run_definitions.PE_13.steps]]
+name = "evaluate_uncertainty_safety"
+script = "2_architecture_experiments/1_pipeline_experiments/run_uncertainty_safety.py"
+arguments = ["--workflow", "PE_13"]
+script_chain = "uncertainty_safety"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.uncertainty_safety]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/run_bagged_tree_members.py",
+    "2_architecture_experiments/1_pipeline_experiments/evaluate_bagging_residual.py",
+    "2_architecture_experiments/1_pipeline_experiments/run_uncertainty_safety.py",
+]
+
+[uncertainty_safety_workflows.PE_13]
+source_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+base_method = "auto"
+source_winner_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/winner_manifest.json"
+prediction_bin_edges = [0.0, 25.0, 50.0, 75.0, 125.0, 1000.0]
+severity_multipliers = [2.0, 1.5, 1.0, 0.75, 0.5]
+strength_grid = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+near_failure_rul = 50.0
+near_failure_penalty = 0.25
+maximum_relative_rmse_regression = 0.005
+minimum_relative_rms_overprediction_improvement = 0.05

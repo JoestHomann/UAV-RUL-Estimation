@@ -86,6 +86,7 @@ from policies import (  # noqa: E402
 RUNNER_VERSION = 1
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
+    "xgboost_aft",
     "catboost",
     "mlp",
     "tcn",

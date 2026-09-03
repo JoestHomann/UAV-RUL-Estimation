@@ -44,7 +44,7 @@ architectures_to_run = [    # Options: any declared architecture name
 # and LSTM prove out, since 100 UAVs make attention an overfitting risk.
 conditional_architectures = ["transformer"]    # Options: any declared name
 # Neither required nor gated, added only if a question stays open or time allows.
-optional_architectures = ["rbf_svr", "trajectory_dtw_knn"]    # Options: any declared name
+optional_architectures = ["rbf_svr", "trajectory_dtw_knn", "xgboost_aft", "horizon_xgboost"]    # Options: any declared name
 
 [study.enabled]
 # The single on/off switch per architecture; false drops it from the run and
@@ -69,6 +69,8 @@ hybrid_gru = false
 transformer = false
 rbf_svr = false
 trajectory_dtw_knn = false
+xgboost_aft = false
+horizon_xgboost = false
 # Saving every architecture's results and never declaring a winner are fixed
 # pipeline behaviors with nothing to configure.
 
@@ -182,7 +184,7 @@ sequence_side_features = ["flight_cycle", "log1p_flight_cycle"]    # Options: an
 # Architectures receiving robust median/IQR scaled tabular inputs.
 scaled_tabular_architectures = ["regularized_linear", "mlp", "rbf_svr"]    # Options: any architecture names
 # Architectures receiving unscaled values, since split ordering needs no scaling.
-unscaled_tree_architectures = ["random_forest", "extra_trees", "hist_gradient_boosting", "xgboost", "catboost"]    # Options: any architecture names
+unscaled_tree_architectures = ["random_forest", "extra_trees", "hist_gradient_boosting", "xgboost", "xgboost_aft", "horizon_xgboost", "catboost"]    # Options: any architecture names
 # Every fitted statistic comes only from the current fold's training UAVs;
 # validation UAVs are transformed but never influence a median or IQR.
 
@@ -418,6 +420,112 @@ value = "none"
 [architectures.xgboost.search.signal_compression_strategy]
 kind = "fixed"
 value = "none"
+
+[architectures.xgboost_aft]
+status = "optional"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["xgboost_aft"]
+early_stopping_patience = 35
+
+[architectures.xgboost_aft.search.maximum_trees]
+kind = "fixed"
+value = 1000
+
+[architectures.xgboost_aft.search.learning_rate]
+kind = "log_uniform"
+low = 0.01
+high = 0.15
+
+[architectures.xgboost_aft.search.max_depth]
+kind = "categorical"
+values = [3, 4, 6]
+
+[architectures.xgboost_aft.search.min_child_weight]
+kind = "log_uniform"
+low = 1.0
+high = 10.0
+
+[architectures.xgboost_aft.search.subsample]
+kind = "uniform"
+low = 0.65
+high = 1.0
+
+[architectures.xgboost_aft.search.colsample_bytree]
+kind = "uniform"
+low = 0.5
+high = 1.0
+
+[architectures.xgboost_aft.search.reg_alpha]
+kind = "log_uniform"
+low = 1e-8
+high = 1.0
+
+[architectures.xgboost_aft.search.reg_lambda]
+kind = "log_uniform"
+low = 1e-3
+high = 100.0
+
+[architectures.xgboost_aft.search.aft_loss_distribution]
+kind = "categorical"
+values = ["normal", "logistic"]
+
+[architectures.xgboost_aft.search.aft_loss_distribution_scale]
+kind = "uniform"
+low = 0.5
+high = 2.0
+
+[architectures.xgboost_aft.search.censoring_threshold]
+kind = "fixed"
+value = 125.0
+
+[architectures.horizon_xgboost]
+status = "optional"
+representation = "tabular"
+feature_sets = ["screened_drift_pruned"]
+variants = ["horizon_xgboost"]
+
+[architectures.horizon_xgboost.search.maximum_trees]
+kind = "fixed"
+value = 300
+
+[architectures.horizon_xgboost.search.learning_rate]
+kind = "log_uniform"
+low = 0.02
+high = 0.15
+
+[architectures.horizon_xgboost.search.max_depth]
+kind = "categorical"
+values = [3, 4, 6]
+
+[architectures.horizon_xgboost.search.min_child_weight]
+kind = "log_uniform"
+low = 1.0
+high = 10.0
+
+[architectures.horizon_xgboost.search.subsample]
+kind = "uniform"
+low = 0.65
+high = 1.0
+
+[architectures.horizon_xgboost.search.colsample_bytree]
+kind = "uniform"
+low = 0.5
+high = 1.0
+
+[architectures.horizon_xgboost.search.reg_alpha]
+kind = "log_uniform"
+low = 1e-8
+high = 1.0
+
+[architectures.horizon_xgboost.search.reg_lambda]
+kind = "log_uniform"
+low = 1e-3
+high = 100.0
+
+[architectures.horizon_xgboost.search.horizons]
+kind = "fixed"
+value = "10,20,35,50,70,90,110,125"
 
 # CatBoost provides a second regularized boosting mechanism over the same
 # numerical engineered features. CPU execution is fixed for reproducibility.

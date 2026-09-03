@@ -1,0 +1,17 @@
+# USER-EDITABLE SETTINGS FOR CENSORED/HORIZON ARCHITECTURE RUN 9.
+
+run_number = 9
+settings_version = 1
+candidate_budget = 6
+search_seed = 13
+max_workers = 3
+families = ["xgboost", "xgboost_aft", "horizon_xgboost"]
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.02
+
+[sources]
+pe3_settings = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/settings.toml"
+source_experiment = "PE3_features_drift"
+tree_oof_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_ensemble_calibration/reporting/method_predictions.csv.gz"
+tree_oof_method = "blend_xgb_0.50__calibrated"
+

@@ -231,3 +231,17 @@ multi-scale CNN, and a hybrid GRU on the dense data. Its report also loads the
 frozen PE_3 calibrated-tree OOF predictions and promotes a hybrid only when it
 beats that stronger current-pipeline control on paired RMSE, fold-win, and
 overprediction gates. It never calls locked Step 6.
+
+# Censored-Target Run 9
+
+Run 9 compares ordinary scalar XGBoost with an accelerated-failure-time model
+that right-censors RUL above 125 and a discrete failure-horizon model:
+
+```powershell
+.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_censored_architecture_study.py --list
+.venv\Scripts\python.exe 2_architecture_experiments\2_model_architecture_study\run_censored_architecture_study.py
+```
+
+Edit only `censored_run_9_settings.toml`. The launcher writes to `runs/run_9`,
+uses development folds only, and applies its promotion gate against the frozen
+PE_3 calibrated tree blend. It never calls locked Step 6.

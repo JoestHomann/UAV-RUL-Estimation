@@ -25,6 +25,10 @@ fits it, produces RUL predictions, and preserves the fitted model when asked.
   automatically uses CUDA only when both the installed XGBoost build and the
   active machine support it, and supports inner-fold early stopping or a fixed
   outer-retraining tree count.
+- "XGBoostAFTAdapter" fits accelerated-failure-time trees with the target tail
+  represented as right-censored observations.
+- "HorizonXGBoostAdapter" learns ordered failure probabilities and integrates
+  their survival curve into a capped RUL estimate.
 - "CatBoostAdapter" fits sample-weighted CPU CatBoost trees over the same
   numerical inputs, with inner-fold early stopping and fixed outer-retraining
   tree counts. CPU execution is intentional because CatBoost GPU training is
@@ -83,7 +87,7 @@ their fits is recorded in the Step 5 and Step 6 artifacts, which is where every
 family's finished numbers live.
 
 Every adapter also declares whether its family is stochastic. Random Forest,
-Extra Trees, XGBoost, CatBoost, and the neural adapters use the three
+Extra Trees, scalar/AFT/horizon XGBoost, CatBoost, and the neural adapters use the three
 retraining seeds from the settings; deterministic baselines and linear or
 kernel models need one run.
 
@@ -93,7 +97,7 @@ Preprocessing stays with the model artifact that depends on it:
 
 - Ridge, Elastic Net, MLP, and RBF-SVR fit robust tabular scaling from the
   active training rows only.
-- Random Forest and XGBoost use unchanged numeric feature values.
+- Random Forest and scalar/AFT/horizon XGBoost use unchanged numeric feature values.
 - Extra Trees and CatBoost use unchanged numeric feature values. CatBoost does
   not receive categorical columns because this dataset's engineered inputs are
   numerical.
@@ -115,7 +119,8 @@ weighted mean squared error, AdamW, deterministic seeds, gradient clipping,
 batch size, maximum epoch count, and early-stopping patience from the settings.
 They run on CPU with one data-loading worker for a simple repeatable baseline.
 
-XGBoost, CatBoost, and neural models support two distinct training modes:
+Scalar XGBoost, XGBoost AFT, CatBoost, and neural models support two distinct
+training modes:
 
 - inner-fold candidate fitting uses validation-based early stopping;
 - outer-fold retraining receives a fixed tree or epoch count from the later
@@ -145,6 +150,7 @@ Every architecture has one implementation module below "models":
 | Tabular | "models/tabular/random_forest.py" | "RandomForestAdapter" |
 | Tabular | "models/tabular/extra_trees.py" | "ExtraTreesAdapter" |
 | Tabular | "models/tabular/xgboost.py" | "XGBoostAdapter" |
+| Tabular | "models/tabular/censored_rul.py" | "XGBoostAFTAdapter", "HorizonXGBoostAdapter" |
 | Tabular | "models/tabular/catboost.py" | "CatBoostAdapter" |
 | Tabular | "models/tabular/rbf_svr.py" | "RBFSVRAdapter" |
 | Trajectory | "models/trajectory/trajectory_dtw_knn.py" | "TrajectoryDTWKNNAdapter" |

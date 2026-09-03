@@ -75,6 +75,7 @@ def default_selected_configurations_path() -> Path:
 
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
+    "xgboost_aft",
     "catboost",
     "mlp",
     "tcn",

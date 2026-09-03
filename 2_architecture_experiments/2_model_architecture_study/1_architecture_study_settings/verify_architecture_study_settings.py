@@ -88,6 +88,16 @@ EXPECTED_SEARCH_PARAMETERS: dict[str, set[str]] = {
         "fault_mode_strategy",
         "signal_compression_strategy",
     },
+    "xgboost_aft": {
+        "maximum_trees", "learning_rate", "max_depth", "min_child_weight",
+        "subsample", "colsample_bytree", "reg_alpha", "reg_lambda",
+        "aft_loss_distribution", "aft_loss_distribution_scale",
+        "censoring_threshold",
+    },
+    "horizon_xgboost": {
+        "maximum_trees", "learning_rate", "max_depth", "min_child_weight",
+        "subsample", "colsample_bytree", "reg_alpha", "reg_lambda", "horizons",
+    },
     "catboost": {
         "maximum_trees",
         "learning_rate",
@@ -195,6 +205,8 @@ EXPECTED_VARIANTS: dict[str, set[str]] = {
     "extra_trees": {"extra_trees"},
     "hist_gradient_boosting": {"hist_gradient_boosting"},
     "xgboost": {"xgboost"},
+    "xgboost_aft": {"xgboost_aft"},
+    "horizon_xgboost": {"horizon_xgboost"},
     "catboost": {"catboost"},
     "mlp": {"mlp"},
     "tcn": {"tcn"},

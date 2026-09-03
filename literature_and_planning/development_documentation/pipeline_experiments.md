@@ -492,26 +492,135 @@ the conservative-prediction objective.
 
 ## R2 Above 0.9 Development Program
 
-These experiments form the current development program. Completed results and
-pending work are distinguished below; their locked-data gates remain closed.
+These experiments test larger changes to the learning formulation after the
+feature, cap, and calibration studies reached a public leaderboard plateau.
+Unless explicitly stated otherwise, every result is development-only and does
+not reopen locked evaluation.
 
 | Experiment | What changes | Why | Result |
 | --- | --- | --- | --- |
 | `PE_6` | Sparse versus stride-2 versus every-cycle sequence endpoints, followed by lookbacks 20/30/50 | Test whether temporal models need denser causal supervision than the failed stride-5 tabular experiment provided | Dense stride 1 selected; lookback 20 selected |
 | Temporal architecture `run_7` | TCN, multiscale CNN, GRU, and LSTM on the frozen PE_6 sampling policy | Find a compact temporal model whose errors complement the tree blend | Complete; no promotion. LSTM was best at mean OOF R2 0.6531 and RMSE 19.57 versus required values of 0.89 and 10.7 |
 | `PE_7` | Fixed blends, nonnegative ridge, and shallow-XGBoost OOF stacks | Test whether a complementary temporal model corrects tree residuals without meta-model leakage | Blocked; Run 7 produced no eligible temporal component, so stacking was not run |
-| `PE_8` | Global cap 125 versus two fold-fitted per-UAV onset targets | Test whether a universal degradation-onset assumption causes the 51-125 RUL errors | Pending |
-| `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Pending |
-| `PE_10` | Fixed hybrid CNN with recent-only versus pooled long-history plus recent raw telemetry | Determine whether multi-resolution history improves a joint sequence/engineered representation | Pending |
-| Hybrid architecture `run_8` | Dense-data XGBoost, hybrid CNN, and hybrid GRU using the frozen PE_10 representation, promoted against frozen PE_3 tree OOF predictions | Test whether temporal information adds value when the model also receives all 298 engineered full-history features | Pending |
+| `PE_8` | Global cap 125 versus temporal-correlation and monotonic-health-index onset targets | Test whether a universal degradation-onset assumption causes the 51-125 RUL errors | Complete; no promotion. Both onset targets lost all five folds and raised tree RMSE from about 12.2 to about 19.6-20.0 |
+| `PE_9` | Control, top-5/top-10 shift pruning, and fold-local target-aware pruning | Test whether development/test-separating features reduce hidden-domain robustness | Complete; no promotion. Domain AUC was 0.8565, but no pruning treatment passed the accuracy and high-propensity gates |
+| `PE_10` | Fixed hybrid CNN with recent-only versus pooled long-history plus recent raw telemetry | Determine whether multi-resolution history improves a joint sequence/engineered representation | Complete; recent-only retained. Multi-resolution RMSE 20.332 versus 18.336, 0/5 wins, 10.89% worse |
+| Hybrid architecture `run_8` | XGBoost, hybrid CNN, and hybrid GRU using the frozen PE_10 representation, promoted against frozen PE_3 tree OOF predictions | Test whether temporal information adds value when the model also receives all 298 engineered full-history features | Complete; no promotion. Hybrid GRU RMSE 14.618 and hybrid CNN 17.671 versus tree-blend 11.508; neither won a fold |
+| `PE_11` | Three-seed XGBoost/ExtraTrees members, mean/median/trimmed aggregation, nested blend fitting, and shallow residual correction | Test variance reduction and systematic residual learnability without changing data or opening locked scenarios | Implemented; pending execution |
+| Architecture `run_9` | Raw scalar XGBoost, right-censored XGBoost AFT, and discrete failure-horizon XGBoost | Test whether the cap should represent censoring or a survival curve rather than an exact scalar target | Implemented; pending execution |
+| `PE_12` | Propensity-weighted ranking of PE_3, PE_11, and Run 9 OOF predictions | Test whether candidate choice changes in the part of development data most similar to the unlabeled test endpoints | Implemented; pending PE_11 and Run 9 |
+| `PE_13` | Prediction-band and ensemble-uncertainty-dependent conservative subtraction | Reduce near-failure overprediction more selectively than a global scalar or prediction-only quantile curve | Implemented; pending PE_11 |
 
 Each experiment has one entry point and one editable TOML under
 `2_architecture_experiments/1_pipeline_experiments/experiments/PE_X/`. PE_7 is
 blocked because temporal Run 7 failed its development gate and did not enter
-three-seed confirmation. PE_8 and
-PE_9 are independent and may run while PE_6 is in progress. Exact gates and
-artifact contracts are documented in `r2_above_0_9_implementation_plan.md`.
+three-seed confirmation. Exact earlier gates and artifact contracts are
+documented in `r2_above_0_9_implementation_plan.md`.
 
-PE_10 reuses PE_6's dense stride-1 Phase 1 artifacts and is run only after
-PE_8 and PE_9. Run 8 cannot start until PE_10 writes its automatic winner
-manifest. Both additions remain development-only and do not open locked data.
+### PE_8 to PE_10 conclusions
+
+PE_8 rejected both personalized-onset formulations. XGBoost RMSE increased
+from `12.154` for cap 125 to `19.686` for temporal correlation and `19.593` for
+the monotonic health index. ExtraTrees showed the same failure. This indicates
+that these fold-fitted change points discard useful absolute target information;
+it does not prove that every personalized degradation model is impossible.
+
+PE_9 confirmed measurable covariate shift (`OOF domain AUC = 0.8565`) but
+showed that the most shifted features cannot simply be removed. The nominally
+best target-aware XGBoost treatment changed relative RMSE by only `+0.013%`,
+won two folds, and worsened high-propensity RMSE by `0.282`. The shift signal is
+therefore retained as a validation diagnostic in PE_12, not treated as feature
+importance or justification for test-distribution weighting during training.
+
+PE_10 and Run 8 jointly reject the tested temporal representations. Adding
+pooled long history made the fixed hybrid CNN 10.89% worse. With recent-only
+history, hybrid GRU and hybrid CNN still trailed the current tree blend by
+27.0% and 53.5% RMSE, respectively. The temporal branch therefore should not
+be added to Phase 3 from these results.
+
+### PE_11: cross-fitted bagging and residual correction
+
+PE_11 regenerates development predictions for the five outer studies, four
+inner folds, XGBoost and ExtraTrees, and seeds 13, 37, and 73. Every member is
+trained without its validation UAVs. It compares the member mean, median,
+trimmed mean, an inner-fold-selected nonnegative family blend, and a shallow
+histogram-gradient residual model using base prediction, cutoff, seed spread,
+range, and family disagreement. Blend tuning and residual fitting use three
+inner folds and predict the fourth inside the same outer study. The provenance
+tables must report zero UAV overlap.
+
+Promotion requires at least four outer-fold wins over the frozen calibrated
+PE_3 blend and at least 1% mean RMSE improvement. Artifacts are checkpointed
+after every member fit, so an interrupted run resumes rather than restarting
+completed fits.
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_11\run.py
+```
+
+### Architecture Run 9: censored and horizon targets
+
+Run 9 is an architecture study because it changes the estimator's output and
+loss contract. `xgboost_aft` treats observed RUL up to 125 as exact and values
+above 125 as right-censored at 125. `horizon_xgboost` learns ordered failure
+probabilities at 10, 20, 35, 50, 70, 90, 110, and 125 cycles and integrates the
+monotone survival curve into a capped RUL estimate. Raw scalar XGBoost is the
+within-run control; promotion is nevertheless judged against the stronger
+frozen PE_3 calibrated blend.
+
+The adapters are registered in the shared Phase 2 model interface, but Run 9
+stops after Step 5 and its dedicated report. A treatment needs four fold wins
+and 2% lower RMSE than the current tree blend before locked confirmation could
+be considered.
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\2_model_architecture_study\run_censored_architecture_study.py
+```
+
+### PE_12: test-like validation selection
+
+PE_12 does not fit a model on test rows and never reads test labels. It reuses
+PE_9's repeated OOF development-versus-test propensity estimates to compute
+clipped density-ratio weights, then ranks frozen PE_3, PE_11, and Run 9 OOF
+predictions by weighted RMSE. It also reports ordinary RMSE, highest-propensity
+quintile RMSE, and effective sample size. A weighted winner is ineligible if
+ordinary RMSE regresses by more than 0.5% or effective sample size falls below
+50% of the fold rows.
+
+Run PE_11 and Run 9 first:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_12\run.py
+```
+
+### PE_13: uncertainty-dependent safety
+
+PE_13 starts from PE_11's automatically selected prediction method and member
+standard deviation. It subtracts `strength * uncertainty * severity_multiplier`, where
+the multiplier is largest for low predicted RUL. Prediction bands, not true
+RUL bands, define the deployed correction. Strength is selected on three inner
+folds and applied to the fourth. This directly tests whether disagreement marks
+dangerous overprediction rather than assuming that every endpoint needs the
+same offset.
+
+The safety policy advances only if near-failure RMS overprediction improves by
+at least 5% while mean RMSE regresses by no more than 0.5%. It is a safety variant, not an
+accuracy-discovery shortcut, and remains separate from the canonical Phase 3
+submission unless it passes that gate.
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_13\run.py
+```
+
+### Execution order
+
+1. Run PE_11 and architecture Run 9; they are independent and may run in
+   separate terminals if GPU/CPU contention is acceptable.
+2. Run PE_12 after both upstream OOF tables exist.
+3. Run PE_13 after PE_11.
+4. Compare the development manifests. Do not open locked evaluation unless one
+   candidate passes its declared promotion gate.

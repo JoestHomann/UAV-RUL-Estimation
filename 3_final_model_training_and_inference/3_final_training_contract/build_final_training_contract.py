@@ -50,6 +50,7 @@ from phase_3_data import HeterogeneousDataset  # noqa: E402
 
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
+    "xgboost_aft",
     "catboost",
     "mlp",
     "tcn",

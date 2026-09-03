@@ -74,6 +74,7 @@ from phase_3_run_layout import tensorboard_log_root  # noqa: E402
 SEARCH_VERSION = 3
 EARLY_STOPPED_FAMILIES = {
     "xgboost",
+    "xgboost_aft",
     "catboost",
     "mlp",
     "tcn",

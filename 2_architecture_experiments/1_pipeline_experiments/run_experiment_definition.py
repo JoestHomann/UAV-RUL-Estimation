@@ -167,7 +167,10 @@ def _command(
         str(definition_path.resolve()),
         *step.get("arguments", []),
     ]
-    if force and Path(step["script_path"]).name == "run_experiments.py":
+    if force and (
+        Path(step["script_path"]).name == "run_experiments.py"
+        or step.get("supports_force") is True
+    ):
         command.append("--force")
     return command
 

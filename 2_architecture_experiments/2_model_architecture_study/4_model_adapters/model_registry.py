@@ -27,6 +27,7 @@ from models.neural.tcn import TCNAdapter
 from models.neural.transformer import TransformerAdapter
 from models.tabular.catboost import CatBoostAdapter
 from models.tabular.calibrated_tree_blend import CalibratedTreeBlendAdapter
+from models.tabular.censored_rul import HorizonXGBoostAdapter, XGBoostAFTAdapter
 from models.tabular.extra_trees import ExtraTreesAdapter
 from models.tabular.hist_gradient_boosting import HistGradientBoostingAdapter
 from models.tabular.random_forest import RandomForestAdapter
@@ -60,6 +61,8 @@ ADAPTER_CLASSES: dict[str, type[ModelAdapter]] = {
     "extra_trees": ExtraTreesAdapter,
     "hist_gradient_boosting": HistGradientBoostingAdapter,
     "xgboost": XGBoostAdapter,
+    "xgboost_aft": XGBoostAFTAdapter,
+    "horizon_xgboost": HorizonXGBoostAdapter,
     "catboost": CatBoostAdapter,
     "mlp": MLPAdapter,
     "tcn": TCNAdapter,
@@ -120,6 +123,30 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
         "reg_lambda",
         "fault_mode_strategy",
         "signal_compression_strategy",
+    },
+    "xgboost_aft": {
+        "maximum_trees",
+        "learning_rate",
+        "max_depth",
+        "min_child_weight",
+        "subsample",
+        "colsample_bytree",
+        "reg_alpha",
+        "reg_lambda",
+        "aft_loss_distribution",
+        "aft_loss_distribution_scale",
+        "censoring_threshold",
+    },
+    "horizon_xgboost": {
+        "maximum_trees",
+        "learning_rate",
+        "max_depth",
+        "min_child_weight",
+        "subsample",
+        "colsample_bytree",
+        "reg_alpha",
+        "reg_lambda",
+        "horizons",
     },
     "catboost": {
         "maximum_trees",
@@ -349,7 +376,7 @@ class ModelAdapterFactory:
         adapter: ModelAdapter
         if family in {"calibrated_tree_blend", "heterogeneous_oof_stack"}:
             adapter = adapter_class(**common_arguments)
-        elif family in {"xgboost", "catboost"}:
+        elif family in {"xgboost", "xgboost_aft", "catboost"}:
             adapter = adapter_class(
                 **common_arguments,
                 early_stopping_patience=architecture["early_stopping_patience"],

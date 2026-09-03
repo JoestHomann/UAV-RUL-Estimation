@@ -39,6 +39,8 @@ FAMILIES = (
     "random_forest",
     "extra_trees",
     "xgboost",
+    "xgboost_aft",
+    "horizon_xgboost",
     "catboost",
     "mlp",
     "tcn",

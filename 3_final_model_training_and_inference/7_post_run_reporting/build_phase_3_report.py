@@ -88,6 +88,8 @@ def _display_name(family: str) -> str:
         "random_forest": "Random Forest",
         "extra_trees": "Extra Trees",
         "xgboost": "XGBoost",
+        "xgboost_aft": "XGBoost AFT",
+        "horizon_xgboost": "Horizon XGBoost",
         "catboost": "CatBoost",
         "mlp": "MLP",
         "tcn": "TCN",

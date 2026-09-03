@@ -1,0 +1,56 @@
+# USER-EDITABLE SETTINGS FOR PE_12.
+
+[pipeline]
+experiment = "PE_12"
+run = "run_1"
+
+[run_definitions.PE_12]
+title = "Test-like validation selection"
+description = "Re-rank frozen development OOF candidates using PE_9 domain propensity without reading test labels or locked targets."
+
+[[run_definitions.PE_12.steps]]
+name = "rank_test_like_candidates"
+script = "2_architecture_experiments/1_pipeline_experiments/run_test_like_selection.py"
+arguments = ["--workflow", "PE_12"]
+script_chain = "test_like_selection"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.test_like_selection]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/domain_shift_diagnostic.py",
+    "2_architecture_experiments/1_pipeline_experiments/run_test_like_selection.py",
+]
+
+[test_like_selection_workflows.PE_12]
+domain_propensity = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_9/runs/run_1/domain_diagnostic/domain_propensity.csv"
+control_candidate = "PE3::blend_xgb_0.50__calibrated"
+propensity_epsilon = 0.05
+weight_clip = [0.25, 4.0]
+high_propensity_quantile = 0.8
+minimum_effective_sample_fraction = 0.5
+maximum_unweighted_rmse_regression = 0.005
+
+[[test_like_selection_workflows.PE_12.sources]]
+name = "PE3"
+path = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_ensemble_calibration/reporting/method_predictions.csv.gz"
+method_column = "method"
+prediction_column = "predicted_rul"
+methods = ["blend_xgb_0.50__calibrated", "xgboost__calibrated", "extra_trees__calibrated"]
+required = true
+
+[[test_like_selection_workflows.PE_12.sources]]
+name = "PE11"
+path = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+method_column = "method"
+prediction_column = "predicted_rul"
+methods = ["member_mean", "member_median", "trimmed_mean", "nonnegative_blend", "residual_corrected"]
+required = true
+
+[[test_like_selection_workflows.PE_12.sources]]
+name = "Run9"
+path = "2_architecture_experiments/2_model_architecture_study/runs/run_9/5_inner_model_selection/selected_inner_predictions.csv.gz"
+method_column = "model_family"
+prediction_column = "predicted_rul"
+methods = ["xgboost", "xgboost_aft", "horizon_xgboost"]
+required = true
+

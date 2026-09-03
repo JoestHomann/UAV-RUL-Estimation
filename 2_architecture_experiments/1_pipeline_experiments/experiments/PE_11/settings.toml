@@ -1,0 +1,55 @@
+# USER-EDITABLE SETTINGS FOR PE_11.
+
+[pipeline]
+experiment = "PE_11"
+run = "run_1"
+
+[run_definitions.PE_11]
+title = "Cross-fitted bagging and residual correction"
+description = "Regenerate development-only tree members across seeds, compare robust aggregation, and fit a shallow residual model without UAV leakage."
+
+[[run_definitions.PE_11.steps]]
+name = "fit_development_members"
+script = "2_architecture_experiments/1_pipeline_experiments/run_bagged_tree_members.py"
+arguments = ["--workflow", "PE_11"]
+script_chain = "bagging_residual_workflow"
+status_artifact = "members/member_manifest.json"
+supports_force = true
+
+[[run_definitions.PE_11.steps]]
+name = "evaluate_aggregation_and_residuals"
+script = "2_architecture_experiments/1_pipeline_experiments/evaluate_bagging_residual.py"
+arguments = ["--workflow", "PE_11"]
+script_chain = "bagging_residual_workflow"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.bagging_residual_workflow]
+scripts = [
+    "2_architecture_experiments/1_pipeline_experiments/run_bagged_tree_members.py",
+    "2_architecture_experiments/1_pipeline_experiments/evaluate_bagging_residual.py",
+]
+
+[bagging_residual_workflows.PE_11]
+families = ["xgboost", "extra_trees"]
+seeds = [13, 37, 73]
+xgboost_weight_grid = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+residual_maximum_iterations = 100
+residual_maximum_leaf_nodes = 7
+residual_l2_regularization = 10.0
+residual_features = [
+    "feature__telemetry_07__baseline_delta",
+    "feature__telemetry_07__history_slope",
+    "feature__telemetry_13__baseline_delta",
+    "feature__telemetry_13__history_slope",
+    "feature__telemetry_19__baseline_delta",
+    "feature__telemetry_19__history_slope",
+    "feature__telemetry_21__baseline_delta",
+    "feature__telemetry_21__history_slope",
+]
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.01
+source_specification = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/1_architecture_study_settings/artifacts/experiment_specification.json"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+selected_configurations = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/5_inner_model_selection/selected_configurations.csv"
+control_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_ensemble_calibration/reporting/method_predictions.csv.gz"
+control_method = "blend_xgb_0.50__calibrated"
