@@ -35,6 +35,7 @@ from models.tabular.residual_corrected_tree_ensemble import (  # noqa: E402
     ScaledRidgeResidualRegressor,
     calibration_sample_weights,
 )
+from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
 from run_marginal_ensemble import cross_fit_blend  # noqa: E402
 from run_population_degradation import degradation_features  # noqa: E402
 from run_residual_refinement import distinct_calibration_manifest  # noqa: E402
@@ -324,9 +325,15 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             hyperparameters[key] = system[key]
         factory = ModelAdapterFactory(REPOSITORY_ROOT / system["specification"])
         model = factory.create(
-            "calibrated_tree_blend", hyperparameters, seed=13, allow_disabled=True
+            "calibrated_tree_blend",
+            hyperparameters,
+            seed=13,
+            allow_disabled=True,
+            training_monitor=NoOpTrainingMonitor(),
         )
         self.assertIsNotNone(model.calibration_features_path)
+        _, xgboost = model._new_components()
+        self.assertIsInstance(xgboost.require_training_monitor(), NoOpTrainingMonitor)
 
     def test_run6_local_calibration_removes_held_outer_uavs(self) -> None:
         workflow = read_experiment_config(
@@ -346,7 +353,11 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             hyperparameters[key] = system[key]
         factory = ModelAdapterFactory(REPOSITORY_ROOT / system["specification"])
         model = factory.create(
-            "calibrated_tree_blend", hyperparameters, seed=13, allow_disabled=True
+            "calibrated_tree_blend",
+            hyperparameters,
+            seed=13,
+            allow_disabled=True,
+            training_monitor=NoOpTrainingMonitor(),
         )
         adapter = TabularDataAdapter(REPOSITORY_ROOT / workflow["tabular_manifest"])
         full_training = adapter.load_training(str(workflow["feature_set"]))

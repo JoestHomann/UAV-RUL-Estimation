@@ -26,6 +26,7 @@ for directory in (
 
 from build_prefix_features import build_feature_table  # noqa: E402
 from model_registry import ModelAdapterFactory  # noqa: E402
+from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
 from tabular_data_adapter import TabularDataAdapter  # noqa: E402
 
 
@@ -194,6 +195,7 @@ def main() -> None:
                 hyperparameters,
                 seed=int(workflow["model_seed"]),
                 allow_disabled=True,
+                training_monitor=NoOpTrainingMonitor(),
             )
             model.fit(split.training, None)
             prediction = model.predict(split.validation)
