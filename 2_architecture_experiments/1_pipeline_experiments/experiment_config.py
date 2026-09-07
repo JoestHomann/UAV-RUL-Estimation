@@ -28,6 +28,10 @@ PIPELINE_OWNED_TABLES = (
     "population_degradation_workflows",
     "tabular_prior_workflows",
     "marginal_ensemble_workflows",
+    "history_confirmation_workflows",
+    "tabular_confirmation_workflows",
+    "combined_confirmation_workflows",
+    "final_candidate_workflows",
 )
 
 

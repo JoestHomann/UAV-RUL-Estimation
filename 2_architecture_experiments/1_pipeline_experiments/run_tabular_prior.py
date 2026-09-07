@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from importlib import metadata
 import inspect
 import json
@@ -87,6 +88,18 @@ def tabpfn_dependency_status(settings: dict) -> dict:
     if not checkpoint.is_absolute():
         checkpoint = REPOSITORY_ROOT / checkpoint
     checkpoint = checkpoint.resolve()
+    expected_sha256 = settings.get("sha256")
+    checkpoint_sha256 = None
+    if checkpoint.is_file():
+        digest = hashlib.sha256()
+        with checkpoint.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        checkpoint_sha256 = digest.hexdigest().upper()
+    hash_matches = (
+        expected_sha256 is None
+        or checkpoint_sha256 == str(expected_sha256).upper()
+    )
     import_error = None
     if installed_version == expected_version:
         try:
@@ -96,6 +109,7 @@ def tabpfn_dependency_status(settings: dict) -> dict:
     ready = (
         installed_version == expected_version
         and checkpoint.is_file()
+        and hash_matches
         and import_error is None
     )
     return {
@@ -104,6 +118,9 @@ def tabpfn_dependency_status(settings: dict) -> dict:
         "checkpoint": checkpoint_value,
         "resolved_checkpoint": str(checkpoint),
         "checkpoint_exists": checkpoint.is_file(),
+        "expected_checkpoint_sha256": expected_sha256,
+        "checkpoint_sha256": checkpoint_sha256,
+        "checkpoint_hash_matches": hash_matches,
         "import_error": import_error,
         "ready": ready,
         "uses_remote_api": False,

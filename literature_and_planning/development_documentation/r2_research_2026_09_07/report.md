@@ -4,7 +4,7 @@ Research date: 7 September 2026. Scope confirmed by the user: unseen-UAV Kaggle 
 
 **Recommendation.** Carry the promoted Run 7 plus full-feature TabPFN blend into multi-seed confirmation, and give highest priority to a complete outer refit of PE_15's forecast-history candidate. The TabPFN gain is too small to close the Kaggle gap by itself; forecast history is the only completed screen with a large enough effect to do so if it survives nested evaluation. Do not expand the failed population, residual-coverage, compact-feature, or broad neural searches.
 
-Implementation update, 7 September 2026: PE_14–PE_19 are complete as experiment-owned workflows. PE_18 promoted a small full-feature TabPFN blend; PE_15 produced a larger forecast-history screening candidate that still needs complete nested outer refitting. No new locked evaluation was opened and no Kaggle submission was made. The earlier September 1 strategy and implementation plan are historical: several of their proposed experiments have now failed, and Phase 3 Run 7 is already complete.
+Implementation update, 7 September 2026: PE_14–PE_19 are complete as experiment-owned workflows. PE_18 promoted a small full-feature TabPFN blend; PE_15 produced a larger forecast-history screening candidate. PE_20–PE_23 now implement the required nested history confirmation, two-seed TabPFN confirmation, gated combined evaluation, and final all-UAV submission build. These follow-up runs are pending. No new locked evaluation was opened and no Kaggle submission was made. The earlier September 1 strategy and implementation plan are historical: several of their proposed experiments have now failed, and Phase 3 Run 7 is already complete.
 
 **Where the project actually stands**
 
@@ -152,11 +152,12 @@ These weights were fitted and scored on the same reused development labels. They
 6. Combine only independently supported changes and re-evaluate the full combination. Seek a meaningful development margin above 0.9, for example around 0.92 under the fixed nominal profile, while treating that as a planning margin rather than a calibrated predictor of Kaggle performance. Do not force a lower confidence bound above 0.9 by repeated selection on the same data.
 7. Freeze the final procedure before any genuinely held-back confirmation. Previously examined locked artifacts are historical evidence, not a reusable fresh holdout. Kaggle public feedback must not become the inner optimization loop.
 
-**Execution status:** PE_14–PE_19 are complete. PE_18's full-feature TabPFN
-blend passed the declared promotion gate, but its small gain and bootstrap
-interval require multi-seed confirmation. PE_15's forecast-history candidate
-still requires complete outer confirmation before a final combination. Run 7's
-public result is confirmed; no duplicate submission is needed.
+**Execution status:** PE_14–PE_19 are complete. PE_20–PE_23 are implemented and
+pending. PE_20 performs the complete nested forecast-history refit, PE_21 adds
+two grouped split seeds for TabPFN, PE_22 combines only independently confirmed
+winners, and PE_23 fits all 100 training UAVs and builds a verified submission
+only after the combined gate passes. Run 7's public result is confirmed; no
+duplicate baseline submission is needed.
 
 **Reproduce this report's new calculations**
 

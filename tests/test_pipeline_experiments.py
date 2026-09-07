@@ -186,7 +186,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
     def test_compatibility_catalog_composes_all_run_definitions(self) -> None:
         self.assertEqual(
             set(self.config["run_definitions"]),
-            {f"PE_{number}" for number in range(1, 20)},
+            {f"PE_{number}" for number in range(1, 24)},
         )
         self.assertEqual(len(run_experiments._experiments(self.config)), 44)
         self.assertIn(

@@ -743,3 +743,33 @@ Inspect or launch any new experiment with:
 ```
 
 Replace `PE_14` with `PE_15` through `PE_19`; remove `--list` to execute.
+
+### PE_20–PE_23: gated confirmation and final fit
+
+PE_20 replaces PE_15's saved-prediction screen with a complete nested refit.
+For every evaluation partition it rebuilds Run 7's six tree members, selects
+their weight from group-held-out calibration predictions, and fits the original
+and forecast-history residual heads. Earlier forecasts use fixed lags 2, 5, 10,
+and 20 and never read observations after the requested cutoff. Five outer and
+twenty inner cells are checkpointed independently.
+
+PE_21 repeats the frozen PE_18 full-feature comparison on split seeds 20260917
+and 20260927. Its ten outer and forty inner partitions refit both the Run 7
+control and TabPFN. The 0–25% TabPFN weight is selected independently inside
+each outer training partition. The package version and the supplied checkpoint's
+SHA-256 digest are required before training.
+
+PE_22 runs only if PE_20, PE_18, and PE_21 promoted their declared winners. It
+selects TabPFN weights from aligned inner predictions and evaluates the combined
+history/TabPFN system on held outer UAVs. A passing result writes a frozen final
+candidate contract. PE_23 consumes only that contract, refits on all 100
+training UAVs, predicts the 100 test UAVs, and verifies the final `id,RUL` CSV.
+It records component predictions and dependency hashes and never reads test
+labels or computes test metrics.
+
+The full resumable chain is:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\run_r2_confirmation_chain.py
+```

@@ -1,4 +1,4 @@
-"""Leakage and configuration tests for PE_14 through PE_19."""
+"""Leakage and configuration tests for PE_14 through PE_23."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ PIPELINE_ROOT = REPOSITORY_ROOT / "2_architecture_experiments" / "1_pipeline_exp
 PHASE2_ROOT = REPOSITORY_ROOT / "2_architecture_experiments" / "2_model_architecture_study"
 for directory in (
     PIPELINE_ROOT,
+    REPOSITORY_ROOT / "1_dataset_construction" / "5_prefix_feature_engineering",
     PHASE2_ROOT / "2_tabular_data_adapter",
     PHASE2_ROOT / "3_sequence_data_adapter",
     PHASE2_ROOT / "4_model_adapters",
@@ -29,7 +30,16 @@ from advanced_r2_utils import (  # noqa: E402
     prediction_history_features,
     subset_dataset,
 )
+from confirmation_utils import (  # noqa: E402
+    evaluation_jobs,
+    fixed_partitions,
+    validate_partitions,
+)
 from experiment_config import read_experiment_config  # noqa: E402
+from history_corrected_tree_system import (  # noqa: E402
+    build_lagged_dataset,
+    fixed_lag_history_features,
+)
 from model_registry import ModelAdapterFactory  # noqa: E402
 from models.tabular.residual_corrected_tree_ensemble import (  # noqa: E402
     ScaledRidgeResidualRegressor,
@@ -56,6 +66,19 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             "population_degradation_workflows": "PE_17",
             "tabular_prior_workflows": "PE_18",
             "marginal_ensemble_workflows": "PE_19",
+        }
+        for table, workflow in expected.items():
+            self.assertIn(workflow, config[table])
+            self.assertEqual(config[table][workflow]["pipeline_experiment"], workflow)
+            self.assertEqual(config[table][workflow]["pipeline_run"], "run_1")
+
+    def test_catalog_registers_the_confirmation_and_final_workflows(self) -> None:
+        config = read_experiment_config(PIPELINE_ROOT / "pipeline_experiments.toml")
+        expected = {
+            "history_confirmation_workflows": "PE_20",
+            "tabular_confirmation_workflows": "PE_21",
+            "combined_confirmation_workflows": "PE_22",
+            "final_candidate_workflows": "PE_23",
         }
         for table, workflow in expected.items():
             self.assertIn(workflow, config[table])
@@ -133,7 +156,7 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
         )
 
     def test_each_new_experiment_has_one_launcher_and_artifact_root(self) -> None:
-        for number in range(14, 20):
+        for number in range(14, 24):
             root = PIPELINE_ROOT / "experiments" / f"PE_{number}"
             self.assertTrue((root / "run.py").is_file())
             self.assertTrue((root / "settings.toml").is_file())
@@ -143,6 +166,94 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             self.assertEqual(definition["pipeline_experiment"], f"PE_{number}")
             self.assertEqual(len(definition["steps"]), 1)
 
+    def test_pe20_uses_complete_fixed_outer_and_inner_partitions(self) -> None:
+        workflow = read_experiment_config(
+            PIPELINE_ROOT / "experiments" / "PE_20" / "settings.toml"
+        )["history_confirmation_workflows"]["PE_20"]
+        outer, inner = fixed_partitions(
+            outer_path=workflow["outer_folds"],
+            inner_path=workflow["inner_folds"],
+            split_seed=int(workflow["split_seed"]),
+        )
+        validate_partitions(
+            outer,
+            inner,
+            expected_outer_folds=5,
+            expected_inner_folds=4,
+        )
+        jobs = evaluation_jobs(outer, inner, include_inner=True)
+        self.assertEqual(len(jobs), 25)
+        self.assertEqual(sum(job.evaluation_level == "outer" for job in jobs), 5)
+        self.assertTrue(
+            all(not (job.training_uavs & job.validation_uavs) for job in jobs)
+        )
+
+    def test_pe21_freezes_two_new_seeds_and_the_original_weight_grid(self) -> None:
+        workflow = read_experiment_config(
+            PIPELINE_ROOT / "experiments" / "PE_21" / "settings.toml"
+        )["tabular_confirmation_workflows"]["PE_21"]
+        self.assertEqual(workflow["split_seeds"], [20260917, 20260927])
+        self.assertEqual(workflow["challenger_weights"], [0.0, 0.05, 0.1, 0.15, 0.25])
+        self.assertEqual(workflow["minimum_fold_wins"], 8)
+        self.assertEqual(workflow["feature_set"], "screened_drift_pruned")
+
+    def test_fixed_lag_history_is_strictly_past_and_excludes_cap(self) -> None:
+        metadata = pd.DataFrame(
+            {
+                "query_index": [0, 0, 0, 1, 1],
+                "history_lag": [0, 2, 5, 0, 2],
+                "cutoff": [20, 18, 15, 40, 38],
+            }
+        )
+        predictions = np.array([45.0, 46.0, 125.0, 30.0, 31.0])
+        observed = fixed_lag_history_features(
+            metadata,
+            predictions,
+            query_count=2,
+            near_cap_threshold=124.5,
+        )
+        self.assertEqual(observed.loc[0, "history_count"], 1.0)
+        self.assertEqual(observed.loc[0, "history_near_cap_fraction"], 0.5)
+        changed = predictions.copy()
+        changed[3:] = -999.0
+        unaffected = fixed_lag_history_features(
+            metadata,
+            changed,
+            query_count=2,
+            near_cap_threshold=124.5,
+        )
+        pd.testing.assert_series_equal(observed.loc[0], unaffected.loc[0])
+
+    def test_lagged_features_ignore_raw_rows_after_the_query_cutoff(self) -> None:
+        pe20 = read_experiment_config(
+            PIPELINE_ROOT / "experiments" / "PE_20" / "settings.toml"
+        )["history_confirmation_workflows"]["PE_20"]
+        adapter = TabularDataAdapter(REPOSITORY_ROOT / pe20["tabular_manifest"])
+        development = adapter.load_development(str(pe20["feature_set"]))
+        query = subset_dataset(development, np.arange(len(development)) == 0)
+        raw = pd.read_csv(REPOSITORY_ROOT / pe20["train_csv"])
+        expected = build_lagged_dataset(
+            raw,
+            query,
+            feature_names=list(query.features.columns),
+            lags=pe20["history_lags"],
+            feature_profile=str(pe20["feature_profile"]),
+        )
+        changed = raw.copy()
+        uav = str(query.metadata.iloc[0].uav_id)
+        cutoff = float(query.metadata.iloc[0].cutoff)
+        future = changed.uav_id.astype(str).eq(uav) & changed.flight_cycle.gt(cutoff)
+        telemetry = [column for column in changed if column.startswith("telemetry_")]
+        changed.loc[future, telemetry] = 1e12
+        observed = build_lagged_dataset(
+            changed,
+            query,
+            feature_names=list(query.features.columns),
+            lags=pe20["history_lags"],
+            feature_profile=str(pe20["feature_profile"]),
+        )
+        pd.testing.assert_frame_equal(expected.features, observed.features)
+
     def test_pe18_pins_local_tabpfn_and_separate_blend_gate(self) -> None:
         workflow = read_experiment_config(
             PIPELINE_ROOT / "experiments" / "PE_18" / "settings.toml"
@@ -150,6 +261,7 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
         self.assertEqual(workflow["tabpfn"]["version"], "8.5.0")
         self.assertTrue(workflow["tabpfn"]["required"])
         self.assertTrue(str(workflow["tabpfn"]["checkpoint"]).endswith(".ckpt"))
+        self.assertEqual(len(workflow["tabpfn"]["sha256"]), 64)
         self.assertLess(
             workflow["blend_minimum_relative_rmse_improvement"],
             workflow["minimum_relative_rmse_improvement"],

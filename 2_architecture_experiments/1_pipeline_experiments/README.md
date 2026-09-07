@@ -357,7 +357,7 @@ directory; the Phase 2 run number is retained for manifest identity and Phase
 3 traceability. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
 
-## R² improvement experiments PE_14–PE_19
+## R² improvement and confirmation experiments PE_14–PE_23
 
 The September 2026 R² research program is implemented in six co-located runs:
 
@@ -381,6 +381,28 @@ complete outer refit. PE_14 reached pooled nominal R² 0.9011 with Run 7 but
 missed its fold-win gate; PE_16 and PE_19 made smaller improvements that missed
 their 1% gates. See the experiment register for the measured results and the
 distinction between screening and complete outer evaluation.
+
+The follow-up chain is implemented as four gated workflows:
+
+- `PE_20` completely refits the fixed-lag forecast-history system in five outer
+  and twenty inner UAV partitions;
+- `PE_21` confirms the frozen full-feature TabPFN blend over two additional
+  grouped split seeds and ten outer folds;
+- `PE_22` combines history and TabPFN only if both independent confirmation
+  manifests promoted their candidates;
+- `PE_23` fits the promoted combined candidate on all training UAVs and writes
+  a verified `id,RUL` submission without reading test labels.
+
+Run the resumable, gate-aware sequence with:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\run_r2_confirmation_chain.py
+```
+
+The chain runs PE_20 and PE_21 sequentially to avoid competing CPU, memory, and
+GPU workloads. It stops normally when a scientific gate rejects a candidate.
+Use `--status` to inspect progress and `--list` to print each command.
 
 ## Configuration ownership
 

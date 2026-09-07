@@ -1,0 +1,24 @@
+[pipeline]
+experiment = "PE_23"
+run = "run_1"
+
+[run_definitions.PE_23]
+title = "Final confirmed candidate fit and submission"
+description = "Fit the PE_22 winner on all 100 training UAVs, predict the 100 test UAVs, and verify a Kaggle-ready CSV."
+
+[[run_definitions.PE_23.steps]]
+name = "fit_and_build_submission"
+script = "2_architecture_experiments/1_pipeline_experiments/run_final_confirmed_candidate.py"
+arguments = ["--workflow", "PE_23"]
+script_chain = "final_confirmed_candidate"
+status_artifact = "reporting/final_manifest.json"
+supports_force = true
+
+[script_chains.final_confirmed_candidate]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_final_confirmed_candidate.py"]
+
+[final_candidate_workflows.PE_23]
+combined_winner_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_22/runs/run_1/reporting/winner_manifest.json"
+candidate_contract = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_22/runs/run_1/reporting/final_candidate_contract.json"
+required_winner = "history_plus_tabpfn_full"
+expected_test_rows = 100

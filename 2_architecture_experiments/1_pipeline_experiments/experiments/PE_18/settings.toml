@@ -42,5 +42,6 @@ thread_count = 4
 [tabular_prior_workflows.PE_18.tabpfn]
 version = "8.5.0"
 checkpoint = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/checkpoints/tabpfn-v3-regressor-v3_default.ckpt"
+sha256 = "311CE18D97E9533D8585EAADAFE040FBDD8070533209ED8696641DADC97A7301"
 device = "auto"
 required = true

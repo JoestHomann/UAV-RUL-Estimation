@@ -1,0 +1,50 @@
+[pipeline]
+experiment = "PE_22"
+run = "run_1"
+
+[run_definitions.PE_22]
+title = "Confirmed history and TabPFN combination"
+description = "Combine PE_20 forecast history with full-feature TabPFN only after both independent confirmation gates pass."
+
+[[run_definitions.PE_22.steps]]
+name = "evaluate_confirmed_combination"
+script = "2_architecture_experiments/1_pipeline_experiments/run_combined_confirmation.py"
+arguments = ["--workflow", "PE_22"]
+script_chain = "combined_confirmation"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.combined_confirmation]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_combined_confirmation.py"]
+
+[combined_confirmation_workflows.PE_22]
+history_winner_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_20/runs/run_1/reporting/winner_manifest.json"
+history_required_winner = "prediction_history"
+tabpfn_winner_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/runs/run_1/reporting/winner_manifest.json"
+tabpfn_confirmation_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_21/runs/run_1/reporting/winner_manifest.json"
+tabpfn_required_winner = "control_plus_tabpfn_full"
+history_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_20/runs/run_1/reporting/fold_predictions.csv"
+history_method = "prediction_history"
+tabpfn_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/runs/run_1/reporting/fold_predictions.csv"
+tabpfn_method = "tabpfn_full"
+challenger_weights = [0.0, 0.05, 0.10, 0.15, 0.25]
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.01
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+target_cap = 125.0
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+model_seed = 13
+train_csv = "data/train.csv"
+test_csv = "data/test.csv"
+feature_profile = "extended"
+history_lags = [2, 5, 10, 20]
+near_cap_threshold = 124.5
+
+[combined_confirmation_workflows.PE_22.tabpfn]
+version = "8.5.0"
+checkpoint = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/checkpoints/tabpfn-v3-regressor-v3_default.ckpt"
+sha256 = "311CE18D97E9533D8585EAADAFE040FBDD8070533209ED8696641DADC97A7301"
+device = "auto"
+required = true
