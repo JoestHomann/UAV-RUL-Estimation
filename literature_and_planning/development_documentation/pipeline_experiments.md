@@ -661,8 +661,7 @@ from Run 7 requires a further 19.02% MSE reduction, or 10.01% RMSE reduction.
 The [score record](r2_research_2026_09_07/kaggle_scores.csv) transcribes the
 supplied submissions. The [updated research plan](r2_research_2026_09_07/report.md)
 defines PE_14–PE_19. All six are implemented as experiment-owned, resumable
-workflows. PE_15 and PE_17 have completed their saved-prediction screens;
-PE_14, PE_16, PE_18, and PE_19 are ready for their larger refit runs.
+workflows. PE_14–PE_17 and PE_19 are complete; PE_18 remains to run.
 
 ### PE_14: multi-seed complete-pipeline audit
 
@@ -672,6 +671,12 @@ training side. Run 6 uses a newly supported fold-local polynomial ridge
 calibrator based on inner OOF component predictions; Run 7 uses its internally
 cross-fitted residual head. Frozen model choices are reused, and the report
 states that it does not estimate workflow-selection uncertainty.
+
+Run 7 reached pooled nominal R² **0.9011** and mean-fold R² **0.8961**, reducing
+mean RMSE by **3.36%** relative to Run 6. It won 11/15 folds, one short of the
+predeclared gate, and its UAV-bootstrap interval crossed zero. Under unrestricted
+RUL support its pooled R² fell to **0.6188**, so the nominal result did not
+promote automatically.
 
 ### PE_15: causal filtering and forecast history
 
@@ -690,6 +695,11 @@ correction, ridge and histogram-gradient heads, fixed-coverage regularization,
 inverse-duplicate weighting for the existing five-scenario table, and twenty
 distinct calibration cutoffs per UAV inside `1 <= RUL <= 125`. All calibration
 data is filtered to the active training UAVs and weighted equally by UAV.
+
+The regularized five-scenario histogram-gradient head was best at mean-fold R²
+**0.9023** and mean RMSE **10.1713**, a **0.63%** RMSE improvement with 4/5
+fold wins. It missed the 1% improvement gate and the bootstrap interval crossed
+zero, so the original Run 7 residual head remains the control.
 
 ### PE_17: population degradation features
 
@@ -712,6 +722,10 @@ PE_19 refits the selected LSTM and TCN configuration for each outer fold using
 fixed retraining epochs. Each 0-15% blend weight is chosen from that fold's
 training-UAV inner OOF predictions before one evaluation on the held UAVs.
 Zero weight is always eligible.
+
+The TCN blend reached mean-fold R² **0.9025** and pooled R² **0.9062**, but its
+**0.76%** RMSE improvement and 3/5 fold wins missed both promotion thresholds.
+The LSTM blend regressed by 0.83%. The tree control was retained.
 
 Inspect or launch any new experiment with:
 

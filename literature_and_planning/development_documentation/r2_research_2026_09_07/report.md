@@ -54,12 +54,12 @@ IDs PE_14–PE_19 below are implemented. Their numerical gates remain prospectiv
 
 | Experiment and status | Hypothesis and comparison | Priority / first budget | Evidence needed to advance |
 | --- | --- | --- | --- |
-| **PE_14: implemented, pending run** | Re-evaluate Run 6 and Run 7 with fold-local learned calibration; compare nominal and unrestricted-RUL profiles over three grouped split seeds | Required first; two frozen systems, three grouped split seeds | Establish whether gains survive the complete evaluation and identify support sensitivity |
+| **PE_14: complete, no promotion** | Run 7 reached pooled nominal R² 0.9011, but won 11/15 folds and its bootstrap interval crossed zero; unrestricted pooled R² was 0.6188 | Completed 60 outer cells | Nominal gain was encouraging but did not pass the stability gate |
 | **PE_15: screening complete** | Existing features versus filtered sensor level/rate features versus previous-prediction features; combine only after independent tests | Five recipes completed | Forecast history improved mean RMSE 13.0% with 5/5 wins; requires complete outer confirmation |
-| **PE_16: implemented, pending run** | Current residual head versus shrinkage/regularized mean correction; the existing five-scenario calibration table versus twenty distinct training-only endpoints per UAV | High; 8 recipes, reuse honest base predictions where possible | ≥1% paired RMSE reduction that survives a second split seed |
+| **PE_16: complete, no promotion** | Regularized HGB improved mean RMSE 0.63% with 4/5 wins; all other residual/coverage variants were weaker | Completed 8 recipes | Missed the 1% gate and bootstrap interval crossed zero |
 | **PE_17: screening complete, rejected** | Current ensemble versus added per-sensor terminal-distance/rate and partially pooled health-trajectory features | Two recipes completed | Both regressed; control retained |
 | **PE_18: implemented, dependency pending** | Current ensemble versus pinned local TabPFN-3 regression on full/compact current features; refreshed CatBoost control | Four direct cells plus nested small blends | ≥2% standalone gain or ≥1% complete-blend gain |
-| **PE_19: implemented, pending run** | Frozen tree ensemble plus 0–15% of an eligible complementary challenger; evaluate the blend directly | Two checkpointed temporal challengers | ≥1% honest paired RMSE gain and stable weights; reject if gain disappears |
+| **PE_19: complete, no promotion** | TCN blend reached pooled R² 0.9062 but improved mean RMSE only 0.76% with 3/5 wins; LSTM regressed | Completed 2 temporal challengers | Tree control retained |
 
 The numerical gates are proposed practical thresholds, not literature guarantees. Use the same five held-out UAV groups and the same endpoints within every paired comparison. Confirm selected recipes over two additional grouped split seeds. Four wins out of five is a screening heuristic, not a significance test.
 
@@ -150,7 +150,11 @@ These weights were fitted and scored on the same reused development labels. They
 6. Combine only independently supported changes and re-evaluate the full combination. Seek a meaningful development margin above 0.9, for example around 0.92 under the fixed nominal profile, while treating that as a planning margin rather than a calibrated predictor of Kaggle performance. Do not force a lower confidence bound above 0.9 by repeated selection on the same data.
 7. Freeze the final procedure before any genuinely held-back confirmation. Previously examined locked artifacts are historical evidence, not a reusable fresh holdout. Kaggle public feedback must not become the inner optimization loop.
 
-**Execution sequence:** run PE_14 next, then PE_16. Confirm PE_15's forecast-history candidate through the same complete outer procedure before combining it. PE_17 is closed. Run PE_18 after installing the pinned local dependency, then PE_19. Run one selected combination only after individual contributions are measured. Run 7's public result is confirmed; no duplicate submission is needed.
+**Execution status:** PE_14–PE_17 and PE_19 are complete. PE_18 is the remaining
+declared experiment now that its pinned local dependency is available. PE_15's
+forecast-history candidate still requires complete outer confirmation before a
+final combination. Run 7's public result is confirmed; no duplicate submission
+is needed.
 
 **Reproduce this report's new calculations**
 

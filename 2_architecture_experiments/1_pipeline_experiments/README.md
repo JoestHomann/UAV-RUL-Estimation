@@ -374,9 +374,12 @@ after the exact package and checkpoint preflight succeeds. Shared reports includ
 pooled and fold metrics, target-region diagnostics, paired UAV-bootstrap
 intervals, explicit promotion gates, and leakage provenance.
 
-PE_15 has completed with forecast history as a screening candidate; PE_17 has
-completed with no promotion. See the experiment register for the measured
-results and the distinction between screening and complete outer evaluation.
+PE_14, PE_15, PE_16, PE_17, and PE_19 are complete; PE_18 remains to run.
+PE_15 retained forecast history as a screening candidate. PE_14 reached pooled
+nominal R² 0.9011 with Run 7 but missed its fold-win gate; PE_16 and PE_19 made
+smaller improvements that missed their 1% gates. See the experiment register
+for the measured results and the distinction between screening and complete
+outer evaluation.
 
 ## Configuration ownership
 

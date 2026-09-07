@@ -7,3 +7,7 @@ This refits the frozen Run 6 and Run 7 systems across three independently genera
 ```
 
 The run checkpoints each system/profile/fold in `runs/run_1/reporting/fold_predictions.csv`.
+
+Run 7 achieved pooled nominal R² 0.9011 and improved mean RMSE by 3.36%, but
+won 11/15 folds against the required 12/15 and its bootstrap interval crossed
+zero. Unrestricted-support pooled R² was 0.6188. No candidate was promoted.
