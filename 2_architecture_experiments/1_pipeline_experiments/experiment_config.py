@@ -22,6 +22,12 @@ PIPELINE_OWNED_TABLES = (
     "conditional_calibration_workflows",
     "target_submission_workflows",
     "hybrid_representation_workflows",
+    "validation_audit_workflows",
+    "causal_filtering_workflows",
+    "residual_refinement_workflows",
+    "population_degradation_workflows",
+    "tabular_prior_workflows",
+    "marginal_ensemble_workflows",
 )
 
 

@@ -1,0 +1,38 @@
+[pipeline]
+experiment = "PE_15"
+run = "run_1"
+
+[run_definitions.PE_15]
+title = "Causal sensor and prediction filtering"
+description = "Add one-sided filtered sensor states and strictly earlier OOF forecast-history features to the residual stage."
+
+[[run_definitions.PE_15.steps]]
+name = "evaluate_causal_filtering"
+script = "2_architecture_experiments/1_pipeline_experiments/run_causal_filtering.py"
+arguments = ["--workflow", "PE_15"]
+script_chain = "causal_filtering"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.causal_filtering]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_causal_filtering.py"]
+
+[causal_filtering_workflows.PE_15]
+source_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+base_method = "nonnegative_blend"
+control_method = "residual_corrected"
+train_csv = "data/train.csv"
+channels = ["telemetry_13", "telemetry_19", "telemetry_21", "telemetry_22", "telemetry_25", "telemetry_28"]
+half_lives = [3.0, 10.0]
+residual_family = "hist_gradient_boosting"
+correction_strength = 1.0
+ridge_alpha = 10.0
+maximum_leaf_nodes = 7
+l2_regularization = 10.0
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.02
+existing_residual_features = [
+  "feature__telemetry_07__baseline_delta", "feature__telemetry_07__history_slope",
+  "feature__telemetry_13__baseline_delta", "feature__telemetry_13__history_slope",
+  "feature__telemetry_19__baseline_delta", "feature__telemetry_19__history_slope",
+  "feature__telemetry_21__baseline_delta", "feature__telemetry_21__history_slope",
+]

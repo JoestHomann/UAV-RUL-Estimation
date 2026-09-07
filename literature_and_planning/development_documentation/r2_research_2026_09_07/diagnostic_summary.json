@@ -1,0 +1,64 @@
+{
+  "scope": "Reused development predictions; descriptive, conditional on prior selection",
+  "run6": {
+    "rows": 500,
+    "uavs": 100,
+    "r2": 0.8973618190473035,
+    "rmse": 10.668483786158513,
+    "mae": 7.83479069099467,
+    "bias": -1.0718014360623969,
+    "sse": 56908.27314776354
+  },
+  "run7": {
+    "rows": 500,
+    "uavs": 100,
+    "r2": 0.9044607760862742,
+    "rmse": 10.29293150690605,
+    "mae": 7.67883159249959,
+    "bias": 0.2731068722117708,
+    "sse": 52972.219502929634
+  },
+  "unique_uav_cutoff_pairs": 444,
+  "duplicate_uav_cutoff_rows": 56,
+  "run7_unique_endpoint_metrics": {
+    "rows": 444,
+    "uavs": 100,
+    "r2": 0.9049429091746812,
+    "rmse": 10.340701430003714,
+    "mae": 7.7003669612320715,
+    "bias": 0.30388744482045266,
+    "sse": 47476.9670926295
+  },
+  "public_score_source": "User-supplied Kaggle screenshots; kaggle_scores.csv",
+  "public_run6_recorded_r2": 0.86741,
+  "public_run7_recorded_r2": 0.87652,
+  "public_run7_r2_gain_vs_run6": 0.009109999999999951,
+  "public_run7_mse_reduction_vs_run6": 0.06870804736405423,
+  "public_run7_rmse_reduction_vs_run6": 0.034965310138570294,
+  "public_rmse_reduction_needed_from_run6": 0.13155040954976605,
+  "public_mse_reduction_needed_from_run7": 0.1901522513767413,
+  "public_rmse_reduction_needed_from_run7": 0.10008458807326859,
+  "run7_top10_uavs_sse_share": 0.387166040805752,
+  "conditional_uav_bootstrap_95_intervals": {
+    "run7_pooled_r2": [
+      0.8777887531949359,
+      0.9277199699413002
+    ],
+    "run7_pooled_rmse": [
+      9.06789708393587,
+      11.4520626623715
+    ],
+    "rmse_delta_run7_minus_run6": [
+      -1.2519884054811024,
+      0.44588421194308137
+    ],
+    "r2_delta_run7_minus_run6": [
+      -0.008569305731800824,
+      0.024471930130047188
+    ]
+  },
+  "bootstrap_replicates": 3000,
+  "bootstrap_caveat": "Resamples fixed OOF predictions, not model training/selection; excludes selection uncertainty.",
+  "available_endpoint_transitions": 344,
+  "increasing_rul_transition_fraction": 0.11046511627906977
+}

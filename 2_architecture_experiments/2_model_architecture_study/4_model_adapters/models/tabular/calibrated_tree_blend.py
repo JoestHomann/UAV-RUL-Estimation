@@ -10,6 +10,10 @@ import joblib
 import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import GroupKFold
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 from base import (
     ModelAdapter,
@@ -90,6 +94,26 @@ class CalibratedTreeBlendAdapter(ModelAdapter):
             hyperparameters["residual_calibrator_path"],
             "residual_calibrator_path",
         )
+        local_calibration = hyperparameters.get("calibration_features_path")
+        self.calibration_features_path = (
+            None
+            if local_calibration is None
+            else _repository_path(local_calibration, "calibration_features_path")
+        )
+        self.calibration_internal_folds = int(
+            hyperparameters.get("calibration_internal_folds", 4)
+        )
+        self.calibration_degree = int(hyperparameters.get("calibration_degree", 2))
+        self.calibration_ridge_alpha = float(
+            hyperparameters.get("calibration_ridge_alpha", 10.0)
+        )
+        if self.calibration_features_path is not None:
+            if self.calibration_internal_folds < 2:
+                raise ModelAdapterError("Local calibration requires at least two folds")
+            if self.calibration_degree < 1:
+                raise ModelAdapterError("Local calibration degree must be positive")
+            if self.calibration_ridge_alpha <= 0.0:
+                raise ModelAdapterError("Local calibration ridge alpha must be positive")
         self.xgboost_weight = float(hyperparameters["xgboost_weight"])
         if not 0.0 < self.xgboost_weight < 1.0:
             raise ModelAdapterError("xgboost_weight must be in (0, 1)")
@@ -104,8 +128,7 @@ class CalibratedTreeBlendAdapter(ModelAdapter):
             raise ModelAdapterError(f"Malformed {family} component configuration")
         return value
 
-    def fit(self, training_data: Any, validation_data: Any | None) -> TrainingSummary:
-        started_at = self.start_timer()
+    def _new_components(self) -> tuple[ExtraTreesAdapter, XGBoostAdapter]:
         extra_configuration = self._component_configuration(
             "extra_trees",
             "extra_trees_configuration_index",
@@ -114,12 +137,12 @@ class CalibratedTreeBlendAdapter(ModelAdapter):
             "xgboost",
             "xgboost_configuration_index",
         )
-        self.extra_trees = ExtraTreesAdapter(
+        extra_trees = ExtraTreesAdapter(
             hyperparameters=extra_configuration["hyperparameters"],
             seed=self.seed,
             prediction_minimum=self.prediction_minimum,
         )
-        self.xgboost = XGBoostAdapter(
+        xgboost = XGBoostAdapter(
             hyperparameters=xgboost_configuration["hyperparameters"],
             seed=self.seed,
             prediction_minimum=self.prediction_minimum,
@@ -127,16 +150,124 @@ class CalibratedTreeBlendAdapter(ModelAdapter):
             training_iterations=int(xgboost_configuration["training_iterations"]),
             training_monitor=self._training_monitor,
         )
-        for component in (self.extra_trees, self.xgboost):
+        for component in (extra_trees, xgboost):
             component.configure_policies(self.target_policy, self.prediction_policy)
+        return extra_trees, xgboost
+
+    @staticmethod
+    def _subset(data: Any, mask: NDArray[np.bool_]) -> Any:
+        selected = pd.Series(mask, index=data.features.index)
+
+        def take(value: pd.Series | None) -> pd.Series | None:
+            return None if value is None else value.loc[selected].reset_index(drop=True)
+
+        return type(data)(
+            features=data.features.loc[selected].reset_index(drop=True),
+            metadata=data.metadata.loc[selected].reset_index(drop=True),
+            target=take(data.target),
+            sample_weights=take(data.sample_weights),
+            fitting_target=take(data.fitting_target),
+        )
+
+    def _calibration_data(self, training_data: Any) -> Any:
+        if self.calibration_features_path is None:
+            raise ModelAdapterError("No fold-local calibration source is configured")
+        feature_names = [str(column) for column in training_data.features.columns]
+        columns = ["sample_id", "scenario", "uav_id", "cutoff", "RUL", *feature_names]
+        try:
+            table = pd.read_csv(self.calibration_features_path, usecols=columns)
+        except (OSError, ValueError, pd.errors.ParserError) as error:
+            raise ModelAdapterError(f"Cannot load local calibration endpoints: {error}") from error
+        training_uavs = set(training_data.metadata["uav_id"].astype(str))
+        table = table.loc[table["uav_id"].astype(str).isin(training_uavs)].copy()
+        if table.empty or table["uav_id"].astype(str).nunique() != len(training_uavs):
+            raise ModelAdapterError(
+                "Local calibration endpoints do not cover every training UAV"
+            )
+        if table["sample_id"].astype(str).duplicated().any():
+            raise ModelAdapterError("Local calibration sample IDs are duplicated")
+        metadata = table[["sample_id", "scenario", "uav_id", "cutoff"]].copy()
+        metadata["uav_id"] = metadata["uav_id"].astype(str)
+        return type(training_data)(
+            features=table[feature_names].reset_index(drop=True),
+            metadata=metadata.reset_index(drop=True),
+            target=table["RUL"].astype(float).reset_index(drop=True),
+            sample_weights=None,
+            fitting_target=None,
+        )
+
+    def _raw_component_blend(
+        self,
+        extra_trees: ExtraTreesAdapter,
+        xgboost: XGBoostAdapter,
+        data: Any,
+    ) -> NDArray[np.float64]:
+        return np.asarray(
+            self.xgboost_weight * xgboost.predict(data)
+            + (1.0 - self.xgboost_weight) * extra_trees.predict(data),
+            dtype=np.float64,
+        )
+
+    def _fit_local_calibrator(self, training_data: Any) -> Any:
+        calibration = self._calibration_data(training_data)
+        groups = calibration.metadata["uav_id"].astype(str).to_numpy()
+        unique_groups = np.unique(groups)
+        if len(unique_groups) < self.calibration_internal_folds:
+            raise ModelAdapterError("Too few UAVs for fold-local calibration")
+        oof_prediction = np.full(len(calibration), np.nan, dtype=np.float64)
+        splitter = GroupKFold(n_splits=self.calibration_internal_folds)
+        for _, held_index in splitter.split(calibration.features, groups=groups):
+            held_uavs = set(groups[held_index])
+            training_mask = ~training_data.metadata["uav_id"].astype(str).isin(
+                held_uavs
+            ).to_numpy()
+            held_mask = np.zeros(len(calibration), dtype=bool)
+            held_mask[held_index] = True
+            fold_training = self._subset(training_data, training_mask)
+            fold_calibration = self._subset(calibration, held_mask)
+            extra_trees, xgboost = self._new_components()
+            extra_trees.fit(fold_training, None)
+            xgboost.fit(fold_training, None)
+            oof_prediction[held_index] = self._raw_component_blend(
+                extra_trees,
+                xgboost,
+                fold_calibration,
+            )
+        if not np.isfinite(oof_prediction).all():
+            raise ModelAdapterError("Local calibration OOF predictions are incomplete")
+        calibration_features = pd.DataFrame(
+            {
+                "raw_blend": oof_prediction,
+                "cutoff": calibration.metadata["cutoff"].to_numpy(float),
+            }
+        )
+        observed = target_values(calibration)
+        residual = oof_prediction - observed
+        counts = pd.Series(groups).value_counts()
+        weights = np.asarray([1.0 / float(counts[value]) for value in groups])
+        weights *= len(weights) / weights.sum()
+        calibrator = make_pipeline(
+            PolynomialFeatures(degree=self.calibration_degree, include_bias=False),
+            StandardScaler(),
+            Ridge(alpha=self.calibration_ridge_alpha),
+        )
+        calibrator.fit(calibration_features, residual, ridge__sample_weight=weights)
+        return calibrator
+
+    def fit(self, training_data: Any, validation_data: Any | None) -> TrainingSummary:
+        started_at = self.start_timer()
+        if self.calibration_features_path is None:
+            try:
+                self.calibrator = joblib.load(self.calibrator_path)
+            except Exception as error:
+                raise ModelAdapterError(
+                    f"Cannot load frozen residual calibrator {self.calibrator_path}: {error}"
+                ) from error
+        else:
+            self.calibrator = self._fit_local_calibrator(training_data)
+        self.extra_trees, self.xgboost = self._new_components()
         extra_summary = self.extra_trees.fit(training_data, None)
         xgboost_summary = self.xgboost.fit(training_data, None)
-        try:
-            self.calibrator = joblib.load(self.calibrator_path)
-        except Exception as error:
-            raise ModelAdapterError(
-                f"Cannot load frozen residual calibrator {self.calibrator_path}: {error}"
-            ) from error
         self._is_fitted = True
         validation_rmse = None
         if validation_data is not None:
@@ -159,12 +290,7 @@ class CalibratedTreeBlendAdapter(ModelAdapter):
         return summary
 
     def _predict_raw(self, data: Any) -> NDArray[np.float64]:
-        extra_prediction = self.extra_trees.predict(data)
-        xgboost_prediction = self.xgboost.predict(data)
-        raw_blend = (
-            self.xgboost_weight * xgboost_prediction
-            + (1.0 - self.xgboost_weight) * extra_prediction
-        )
+        raw_blend = self._raw_component_blend(self.extra_trees, self.xgboost, data)
         cutoffs = cutoff_values(data)
         if cutoffs is None:
             raise ModelAdapterError("Calibrated blend requires endpoint cutoffs")

@@ -1,0 +1,45 @@
+topic: "Experiments toward Kaggle R2 above 0.9 on unseen UAVs"
+research_date: "2026-09-07"
+scope: "Confirmed by user: current repository and PE_1 through PE_13; all publication years"
+status: "Research completed; PE_14-PE_19 implemented; PE_15 and PE_17 screens completed"
+baseline: "Phase 3 Run 7 residual_corrected_tree_ensemble; Run 6 historical control"
+baseline_public_r2: 0.87652
+public_score_source: "User-supplied Kaggle screenshots recorded in kaggle_scores.csv"
+items:
+  - id: PE_14
+    name: Complete-pipeline validation and endpoint stress test
+    priority: required
+    candidate_budget: 2
+  - id: PE_15
+    name: Causal sensor and prediction filtering
+    priority: high
+    candidate_budget: 8
+  - id: PE_16
+    name: Residual regularization and calibration coverage
+    priority: high
+    candidate_budget: 8
+  - id: PE_17
+    name: Population-informed degradation extrapolation
+    priority: medium
+    candidate_budget: 6
+  - id: PE_18
+    name: Pinned local TabPFN-3 and matched tabular controls
+    priority: medium
+    candidate_budget: 4
+  - id: PE_19
+    name: Marginal ensemble utility
+    priority: conditional
+    maximum_challengers: 2
+execution:
+  mode: "Runnable local workflows; PE_15 and PE_17 screens executed; no submissions performed"
+  batch_size: 1
+  items_per_agent: 6
+  output_dir: "."
+  note: "PE_14, PE_16, PE_18, and PE_19 are checkpointed larger refit workflows"
+evidence:
+  report: report.md
+  diagnostics_script: analyze_saved_predictions.py
+  summary: diagnostic_summary.json
+  public_scores: kaggle_scores.csv
+  error_bands: error_bands.csv
+  optimistic_blend_screen: optimistic_blend_screen.csv

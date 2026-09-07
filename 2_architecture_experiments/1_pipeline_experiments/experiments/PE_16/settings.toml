@@ -1,0 +1,137 @@
+[pipeline]
+experiment = "PE_16"
+run = "run_1"
+
+[run_definitions.PE_16]
+title = "Residual regularization and calibration coverage"
+description = "Compare residual head capacity, shrinkage, and five versus twenty training-only calibration endpoints per UAV in full outer evaluation."
+
+[[run_definitions.PE_16.steps]]
+name = "evaluate_residual_refinement"
+script = "2_architecture_experiments/1_pipeline_experiments/run_residual_refinement.py"
+arguments = ["--workflow", "PE_16"]
+script_chain = "residual_refinement"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.residual_refinement]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_residual_refinement.py"]
+
+[residual_refinement_workflows.PE_16]
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+train_csv = "data/train.csv"
+feature_profile = "extended"
+distinct_calibration_endpoint_count = 20
+calibration_minimum_rul = 1.0
+calibration_maximum_rul = 125.0
+control = "hgb_5_strength1"
+model_seed = 13
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.01
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "hgb_5_strength1"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_rows"
+residual_family = "hist_gradient_boosting"
+correction_strength = 1.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05
+ridge_alpha = 10.0
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "no_correction_5"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_rows"
+residual_family = "ridge"
+correction_strength = 0.0
+ridge_alpha = 10.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "hgb_5_strength05"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_rows"
+residual_family = "hist_gradient_boosting"
+correction_strength = 0.5
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05
+ridge_alpha = 10.0
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "hgb_5_regularized"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_rows"
+residual_family = "hist_gradient_boosting"
+correction_strength = 1.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 40
+l2_regularization = 20.0
+learning_rate = 0.05
+ridge_alpha = 10.0
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "hgb_20_strength1"
+calibration_features_path = "generated_distinct_20"
+calibration_weighting = "equal_uav_rows"
+residual_family = "hist_gradient_boosting"
+correction_strength = 1.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 40
+l2_regularization = 20.0
+learning_rate = 0.05
+ridge_alpha = 10.0
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "hgb_5_unique_endpoint_weighting"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_unique_endpoints"
+residual_family = "hist_gradient_boosting"
+correction_strength = 1.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05
+ridge_alpha = 10.0
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "ridge_5"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_weighting = "equal_uav_rows"
+residual_family = "ridge"
+correction_strength = 1.0
+ridge_alpha = 10.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05
+
+[[residual_refinement_workflows.PE_16.candidates]]
+name = "ridge_20"
+calibration_features_path = "generated_distinct_20"
+calibration_weighting = "equal_uav_rows"
+residual_family = "ridge"
+correction_strength = 1.0
+ridge_alpha = 20.0
+maximum_iterations = 100
+maximum_leaf_nodes = 7
+minimum_samples_leaf = 20
+l2_regularization = 10.0
+learning_rate = 0.05

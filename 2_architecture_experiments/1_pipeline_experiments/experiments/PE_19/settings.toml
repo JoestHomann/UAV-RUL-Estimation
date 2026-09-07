@@ -1,0 +1,33 @@
+[pipeline]
+experiment = "PE_19"
+run = "run_1"
+
+[run_definitions.PE_19]
+title = "Marginal ensemble utility"
+description = "Refit selected LSTM and TCN configurations on each outer training fold, then let each earn only a small weight selected without the held fold."
+
+[[run_definitions.PE_19.steps]]
+name = "evaluate_marginal_ensemble"
+script = "2_architecture_experiments/1_pipeline_experiments/run_marginal_ensemble.py"
+arguments = ["--workflow", "PE_19"]
+script_chain = "marginal_ensemble"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.marginal_ensemble]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_marginal_ensemble.py"]
+
+[marginal_ensemble_workflows.PE_19]
+tree_predictions = "3_final_model_training_and_inference/runs/run_7/2_final_configuration_search/artifacts/final_search_oof_predictions.csv"
+control_candidate_number = 1
+tree_inner_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+tree_inner_method = "residual_corrected"
+temporal_inner_predictions = "2_architecture_experiments/2_model_architecture_study/runs/run_7/5_inner_model_selection/selected_inner_predictions.csv.gz"
+selected_configurations = "2_architecture_experiments/2_model_architecture_study/runs/run_7/5_inner_model_selection/selected_configurations.csv"
+sequence_manifest = "2_architecture_experiments/2_model_architecture_study/runs/run_7/3_sequence_data_adapter/artifacts/sequence_dataset_manifest.json"
+specification = "2_architecture_experiments/2_model_architecture_study/runs/run_7/1_architecture_study_settings/artifacts/experiment_specification.json"
+challengers = ["lstm", "tcn"]
+challenger_weights = [0.0, 0.05, 0.10, 0.15]
+model_seed = 13
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.01

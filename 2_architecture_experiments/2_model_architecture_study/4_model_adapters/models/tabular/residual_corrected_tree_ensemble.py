@@ -10,7 +10,9 @@ import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.linear_model import Ridge
 from sklearn.model_selection import GroupKFold
+from sklearn.preprocessing import StandardScaler
 
 from base import (
     ModelAdapter,
@@ -26,6 +28,36 @@ from policies import PredictionPolicy
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
+
+
+class ScaledRidgeResidualRegressor:
+    """Small serializable ridge head for residual-correction ablations."""
+
+    def __init__(self, *, alpha: float) -> None:
+        if alpha <= 0.0:
+            raise ModelAdapterError("Residual ridge alpha must be positive")
+        self.alpha = float(alpha)
+
+    def fit(
+        self,
+        features: pd.DataFrame,
+        target: NDArray[np.float64],
+        *,
+        sample_weight: NDArray[np.float64] | None = None,
+    ) -> ScaledRidgeResidualRegressor:
+        self.feature_names = tuple(str(value) for value in features.columns)
+        values = features.to_numpy(dtype=np.float64)
+        self.scaler = StandardScaler()
+        transformed = self.scaler.fit_transform(values)
+        self.model = Ridge(alpha=self.alpha)
+        self.model.fit(transformed, target, sample_weight=sample_weight)
+        return self
+
+    def predict(self, features: pd.DataFrame) -> NDArray[np.float64]:
+        if tuple(str(value) for value in features.columns) != self.feature_names:
+            raise ModelAdapterError("Residual ridge feature order changed")
+        values = self.scaler.transform(features.to_numpy(dtype=np.float64))
+        return np.asarray(self.model.predict(values), dtype=np.float64)
 
 
 def _repository_path(value: Any, name: str) -> Path:
@@ -55,6 +87,35 @@ def _subset(dataset: Any, mask: NDArray[np.bool_]) -> Any:
         sample_weights=take(dataset.sample_weights),
         fitting_target=take(dataset.fitting_target),
     )
+
+
+def calibration_sample_weights(
+    metadata: pd.DataFrame,
+    strategy: str,
+) -> NDArray[np.float64]:
+    """Give every UAV, and optionally every distinct endpoint, equal total weight."""
+
+    uavs = metadata["uav_id"].astype(str)
+    if strategy == "equal_uav_rows":
+        uav_counts = uavs.value_counts()
+        weights = np.asarray([1.0 / float(uav_counts[uav]) for uav in uavs])
+    elif strategy == "equal_uav_unique_endpoints":
+        cutoffs = metadata["cutoff"].astype(float)
+        endpoints = pd.DataFrame(
+            {"uav_id": uavs.to_numpy(), "cutoff": cutoffs.to_numpy()}
+        )
+        endpoint_counts = endpoints.groupby(["uav_id", "cutoff"]).size()
+        unique_per_uav = endpoints.drop_duplicates().groupby("uav_id").size()
+        weights = np.asarray(
+            [
+                1.0 / (float(unique_per_uav[uav]) * float(endpoint_counts[(uav, cutoff)]))
+                for uav, cutoff in endpoints.itertuples(index=False, name=None)
+            ],
+            dtype=np.float64,
+        )
+    else:
+        raise ModelAdapterError(f"Unknown calibration weighting {strategy!r}")
+    return weights * len(weights) / weights.sum()
 
 
 class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
@@ -104,6 +165,19 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
         if self.internal_folds < 2:
             raise ModelAdapterError("Residual ensemble requires at least two OOF folds")
         self.residual_features = tuple(str(value) for value in contract["residual_features"])
+        self.correction_strength = float(contract.get("correction_strength", 1.0))
+        if not 0.0 <= self.correction_strength <= 1.5:
+            raise ModelAdapterError("Residual correction strength must be in [0, 1.5]")
+        self.calibration_weighting = str(
+            contract.get("calibration_weighting", "equal_uav_rows")
+        )
+        if self.calibration_weighting not in {
+            "equal_uav_rows",
+            "equal_uav_unique_endpoints",
+        }:
+            raise ModelAdapterError(
+                f"Unknown calibration weighting {self.calibration_weighting!r}"
+            )
         self.weight_grid = tuple(float(value) for value in contract["xgboost_weight_grid"])
         if not self.weight_grid or any(not 0.0 <= value <= 1.0 for value in self.weight_grid):
             raise ModelAdapterError("Residual ensemble blend weights must be in [0, 1]")
@@ -273,24 +347,43 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
             self._member_statistics(oof_members)
         )
         observed = target_values(calibration)
+        calibration_weights = calibration_sample_weights(
+            calibration.metadata,
+            self.calibration_weighting,
+        )
         scored_weights = []
         for weight in self.weight_grid:
             estimate = weight * xgb + (1.0 - weight) * extra
-            scored_weights.append((root_mean_squared_error(observed, estimate), weight))
+            weighted_rmse = float(
+                np.sqrt(np.average(np.square(estimate - observed), weights=calibration_weights))
+            )
+            scored_weights.append((weighted_rmse, weight))
         _, self.xgboost_weight = min(scored_weights, key=lambda item: (item[0], item[1]))
         base = np.maximum(
             self.xgboost_weight * xgb + (1.0 - self.xgboost_weight) * extra,
             self.prediction_minimum,
         )
         residual_settings = self.contract["residual_model"]
-        self.residual_model = HistGradientBoostingRegressor(
-            max_iter=int(residual_settings["maximum_iterations"]),
-            max_leaf_nodes=int(residual_settings["maximum_leaf_nodes"]),
-            min_samples_leaf=int(residual_settings["minimum_samples_leaf"]),
-            l2_regularization=float(residual_settings["l2_regularization"]),
-            learning_rate=float(residual_settings["learning_rate"]),
-            random_state=int(residual_settings["seed"]),
+        residual_family = str(
+            residual_settings.get("family", "hist_gradient_boosting")
         )
+        if residual_family == "hist_gradient_boosting":
+            self.residual_model: Any = HistGradientBoostingRegressor(
+                max_iter=int(residual_settings["maximum_iterations"]),
+                max_leaf_nodes=int(residual_settings["maximum_leaf_nodes"]),
+                min_samples_leaf=int(residual_settings["minimum_samples_leaf"]),
+                l2_regularization=float(residual_settings["l2_regularization"]),
+                learning_rate=float(residual_settings["learning_rate"]),
+                random_state=int(residual_settings["seed"]),
+            )
+        elif residual_family == "ridge":
+            self.residual_model = ScaledRidgeResidualRegressor(
+                alpha=float(residual_settings["alpha"])
+            )
+        else:
+            raise ModelAdapterError(
+                f"Unknown residual model family {residual_family!r}"
+            )
         residual_matrix = self._residual_matrix(
             calibration,
             base,
@@ -298,7 +391,11 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
             uncertainty_range,
             disagreement,
         )
-        self.residual_model.fit(residual_matrix, base - observed)
+        self.residual_model.fit(
+            residual_matrix,
+            base - observed,
+            sample_weight=calibration_weights,
+        )
 
         print(
             "Residual ensemble final refit: fitting "
@@ -349,7 +446,7 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
             disagreement,
         )
         correction = np.asarray(self.residual_model.predict(matrix), dtype=np.float64)
-        return base - correction
+        return base - self.correction_strength * correction
 
     def predict(self, data: Any) -> NDArray[np.float64]:
         """Return residual-corrected RUL without applying target inversion twice."""

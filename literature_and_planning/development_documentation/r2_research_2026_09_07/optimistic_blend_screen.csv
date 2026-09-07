@@ -1,0 +1,9 @@
+control,temporal,rows,oracle_alpha,baseline_pooled_rmse,oracle_pooled_rmse,optimistic_rmse_improvement,scope
+PE3,gru,2000,0.057677828144388696,11.530908384282151,11.4879725544298,0.0037235427098594176,Weight fit and scored on same reused development targets; NOT validation
+PE3,lstm,2000,0.0702431887609248,11.530908384282151,11.46816589463402,0.005441244311129578,Weight fit and scored on same reused development targets; NOT validation
+PE3,multiscale_cnn,2000,0.024452392294282536,11.530908384282151,11.52044202735471,0.0009076784394287385,Weight fit and scored on same reused development targets; NOT validation
+PE3,tcn,2000,0.05785379524052732,11.530908384282151,11.479489173849224,0.0044592506261706966,Weight fit and scored on same reused development targets; NOT validation
+PE11,gru,2000,0.09481028797817193,11.040450064739689,10.901994348403983,0.012540767407471676,Weight fit and scored on same reused development targets; NOT validation
+PE11,lstm,2000,0.10739139412292364,11.040450064739689,10.864479228943917,0.0159387375300738,Weight fit and scored on same reused development targets; NOT validation
+PE11,multiscale_cnn,2000,0.06028628968779369,11.040450064739689,10.96630115350861,0.006716113092879339,Weight fit and scored on same reused development targets; NOT validation
+PE11,tcn,2000,0.0956681836689246,11.040450064739689,10.873284584620178,0.015141183478868614,Weight fit and scored on same reused development targets; NOT validation

@@ -1,0 +1,38 @@
+[pipeline]
+experiment = "PE_17"
+run = "run_1"
+
+[run_definitions.PE_17]
+title = "Population-informed degradation extrapolation"
+description = "Estimate fold-local healthy and terminal sensor references and update them from each causal UAV prefix without relabeling RUL."
+
+[[run_definitions.PE_17.steps]]
+name = "evaluate_population_degradation"
+script = "2_architecture_experiments/1_pipeline_experiments/run_population_degradation.py"
+arguments = ["--workflow", "PE_17"]
+script_chain = "population_degradation"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.population_degradation]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_population_degradation.py"]
+
+[population_degradation_workflows.PE_17]
+source_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+base_method = "nonnegative_blend"
+control_method = "residual_corrected"
+train_csv = "data/train.csv"
+channels = ["telemetry_13", "telemetry_19", "telemetry_21", "telemetry_22", "telemetry_25", "telemetry_28"]
+edge_window = 10
+recent_window = 20
+residual_families = ["ridge", "hist_gradient_boosting"]
+ridge_alpha = 20.0
+maximum_leaf_nodes = 7
+l2_regularization = 20.0
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.02
+existing_residual_features = [
+  "feature__telemetry_07__baseline_delta", "feature__telemetry_07__history_slope",
+  "feature__telemetry_13__baseline_delta", "feature__telemetry_13__history_slope",
+  "feature__telemetry_19__baseline_delta", "feature__telemetry_19__history_slope",
+  "feature__telemetry_21__baseline_delta", "feature__telemetry_21__history_slope",
+]

@@ -357,6 +357,27 @@ directory; the Phase 2 run number is retained for manifest identity and Phase
 3 traceability. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
 
+## R² improvement experiments PE_14–PE_19
+
+The September 2026 R² research program is implemented in six co-located runs:
+
+- `PE_14` audits Run 6 and Run 7 over three fresh grouped split seeds and nominal/unrestricted endpoint support;
+- `PE_15` screens causal filters and strictly earlier forecast history;
+- `PE_16` compares eight residual-head strength, regularization, and coverage cells;
+- `PE_17` screens fold-local population degradation features;
+- `PE_18` runs nested CatBoost/TabPFN full and compact comparisons plus small blends;
+- `PE_19` refits LSTM/TCN challengers and selects their weights from inner OOF predictions.
+
+Each launcher supports `--list` and writes only below its own `runs/run_1`
+folder. PE_14, PE_16, and PE_19 support `--force`; PE_18 also supports it
+after the exact package and checkpoint preflight succeeds. Shared reports include
+pooled and fold metrics, target-region diagnostics, paired UAV-bootstrap
+intervals, explicit promotion gates, and leakage provenance.
+
+PE_15 has completed with forecast history as a screening candidate; PE_17 has
+completed with no promotion. See the experiment register for the measured
+results and the distinction between screening and complete outer evaluation.
+
 ## Configuration ownership
 
 Standalone Phase 2 runs use

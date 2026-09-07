@@ -1,0 +1,46 @@
+[pipeline]
+experiment = "PE_18"
+run = "run_1"
+
+[run_definitions.PE_18]
+title = "Pretrained tabular prior"
+description = "Compare pinned TabPFN-3 regression and a matched CatBoost refresh on full and fold-selected compact endpoint features."
+
+[[run_definitions.PE_18.steps]]
+name = "evaluate_tabular_prior"
+script = "2_architecture_experiments/1_pipeline_experiments/run_tabular_prior.py"
+arguments = ["--workflow", "PE_18"]
+script_chain = "tabular_prior"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.tabular_prior]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_tabular_prior.py"]
+
+[tabular_prior_workflows.PE_18]
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+compact_feature_count = 64
+target_cap = 125.0
+control_predictions = "3_final_model_training_and_inference/runs/run_7/2_final_configuration_search/artifacts/final_search_oof_predictions.csv"
+control_candidate_number = 1
+control_inner_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_11/runs/run_1/reporting/method_predictions.csv.gz"
+control_inner_method = "residual_corrected"
+minimum_fold_wins = 4
+minimum_relative_rmse_improvement = 0.02
+blend_minimum_relative_rmse_improvement = 0.01
+challenger_weights = [0.0, 0.05, 0.10, 0.15, 0.25]
+
+[tabular_prior_workflows.PE_18.catboost]
+iterations = 600
+depth = 7
+learning_rate = 0.03
+l2_leaf_reg = 5.0
+seed = 13
+thread_count = 4
+
+[tabular_prior_workflows.PE_18.tabpfn]
+version = "8.5.0"
+checkpoint = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/checkpoints/tabpfn-v3-regressor-v3_default.ckpt"
+device = "auto"
+required = true

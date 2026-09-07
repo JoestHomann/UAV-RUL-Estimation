@@ -1,0 +1,58 @@
+[pipeline]
+experiment = "PE_14"
+run = "run_1"
+
+[run_definitions.PE_14]
+title = "Complete-pipeline validation and endpoint stress test"
+description = "Refit frozen Run 6 and Run 7 systems without held-out UAVs and evaluate fresh nominal and unrestricted-support scenarios."
+
+[[run_definitions.PE_14.steps]]
+name = "run_complete_validation"
+script = "2_architecture_experiments/1_pipeline_experiments/run_complete_pipeline_validation.py"
+arguments = ["--workflow", "PE_14"]
+script_chain = "complete_validation"
+status_artifact = "reporting/audit_manifest.json"
+supports_force = true
+
+[script_chains.complete_validation]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_complete_pipeline_validation.py"]
+
+[validation_audit_workflows.PE_14]
+train_csv = "data/train.csv"
+outer_folds = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+model_seed = 13
+outer_fold_count = 5
+split_seeds = [20260907, 20260917, 20260927]
+minimum_fold_wins = 12
+minimum_relative_rmse_improvement = 0.01
+
+[[validation_audit_workflows.PE_14.profiles]]
+name = "nominal"
+assignment = "bipartite"
+minimum_rul = 1
+maximum_rul = 125
+scenario_count = 3
+scenario_seed_offset = 101
+
+[[validation_audit_workflows.PE_14.profiles]]
+name = "unrestricted"
+assignment = "eligible_random"
+scenario_count = 3
+scenario_seed_offset = 202
+
+[validation_audit_workflows.PE_14.systems.run_6]
+family = "calibrated_tree_blend"
+specification = "3_final_model_training_and_inference/runs/run_6/1_winning_architecture_selection/artifacts/promoted_phase_2_specification.json"
+selected_candidates = "3_final_model_training_and_inference/runs/run_6/2_final_configuration_search/artifacts/final_search_candidate_results.csv"
+calibration_features_path = "1_dataset_construction/runs/PE_run_3/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz"
+calibration_internal_folds = 4
+calibration_degree = 2
+calibration_ridge_alpha = 10.0
+
+[validation_audit_workflows.PE_14.systems.run_7]
+family = "residual_corrected_tree_ensemble"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+selected_candidates = "3_final_model_training_and_inference/runs/run_7/2_final_configuration_search/artifacts/final_search_candidate_results.csv"

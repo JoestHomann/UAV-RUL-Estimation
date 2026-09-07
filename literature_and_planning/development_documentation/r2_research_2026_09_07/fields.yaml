@@ -1,0 +1,48 @@
+categories:
+  - name: scientific_question
+    fields:
+      - name: hypothesis
+        description: "Specific residual pattern or representation limitation addressed"
+        detail_level: detailed
+      - name: novelty_relative_to_existing_work
+        description: "Difference from PE_1 through PE_13 and prior architecture studies"
+        detail_level: detailed
+      - name: source_and_transfer_limit
+        description: "Primary source, date, relevant mechanism, and limits of applicability"
+        detail_level: moderate
+  - name: experimental_contract
+    fields:
+      - name: controls_and_treatments
+        description: "Frozen baseline and minimal comparison cells"
+        detail_level: detailed
+      - name: endpoint_information_contract
+        description: "Available prefix information, target-dependent sampling, and evaluation support"
+        detail_level: detailed
+      - name: independent_information_count
+        description: "Unique UAVs, distinct endpoints, duplicate weighting, and cluster uncertainty"
+        detail_level: moderate
+      - name: transformation_fit_scope
+        description: "Training partition for every selector, smoother, threshold, model and stack"
+        detail_level: detailed
+      - name: target_functional_and_cap_semantics
+        description: "Raw evaluation target, capped fitting target, mean/quantile distinction"
+        detail_level: moderate
+  - name: decision_and_reproducibility
+    fields:
+      - name: marginal_ensemble_utility
+        description: "Paired improvement of the full blend, beyond standalone model score"
+        detail_level: moderate
+      - name: promotion_and_stop_rules
+        description: "Predeclared gain, fold consistency, uncertainty, and bounded search"
+        detail_level: detailed
+      - name: budget_and_implementation
+        description: "Candidate budget, compute scale, and existing files to extend"
+        detail_level: moderate
+      - name: artifact_provenance
+        description: "Configuration/checkpoint versions, exact cutoffs and saved prediction source"
+        detail_level: moderate
+uncertain:
+  - "Private-test performance is unknown; Run 7 public R2 0.87652 is confirmed by user screenshot"
+  - "Hidden test target support and transfer of nominal development metrics"
+  - "Marginal gains of all proposed experiments"
+  - "Dataset identity relative to external RUL benchmarks is not established"

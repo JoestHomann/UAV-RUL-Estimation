@@ -265,6 +265,15 @@ EXPECTED_HYPERPARAMETERS: dict[str, set[str]] = {
     },
 }
 
+OPTIONAL_HYPERPARAMETERS: dict[str, set[str]] = {
+    "calibrated_tree_blend": {
+        "calibration_features_path",
+        "calibration_internal_folds",
+        "calibration_degree",
+        "calibration_ridge_alpha",
+    },
+}
+
 
 def load_experiment_specification(
     path: Path = DEFAULT_SPECIFICATION_PATH,
@@ -317,9 +326,10 @@ class ModelAdapterFactory:
     ) -> None:
         observed = set(hyperparameters)
         expected = EXPECTED_HYPERPARAMETERS[family]
-        if observed != expected:
+        allowed = expected | OPTIONAL_HYPERPARAMETERS.get(family, set())
+        if not expected.issubset(observed) or not observed.issubset(allowed):
             missing = sorted(expected - observed)
-            unexpected = sorted(observed - expected)
+            unexpected = sorted(observed - allowed)
             raise ModelAdapterError(
                 f"Resolved hyperparameters for {family!r} are invalid: "
                 f"missing={missing}, unexpected={unexpected}"

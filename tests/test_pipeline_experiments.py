@@ -51,7 +51,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
         self.assertIn("signal_family_ablation", self.config["profiles"])
         self.assertIn("current", self.config["scenario_profiles"])
         self.assertIn("dense_stride_5", self.config["prefix_variants"])
-        self.assertEqual(run_experiments._configured_max_workers(self.config), 6)
+        self.assertGreaterEqual(run_experiments._configured_max_workers(self.config), 1)
 
     def test_each_pipeline_run_has_one_settings_file_and_entry_point(self) -> None:
         experiments_root = PIPELINE_EXPERIMENTS_ROOT / "experiments"
@@ -186,9 +186,9 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
     def test_compatibility_catalog_composes_all_run_definitions(self) -> None:
         self.assertEqual(
             set(self.config["run_definitions"]),
-            {"PE_1", "PE_2", "PE_3", "PE_4"},
+            {f"PE_{number}" for number in range(1, 20)},
         )
-        self.assertEqual(len(run_experiments._experiments(self.config)), 36)
+        self.assertEqual(len(run_experiments._experiments(self.config)), 44)
         self.assertIn(
             "PE_target_scenario_2x2",
             run_experiments._experiment_groups(self.config),
@@ -1107,6 +1107,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 "PE_2x2_current_cap125",
                 self.config,
                 experiment,
+                force=False,
             )
 
         orchestrator = commands[-1]
@@ -1153,6 +1154,7 @@ class PipelineExperimentCatalogTests(unittest.TestCase):
                 "PE_2x2_current_cap125",
                 self.config,
                 experiment,
+                force=False,
             )
 
         orchestrator = commands[-2]

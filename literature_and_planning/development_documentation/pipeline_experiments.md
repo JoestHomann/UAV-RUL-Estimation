@@ -643,7 +643,7 @@ it was not independently selected and is not promoted from this run.
 
 PE_11, Run 9, PE_12, and PE_13 are complete. PE_11 is the only promoted
 accuracy treatment, PE_12 confirms it under test-like weighting, and PE_13's
-safety overlay is rejected. The next execution is Phase 3 Run 7:
+safety overlay is rejected. Phase 3 Run 7 is also complete; its entry point is:
 
 ```powershell
 & .\.venv\Scripts\python.exe `
@@ -652,5 +652,72 @@ safety overlay is rejected. The next execution is Phase 3 Run 7:
 
 This fits the residual correction from internally cross-fitted predictions,
 refits all six tree members on the available training side, verifies the final
-submission, and writes the Run 7 report. Its Kaggle score is the next external
-confirmation; no remaining implemented experiment needs to precede it.
+submission, and writes the Run 7 report. User-supplied Kaggle screenshots,
+recorded on 7 September 2026, confirm Run 7 public R2 **0.87652**, compared
+with Run 6 **0.86741**. This is a gain of 0.00911 R2, equivalent to 6.87%
+lower MSE or 3.50% lower RMSE on the same public target set. Reaching 0.9
+from Run 7 requires a further 19.02% MSE reduction, or 10.01% RMSE reduction.
+
+The [score record](r2_research_2026_09_07/kaggle_scores.csv) transcribes the
+supplied submissions. The [updated research plan](r2_research_2026_09_07/report.md)
+defines PE_14–PE_19. All six are implemented as experiment-owned, resumable
+workflows. PE_15 and PE_17 have completed their saved-prediction screens;
+PE_14, PE_16, PE_18, and PE_19 are ready for their larger refit runs.
+
+### PE_14: multi-seed complete-pipeline audit
+
+PE_14 creates three independent five-fold UAV partitions, regenerates nominal
+and unrestricted test-cutoff scenarios, and refits Run 6 and Run 7 on each
+training side. Run 6 uses a newly supported fold-local polynomial ridge
+calibrator based on inner OOF component predictions; Run 7 uses its internally
+cross-fitted residual head. Frozen model choices are reused, and the report
+states that it does not estimate workflow-selection uncertainty.
+
+### PE_15: causal filtering and forecast history
+
+PE_15 is complete as a screening experiment. The strictly earlier
+forecast-history recipe reduced mean RMSE from **11.0243 to 9.5916**
+(**13.0%**) and won all five folds. Its UAV-bootstrap paired RMSE-delta
+interval was **-1.94 to -0.95 cycles**. Sensor filtering alone regressed;
+sensor-plus-history recipes improved but did not beat history alone. The
+manifest labels this `screening_only`, so this result cannot automatically
+promote a production model.
+
+### PE_16: residual regularization and coverage
+
+PE_16 declares eight checkpointed full outer-refit cells: zero/half/full
+correction, ridge and histogram-gradient heads, fixed-coverage regularization,
+inverse-duplicate weighting for the existing five-scenario table, and twenty
+distinct calibration cutoffs per UAV inside `1 <= RUL <= 125`. All calibration
+data is filtered to the active training UAVs and weighted equally by UAV.
+
+### PE_17: population degradation features
+
+PE_17 is complete and rejected. The histogram-gradient population model
+worsened mean RMSE by **2.5%** and the ridge version by **11.8%**. Fold-local
+terminal references and prefix-only query features passed their leakage
+checks, but neither candidate met the accuracy gate.
+
+### PE_18: pinned tabular prior
+
+PE_18 implements nested outer/inner comparisons for CatBoost and pinned local
+TabPFN 8.5.0 on full and fold-selected compact features. Direct models require
+a 2% RMSE gain; small blends require 1%, with weights chosen from inner OOF
+rows only. The runner checks the exact package and local checkpoint before
+training.
+
+### PE_19: marginal temporal ensemble
+
+PE_19 refits the selected LSTM and TCN configuration for each outer fold using
+fixed retraining epochs. Each 0-15% blend weight is chosen from that fold's
+training-UAV inner OOF predictions before one evaluation on the held UAVs.
+Zero weight is always eligible.
+
+Inspect or launch any new experiment with:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_14\run.py --list
+```
+
+Replace `PE_14` with `PE_15` through `PE_19`; remove `--list` to execute.
