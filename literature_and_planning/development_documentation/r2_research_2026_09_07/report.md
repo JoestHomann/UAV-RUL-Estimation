@@ -2,9 +2,9 @@
 
 Research date: 7 September 2026. Scope confirmed by the user: unseen-UAV Kaggle performance, building on PE_1–PE_13, with literature from any year.
 
-**Recommendation.** Keep the Run 7 residual-corrected tree ensemble as the main candidate. First verify its complete evaluation procedure, then test causal filtering, stronger residual estimation, and population-informed degradation features. Run one bounded pretrained-tabular-model comparison. Treat existing neural models as possible small ensemble contributors. Another broad CNN/LSTM/TCN search is poorly supported by this project's results.
+**Recommendation.** Carry the promoted Run 7 plus full-feature TabPFN blend into multi-seed confirmation, and give highest priority to a complete outer refit of PE_15's forecast-history candidate. The TabPFN gain is too small to close the Kaggle gap by itself; forecast history is the only completed screen with a large enough effect to do so if it survives nested evaluation. Do not expand the failed population, residual-coverage, compact-feature, or broad neural searches.
 
-Implementation update, 7 September 2026: PE_14–PE_19 are now registered as runnable, experiment-owned workflows. PE_15 and PE_17 completed their inexpensive saved-prediction screens; PE_14, PE_16, PE_18, and PE_19 are checkpointed larger refit jobs and have not been executed. No new locked evaluation was opened and no Kaggle submission was made. The earlier September 1 strategy and implementation plan are historical: several of their proposed experiments have now failed, and Phase 3 Run 7 is already complete.
+Implementation update, 7 September 2026: PE_14–PE_19 are complete as experiment-owned workflows. PE_18 promoted a small full-feature TabPFN blend; PE_15 produced a larger forecast-history screening candidate that still needs complete nested outer refitting. No new locked evaluation was opened and no Kaggle submission was made. The earlier September 1 strategy and implementation plan are historical: several of their proposed experiments have now failed, and Phase 3 Run 7 is already complete.
 
 **Where the project actually stands**
 
@@ -13,6 +13,8 @@ Implementation update, 7 September 2026: PE_14–PE_19 are now registered as run
 | Phase 3 Run 6, mean development fold | 0.89274 | 10.6332 | Previous production configuration |
 | Phase 3 Run 7, mean development fold | **0.90041** | **10.2361** | Current residual-corrected ensemble |
 | Run 7, pooled 500 development predictions | **0.90446** | **10.2929** | Recomputed from saved predictions |
+| PE_18 Run 7 + full TabPFN blend, mean development fold | **0.90258** | **10.1035** | Promoted by the declared 1%/4-of-5 practical gate |
+| PE_18 Run 7 + full TabPFN blend, pooled development predictions | **0.90668** | **10.1725** | Small complementary gain; bootstrap interval crosses zero |
 | Run 7, conditional UAV-bootstrap 95% interval | **0.87779–0.92772** | 9.0679–11.4521 | Uncertainty in fixed predictions, excluding training/selection uncertainty |
 | Run 6 Kaggle public score | **0.86741** | Unknown | Confirmed by user-supplied screenshot |
 | Run 7 Kaggle public score | **0.87652** | Unknown | Best score in the supplied screenshots; +0.00911 versus Run 6 |
@@ -58,7 +60,7 @@ IDs PE_14–PE_19 below are implemented. Their numerical gates remain prospectiv
 | **PE_15: screening complete** | Existing features versus filtered sensor level/rate features versus previous-prediction features; combine only after independent tests | Five recipes completed | Forecast history improved mean RMSE 13.0% with 5/5 wins; requires complete outer confirmation |
 | **PE_16: complete, no promotion** | Regularized HGB improved mean RMSE 0.63% with 4/5 wins; all other residual/coverage variants were weaker | Completed 8 recipes | Missed the 1% gate and bootstrap interval crossed zero |
 | **PE_17: screening complete, rejected** | Current ensemble versus added per-sensor terminal-distance/rate and partially pooled health-trajectory features | Two recipes completed | Both regressed; control retained |
-| **PE_18: implemented, dependency pending** | Current ensemble versus pinned local TabPFN-3 regression on full/compact current features; refreshed CatBoost control | Four direct cells plus nested small blends | ≥2% standalone gain or ≥1% complete-blend gain |
+| **PE_18: complete, promoted for confirmation** | Full-feature TabPFN blend reached pooled R² 0.9067 and improved mean RMSE 1.30% with 4/5 wins; standalone and compact models were weaker | Completed 4 direct cells plus nested small blends | Passed the practical gate; bootstrap interval crossed zero, so confirm on new grouped splits |
 | **PE_19: complete, no promotion** | TCN blend reached pooled R² 0.9062 but improved mean RMSE only 0.76% with 3/5 wins; LSTM regressed | Completed 2 temporal challengers | Tree control retained |
 
 The numerical gates are proposed practical thresholds, not literature guarantees. Use the same five held-out UAV groups and the same endpoints within every paired comparison. Confirm selected recipes over two additional grouped split seeds. Four wins out of five is a screening heuristic, not a significance test.
@@ -150,11 +152,11 @@ These weights were fitted and scored on the same reused development labels. They
 6. Combine only independently supported changes and re-evaluate the full combination. Seek a meaningful development margin above 0.9, for example around 0.92 under the fixed nominal profile, while treating that as a planning margin rather than a calibrated predictor of Kaggle performance. Do not force a lower confidence bound above 0.9 by repeated selection on the same data.
 7. Freeze the final procedure before any genuinely held-back confirmation. Previously examined locked artifacts are historical evidence, not a reusable fresh holdout. Kaggle public feedback must not become the inner optimization loop.
 
-**Execution status:** PE_14–PE_17 and PE_19 are complete. PE_18 is the remaining
-declared experiment now that its pinned local dependency is available. PE_15's
-forecast-history candidate still requires complete outer confirmation before a
-final combination. Run 7's public result is confirmed; no duplicate submission
-is needed.
+**Execution status:** PE_14–PE_19 are complete. PE_18's full-feature TabPFN
+blend passed the declared promotion gate, but its small gain and bootstrap
+interval require multi-seed confirmation. PE_15's forecast-history candidate
+still requires complete outer confirmation before a final combination. Run 7's
+public result is confirmed; no duplicate submission is needed.
 
 **Reproduce this report's new calculations**
 

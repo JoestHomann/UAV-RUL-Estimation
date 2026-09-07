@@ -661,7 +661,7 @@ from Run 7 requires a further 19.02% MSE reduction, or 10.01% RMSE reduction.
 The [score record](r2_research_2026_09_07/kaggle_scores.csv) transcribes the
 supplied submissions. The [updated research plan](r2_research_2026_09_07/report.md)
 defines PE_14–PE_19. All six are implemented as experiment-owned, resumable
-workflows. PE_14–PE_17 and PE_19 are complete; PE_18 remains to run.
+workflows and all six are complete.
 
 ### PE_14: multi-seed complete-pipeline audit
 
@@ -715,6 +715,14 @@ TabPFN 8.5.0 on full and fold-selected compact features. Direct models require
 a 2% RMSE gain; small blends require 1%, with weights chosen from inner OOF
 rows only. The runner checks the exact package and local checkpoint before
 training.
+
+The full-feature TabPFN blend passed the declared promotion gate. It reached
+mean-fold R² **0.9026**, pooled R² **0.9067**, and mean RMSE **10.1035**, a
+**1.30%** improvement with 4/5 fold wins. Its fold-selected TabPFN weights were
+5–25%. The full-feature CatBoost blend had a slightly better point estimate
+(pooled R² **0.9068**, 1.38% mean-RMSE gain) but only 3/5 fold wins. Both paired
+bootstrap intervals crossed zero. Standalone TabPFN, standalone CatBoost, and
+the compact-feature variants were weaker than the Run 7 control.
 
 ### PE_19: marginal temporal ensemble
 
