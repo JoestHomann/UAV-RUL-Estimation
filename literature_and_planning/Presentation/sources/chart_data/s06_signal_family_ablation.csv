@@ -1,0 +1,7 @@
+experiment,added_signal_family,xgboost_r2,extratrees_r2,xgboost_delta_r2,extratrees_delta_r2,fold_wins_note
+PE_signal_control,none (age + latest value of every nonconstant channel),0.6081,0.5779,0.0000,0.0000,control
+PE_signal_family_07,channel 07 discrete state,,,,,unsupported: XGBoost lost all folds; ExtraTrees negligible
+PE_signal_family_19_21,rising redundant pair 19/21,,,,,supported: R2 improved in 5/5 folds for both models
+PE_signal_family_13_16_22_25_28,shared five-channel axis,,,,,supported: R2 improved in 5/5 folds for both models
+PE_signal_family_15_23,inverse pair 15/23,,,0.1198,0.1237,strongest single family
+PE_signal_all_families,all four families,,,0.1731,0.1764,retained: 5/5 folds for both models

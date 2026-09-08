@@ -1,0 +1,8 @@
+scope,label,r2,rmse,aggregation,source
+development,Run 6 mean-fold,0.8927378441822137,10.6331657880198,mean over 5 development folds,run_6/7_post_run_reporting/report_summary.json
+development,Run 7 mean-fold,0.9004055024925343,10.23610087362707,mean over 5 development folds,run_7/7_post_run_reporting/report_summary.json
+development,Run 7 pooled,0.9044607760862742,10.29293150690605,pooled over 500 development rows,r2_research_2026_09_07/diagnostic_summary.json
+public,Run 4,0.84513,,Kaggle public leaderboard (30% of test),kaggle_scores.csv
+public,Run 5,0.86525,,Kaggle public leaderboard (30% of test),kaggle_scores.csv
+public,Run 6,0.86741,,Kaggle public leaderboard (30% of test),kaggle_scores.csv
+public,Run 7,0.87652,,Kaggle public leaderboard (30% of test),kaggle_scores.csv

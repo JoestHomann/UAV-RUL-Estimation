@@ -1,0 +1,6 @@
+sequence,stage,experiment,control_mean_rmse,candidate_mean_rmse,relative_rmse_improvement,fold_wins,folds,bootstrap_rmse_delta_low,bootstrap_rmse_delta_high,evaluation_scope,promoted
+forecast_history,screen,PE_15,11.024273821414628,9.591620243048814,0.1299544624502058,5,5,-1.9444454772420106,-0.9459333050588176,screening on saved predictions,no
+forecast_history,confirmation,PE_20,10.23610087362707,10.396223299658043,-0.01564291208222878,2,5,0.016162115583169847,0.30975825797711887,complete nested refit,no
+small_blend,screen,PE_18,10.23610087362707,10.103460866079816,0.012958,4,5,,,complete outer evaluation on five folds,gate passed for confirmation
+small_blend,confirmation_2seeds,PE_21,10.784833806249647,10.664013496482493,0.011203,6,10,,,two new grouped split seeds,no
+small_blend,confirmation_3seeds_regime,PE_24,10.310638294518352,10.11513731354867,0.018961,11,15,-0.5137,0.0862,three new grouped split seeds with pre-registered gate,no

@@ -1,0 +1,9 @@
+cell,scenario_profile,fitting_target,model,inner_rmse_mean,fold_sd,inner_r2_mean,bias,overprediction_rate,evaluated_target_support
+PE_1,current,raw,XGBoost,29.8059,1.7513,0.7708,5.2165,0.6735,raw endpoint RUL
+PE_1,current,raw,ExtraTrees,32.7578,2.6545,0.7264,4.4906,0.6600,raw endpoint RUL
+PE_2x2_current_cap125,current,cap 125,XGBoost,36.2141,2.5645,0.6690,-10.8488,0.4670,raw endpoint RUL
+PE_2x2_current_cap125,current,cap 125,ExtraTrees,37.1100,2.5884,0.6525,-10.7370,0.5095,raw endpoint RUL
+PE_2x2_early_raw,early/middle,raw,XGBoost,23.3667,1.5326,0.4867,11.4973,0.7135,RUL restricted to 1-125
+PE_2x2_early_raw,early/middle,raw,ExtraTrees,26.6406,2.9202,0.2703,10.6021,0.6760,RUL restricted to 1-125
+PE_2x2_early_cap125,early/middle,cap 125,XGBoost,11.9746,0.9418,0.8661,-0.9007,0.4730,RUL restricted to 1-125
+PE_2x2_early_cap125,early/middle,cap 125,ExtraTrees,12.2693,0.8427,0.8598,-1.0864,0.4715,RUL restricted to 1-125

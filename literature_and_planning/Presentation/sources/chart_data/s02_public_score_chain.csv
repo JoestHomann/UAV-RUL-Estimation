@@ -1,0 +1,6 @@
+submission,public_r2,decision,development_experiment,delta_vs_previous,source
+Run 3,0.54136,"XGBoost on raw RUL with the current validation scenarios",Phase 2 run 3 winner,,kaggle_scores.csv
+Run 4,0.84513,"bounded validation scenarios plus fitting cap 125",PE_2 target/scenario 2x2,0.30377,kaggle_scores.csv
+Run 5,0.86525,"drift-pruned 298 features plus calibrated 50/50 tree blend",PE_3 feature union and ensemble,0.02012,kaggle_scores.csv
+Run 6,0.86741,"conditional conservative calibration at q = 0.55",PE_4 and PE_5,0.00216,kaggle_scores.csv
+Run 7,0.87652,"cross-fitted residual correction on six seeded tree members",PE_11,0.00911,kaggle_scores.csv

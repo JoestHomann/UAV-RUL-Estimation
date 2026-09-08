@@ -1,0 +1,17 @@
+study,protocol,model_family,seeds,mean_rmse,mean_r2,fold_wins_vs_control,shown_in_main_deck
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",mean_baseline,1,73.6023,-0.3066,,yes
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",xgboost,3,28.4989,0.8041,,yes
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",random_forest,3,30.0138,0.7827,,yes
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",extra_trees,3,31.2779,0.7640,,no
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",trajectory_dtw_knn,1,45.2239,0.5067,,no
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",sensor_graph_tcn,3,48.2278,0.4294,,yes
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",multiscale_cnn,3,51.4209,0.3607,,yes
+locked_architecture_run5,"Locked comparison: current scenarios, raw RUL target, 20 locked scenarios x 100 UAVs",tcn,3,111.2088,-2.4231,,no
+hybrid_study_run8,"Hybrid study: early/middle scenarios, cap-125 fitting target, hybrids also receive all 298 engineered features",current_tree_blend,,11.5080,0.8795,,yes
+hybrid_study_run8,"Hybrid study: early/middle scenarios, cap-125 fitting target, hybrids also receive all 298 engineered features",xgboost,,12.9563,0.8477,0,yes
+hybrid_study_run8,"Hybrid study: early/middle scenarios, cap-125 fitting target, hybrids also receive all 298 engineered features",hybrid_gru,,14.6185,0.8059,0,yes
+hybrid_study_run8,"Hybrid study: early/middle scenarios, cap-125 fitting target, hybrids also receive all 298 engineered features",hybrid_cnn,,17.6705,0.7151,0,yes
+temporal_study_run7,"Dedicated temporal study: frozen PE_6 dense sampling policy, lookback 20; separate endpoints and protocol",lstm,,19.5698,0.6531,,backup only
+temporal_study_run7,"Dedicated temporal study: frozen PE_6 dense sampling policy, lookback 20; separate endpoints and protocol",gru,,19.8324,0.6424,,backup only
+temporal_study_run7,"Dedicated temporal study: frozen PE_6 dense sampling policy, lookback 20; separate endpoints and protocol",tcn,,21.0841,0.5969,,backup only
+temporal_study_run7,"Dedicated temporal study: frozen PE_6 dense sampling policy, lookback 20; separate endpoints and protocol",multiscale_cnn,,22.7117,0.5325,,backup only
