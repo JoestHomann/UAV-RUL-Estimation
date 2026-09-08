@@ -449,6 +449,18 @@ UAV-bootstrap interval. These splits reuse the development UAV population.
   .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_27\run.py
 ```
 
+[PE_28](experiments/PE_28/README.md) compares ten fixed feature sets with both
+Run 7 and an XGBoost/CatBoost recipe. Every configuration uses matching training
+prefixes, UAV weights and raw evaluation labels. The five-fold screen evaluates
+all twenty configurations; one passing challenger is frozen for confirmation on
+two separate split seeds. There are 100 screen recipe evaluations and at most
+20 confirmation evaluations, with atomic checkpoints per completed evaluation.
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_28\run.py
+```
+
 ## Configuration ownership
 
 Standalone Phase 2 runs use

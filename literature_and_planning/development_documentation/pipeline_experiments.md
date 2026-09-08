@@ -853,3 +853,36 @@ simulated workflow with zero-refit resume, and 81 existing experiment tests pass
 See [PE_27](../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_27/README.md)
 for the run command and registered settings. No production replacement or Kaggle
 submission is performed by this experiment.
+
+### PE_28: ten feature representations crossed with two model recipes
+
+PE_28 implements the agreed twenty-configuration comparison: the existing
+298-feature set, the alternative script's 266 features, and controlled variations
+in sensor coverage, window lengths, baseline averaging, summary complexity and
+recent slopes. Feature counts range from 50 to 310. Each is evaluated with
+Run 7 and an XGBoost/CatBoost blend on matching prefixes, equal UAV weights,
+cap-125 fitting targets and raw development labels.
+
+All 100 screening recipe evaluations use grouped seed 20270107. A 2% mean-RMSE
+gain and 4/5 wins are required to advance. One passing configuration is frozen
+by lowest mean RMSE (ties: feature count, then name). Only it and unchanged
+Run 7 enter ten confirmation folds using seeds 20270117/20270127, requiring
+2% improvement, 8/10 wins, pooled R² at least 0.90 and a wholly favorable
+UAV-bootstrap interval. These splits reuse the development UAV population.
+
+Run 7's residual calibration uses each variant's own features. The alternative
+recipe keeps early-stopping UAVs separate from internal OOF UAVs, selects blend
+weight from raw-label training-side calibration, and refits on every outer-training
+UAV. Completed recipe evaluations are saved in atomic checksummed cells.
+Reports include 32 predefined matched contrasts, runtime and regional errors.
+
+Implementation validation passed 16 new tests and 92 existing experiment tests,
+including small real fits of both recipes, causal feature checks against the
+reference implementation, and interrupted/full-run resume checks. Two worker
+processes now evaluate independent configuration/fold cells concurrently, with
+bounded dispatch and stage decisions retained in the main process. A real Windows
+spawn test matched serial predictions and reused completed cells without starting
+workers; it ran outside the sandbox because the sandbox blocks multiprocessing
+named pipes. Full scientific
+training remains pending. See [PE_28](../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/README.md)
+for commands, settings, workload and output locations.

@@ -1,0 +1,78 @@
+[pipeline]
+experiment = "PE_28"
+run = "run_1"
+
+[run_definitions.PE_28]
+title = "Ten feature sets crossed with Run 7 and XGBoost-CatBoost"
+description = "Screen twenty matched configurations, then confirm one frozen challenger against unchanged Run 7 on separate grouped splits."
+
+[[run_definitions.PE_28.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_feature_comparison.py"
+arguments = ["--workflow", "PE_28", "--check"]
+script_chain = "feature_comparison"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_28.steps]]
+name = "evaluate_feature_comparison"
+script = "2_architecture_experiments/1_pipeline_experiments/run_feature_comparison.py"
+arguments = ["--workflow", "PE_28"]
+script_chain = "feature_comparison"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.feature_comparison]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_feature_comparison.py"]
+
+[feature_comparison_workflows.PE_28]
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+history_summary = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+raw_training = "data/train.csv"
+reference_implementation = "other_pipelines/uav_rul_pipeline_v4 (1).py"
+feature_sets = ["A_current", "B_other", "C_other_14", "D_long_windows", "E_compact_22", "F_baseline_10", "G_all_windows", "H_compact_14", "I_four_sensors", "J_recent_slopes"]
+recipes = ["run7", "xgb_cat"]
+screen_split_seed = 20270107
+confirmation_split_seeds = [20270117, 20270127]
+outer_fold_count = 5
+inner_fold_count = 4
+model_seed = 13
+target_cap = 125.0
+cpu_threads = 4
+max_workers = 2
+screen_minimum_fold_wins = 4
+screen_minimum_relative_rmse_improvement = 0.02
+confirmation_minimum_fold_wins = 8
+confirmation_minimum_relative_rmse_improvement = 0.02
+confirmation_minimum_pooled_r2 = 0.90
+
+[feature_comparison_workflows.PE_28.simple]
+early_stopping_rounds = 100
+stopping_fraction = 0.20
+selection_seed = 20270101
+blend_weights = [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
+
+[feature_comparison_workflows.PE_28.simple.xgboost]
+n_estimators = 3000
+max_depth = 5
+learning_rate = 0.015
+subsample = 0.8
+colsample_bytree = 0.8
+reg_lambda = 1.0
+random_state = 0
+n_jobs = 1
+device = "auto"
+
+[feature_comparison_workflows.PE_28.simple.catboost]
+iterations = 3000
+depth = 6
+learning_rate = 0.02
+l2_leaf_reg = 3.0
+subsample = 0.8
+random_seed = 0
+thread_count = 4
+verbose = false
+allow_writing_files = false
+loss_function = "RMSE"
