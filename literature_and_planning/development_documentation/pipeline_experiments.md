@@ -827,6 +827,29 @@ changes Run 7, accesses locked data or produces an automatic Kaggle submission.
 PE_25 Run 1 completed during implementation verification: mean RMSE 10.1143
 versus control 10.3106 (1.904% improvement), pooled R² 0.90674, 10/15 fold wins,
 and bootstrap interval [-0.4695, +0.0307]. It did not pass the screening gate.
-PE_26 passed input verification for all 75 jobs; the full scientific training
-run remains pending. Eighteen new isolation/routing/resume tests, a real small
-specialist fit, and 63 existing experiment tests passed.
+PE_26 completed all 150 model fits without promotion. The combined specialist
+improved mean RMSE by only 0.389%, with 6/15 fold wins and pooled R² 0.89924.
+Run 7 remains retained.
+
+### PE_27: UAV-subset ensemble
+
+PE_27 is implemented and input-verified; scientific training remains pending.
+It compares unchanged Run 7 with uniform averages of models trained on distinct
+64-UAV subsets of each 80-UAV outer training partition. Sampling is without
+replacement and preserves all selected UAV prefixes and their original weights.
+Each member's residual calibration stays inside its own training UAVs.
+
+The four-member screen uses seed 20261207 and requires 2% mean-fold RMSE
+improvement with 4/5 wins. Passing allows four additional members on the same
+folds, with the same gate. Only then are eight members evaluated on seeds
+20261217 and 20261227; promotion requires 2% improvement, 8/10 wins, pooled R²
+at least 0.90 and a UAV-bootstrap RMSE-change interval wholly below zero.
+Confirmation reports exclude the screen, but still reuse previously examined
+UAVs. The initial budget is 25 complete Run 7 fits; the maximum is 135.
+
+Atomic checkpoints validate endpoint identity, labels, and training/calibration
+membership before reuse. Eleven new tests, including stage gating and a complete
+simulated workflow with zero-refit resume, and 81 existing experiment tests passed.
+See [PE_27](../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_27/README.md)
+for the run command and registered settings. No production replacement or Kaggle
+submission is performed by this experiment.

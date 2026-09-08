@@ -1,0 +1,47 @@
+[pipeline]
+experiment = "PE_27"
+run = "run_1"
+
+[run_definitions.PE_27]
+title = "UAV-subset ensemble with gated four-to-eight expansion"
+description = "Keep Run 7 fixed; average models fitted on different whole-UAV subsets, screen four then eight members, and confirm only on separate split seeds."
+
+[[run_definitions.PE_27.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_uav_subset_ensemble.py"
+arguments = ["--workflow", "PE_27", "--check"]
+script_chain = "uav_subset_ensemble"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_27.steps]]
+name = "evaluate_subset_ensemble"
+script = "2_architecture_experiments/1_pipeline_experiments/run_uav_subset_ensemble.py"
+arguments = ["--workflow", "PE_27"]
+script_chain = "uav_subset_ensemble"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.uav_subset_ensemble]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_uav_subset_ensemble.py"]
+
+[uav_subset_workflows.PE_27]
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+history_summary = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+screen_split_seed = 20261207
+confirmation_split_seeds = [20261217, 20261227]
+outer_fold_count = 5
+inner_fold_count = 4
+model_seed = 13
+target_cap = 125.0
+subset_fraction = 0.80
+subset_seed = 20261201
+screen_members = 4
+expanded_members = 8
+screen_minimum_fold_wins = 4
+screen_minimum_relative_rmse_improvement = 0.02
+confirmation_minimum_fold_wins = 8
+confirmation_minimum_relative_rmse_improvement = 0.02
+confirmation_minimum_pooled_r2 = 0.90

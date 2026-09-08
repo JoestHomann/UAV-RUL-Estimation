@@ -435,6 +435,20 @@ Both have a `validate_inputs` step, a co-located `settings.toml`, and the usual
 does not depend on PE_25 passing. Neither experiment changes the deployed model
 or opens locked evaluation.
 
+[PE_27](experiments/PE_27/README.md) tests uniform averaging of unchanged Run 7
+models trained on different whole-UAV subsets: 64 of the 80 outer-training UAVs
+per member. A four-member screen costs 25 complete model fits. Passing its
+2% RMSE / 4-of-5-win gate allows expansion to eight members, then confirmation
+on two separate split seeds. The maximum is 135 fits; completed fits resume
+from validated checkpoints. Confirmation alone can promote a candidate, requiring
+2% RMSE improvement, 8/10 wins, pooled R² at least 0.90 and a favorable
+UAV-bootstrap interval. These splits reuse the development UAV population.
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_27\run.py
+```
+
 ## Configuration ownership
 
 Standalone Phase 2 runs use

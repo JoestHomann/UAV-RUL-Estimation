@@ -31,4 +31,5 @@ include = [
     "experiments/PE_24/settings.toml",
     "experiments/PE_25/settings.toml",
     "experiments/PE_26/settings.toml",
+    "experiments/PE_27/settings.toml",
 ]

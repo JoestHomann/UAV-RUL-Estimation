@@ -35,6 +35,7 @@ PIPELINE_OWNED_TABLES = (
     "regime_tabpfn_workflows",
     "restricted_tabpfn_workflows",
     "short_history_workflows",
+    "uav_subset_workflows",
 )
 
 

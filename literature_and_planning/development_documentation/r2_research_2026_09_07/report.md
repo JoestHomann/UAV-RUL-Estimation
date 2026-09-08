@@ -2,9 +2,9 @@
 
 Research date: 7 September 2026. Scope confirmed by the user: unseen-UAV Kaggle performance, building on PE_1–PE_13, with literature from any year.
 
-**Recommendation.** Retain Run 7 as the validated control and reject the current forecast-history implementation. Test whether the small TabPFN gain can be concentrated with one shallow inference-time regime gate; global blending is too small to close the Kaggle gap. Do not expand the failed population, residual-coverage, compact-feature, or broad neural searches.
+**Current next experiment.** Retain Run 7 and test averaging its predictions across models trained on different whole-UAV subsets in PE_27. The experiment screens four members before expanding to eight and requires separate split-seed confirmation. It is implemented and input-verified; full training is pending. See [PE_27](../../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_27/README.md) for the frozen design. The research proposals below retain their historical context.
 
-Implementation update, 8 September 2026: PE_20 rejected forecast history after a complete nested refit. PE_21 reproduced a roughly 1.1% global TabPFN blend gain on two new seeds, but it missed the fold-win gate and its bootstrap interval included zero. The gate therefore skipped PE_22 and PE_23, and no Kaggle submission was made. PE_24 now implements a pre-registered three-seed nested test of one shallow regime-aware TabPFN gate.
+Implementation update, 8 September 2026: PE_20 rejected forecast history after a complete nested refit. PE_21 reproduced a roughly 1.1% global TabPFN blend gain on two new seeds, but it missed the fold-win gate and its bootstrap interval included zero. The gate therefore skipped PE_22 and PE_23, and no Kaggle submission was made. PE_24 and PE_25 subsequently missed their gates with roughly 1.9% RMSE improvements. PE_26 completed all 150 fits: the short-history combination improved mean RMSE by only 0.389%, with 6/15 wins and pooled R² 0.89924. None replaced Run 7.
 
 **Where the project actually stands**
 
