@@ -155,8 +155,14 @@ These weights were fitted and scored on the same reused development labels. They
 **Execution status:** PE_14–PE_21 are complete. PE_20 retained the control after
 history increased mean RMSE by 1.56%. PE_21 also retained the control: the global
 TabPFN blend improved mean RMSE by 1.12% but won 6/10 folds. PE_22 and PE_23 were
-gated off. PE_24 is implemented and pending; it tests the regime-aware blend on
-three fresh seeds without using locked evaluation data or test labels.
+gated off. PE_24 completed without promotion: mean RMSE improved 1.896%, with
+11/15 fold wins and a UAV-bootstrap interval [-0.5137, +0.0862]. PE_25 now
+implements an exploratory restricted TabPFN rule on the saved nested predictions.
+PE_26 implements an independent, nested short-history specialist comparison.
+Both keep Run 7 as the production control and avoid locked data and test labels.
+PE_25 Run 1 completed without passing its screening gate (1.904% mean-RMSE
+improvement, 10/15 fold wins, bootstrap interval spanning zero). PE_26 passed
+all input checks and is ready for its full training run.
 
 **Reproduce this report's new calculations**
 

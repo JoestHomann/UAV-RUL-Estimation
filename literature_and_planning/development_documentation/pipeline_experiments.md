@@ -798,3 +798,35 @@ resume all 75 evaluation jobs with:
 & .\.venv\Scripts\python.exe `
   .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_24\run.py
 ```
+
+Run 1 completed without promotion: control mean RMSE 10.3106 versus regime
+10.1151 (1.896% improvement), pooled R² 0.90660, 11/15 fold wins, and a
+UAV-bootstrap RMSE-change interval [-0.5137, +0.0862]. Run 7 remains retained.
+
+### PE_25 and PE_26: restricted blending and short-history specialization
+
+PE_25 uses PE_24's saved nested predictions. Each outer fold's inner OOF rows
+choose TabPFN weight `{0, 0.10, 0.25, 0.50}` and maximum control-predicted RUL
+`{50, 75, 100}`. Above that cutoff, prediction equals Run 7. A passing practical
+gate is explicitly screening only because the hypothesis came from PE_24.
+No model training is required. See [PE_25](../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_25/README.md).
+
+PE_26 independently refits the unchanged Run 7 recipe and a specialist whose
+training prefixes and residual calibration endpoints have cutoff at most 100.
+It restores equal total training weight per UAV after filtering. Three new
+grouped seeds provide 15 outer and 60 inner evaluation jobs. Inner OOF selection
+chooses specialist weight `{0, 0.25, 0.50, 1}`; longer histories always return
+Run 7. Only the full combination can promote, at 2% mean-RMSE improvement,
+12/15 wins, pooled R² 0.90, and a bootstrap interval wholly below zero. See
+[PE_26](../../2_architecture_experiments/1_pipeline_experiments/experiments/PE_26/README.md).
+
+Both experiments have independent settings, input verification, source/code
+registration and run-owned reports. PE_26 checkpoints each model fit. Neither
+changes Run 7, accesses locked data or produces an automatic Kaggle submission.
+
+PE_25 Run 1 completed during implementation verification: mean RMSE 10.1143
+versus control 10.3106 (1.904% improvement), pooled R² 0.90674, 10/15 fold wins,
+and bootstrap interval [-0.4695, +0.0307]. It did not pass the screening gate.
+PE_26 passed input verification for all 75 jobs; the full scientific training
+run remains pending. Eighteen new isolation/routing/resume tests, a real small
+specialist fit, and 63 existing experiment tests passed.

@@ -1,0 +1,42 @@
+[pipeline]
+experiment = "PE_26"
+run = "run_1"
+
+[run_definitions.PE_26]
+title = "Nested short-history specialist comparison"
+description = "Compare Run 7 with its unchanged tree/residual recipe trained on prefixes of at most 100 cycles, and choose specialist shrinkage inside each outer training partition."
+
+[[run_definitions.PE_26.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_short_history_specialist.py"
+arguments = ["--workflow", "PE_26", "--check"]
+script_chain = "short_history_specialist"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_26.steps]]
+name = "evaluate_specialist"
+script = "2_architecture_experiments/1_pipeline_experiments/run_short_history_specialist.py"
+arguments = ["--workflow", "PE_26"]
+script_chain = "short_history_specialist"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.short_history_specialist]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_short_history_specialist.py"]
+
+[short_history_workflows.PE_26]
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+history_summary = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+split_seeds = [20261107, 20261117, 20261127]
+outer_fold_count = 5
+inner_fold_count = 4
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+model_seed = 13
+target_cap = 125.0
+maximum_history = 100.0
+specialist_weights = [0.0, 0.25, 0.50, 1.0]
+minimum_fold_wins = 12
+minimum_relative_rmse_improvement = 0.02
+minimum_pooled_r2 = 0.90

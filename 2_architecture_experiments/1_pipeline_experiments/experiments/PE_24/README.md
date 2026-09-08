@@ -20,3 +20,10 @@ The run has 75 resumable evaluation jobs and two fitted methods per job. Re-run
 the same command after an interruption to continue from `fold_predictions.csv`.
 The first execution writes `pre_registration.json`; changing a scientific
 setting afterward requires a new `pipeline.run` directory.
+
+Run 1 completed all 150 component fits without promotion. The regime blend
+reduced mean RMSE from 10.3106 to 10.1151 (1.896%) and reached pooled R2 0.90660,
+but won 11/15 folds and its UAV-bootstrap 95% RMSE-change interval was
+[-0.5137, +0.0862]. Run 7 remains the control. PE_25 screens one restricted
+TabPFN rule using these saved predictions; PE_26 independently tests an
+early-history specialist.

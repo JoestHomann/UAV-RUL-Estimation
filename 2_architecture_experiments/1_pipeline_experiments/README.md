@@ -418,6 +418,23 @@ a wholly favorable UAV-bootstrap interval. Run or resume it with:
   .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_24\run.py
 ```
 
+`PE_24` completed without promotion: mean RMSE improved 1.896%, with 11/15 fold
+wins and a bootstrap interval crossing zero. Run 7 remains the production model.
+
+The implemented follow-ups are independent:
+
+- [PE_25](experiments/PE_25/README.md) uses the saved PE_24 nested predictions
+  to select a small TabPFN weight below a control-predicted RUL threshold. It
+  performs no model fitting and can produce only an exploratory screening result.
+- [PE_26](experiments/PE_26/README.md) refits Run 7 and an early-history specialist
+  on three new grouped split seeds, selecting specialist strength inside each
+  outer training partition. The 150 complete ensemble fits are resumable.
+
+Both have a `validate_inputs` step, a co-located `settings.toml`, and the usual
+`run.py --list` / `--status` interface. Run either with its own `run.py`; PE_26
+does not depend on PE_25 passing. Neither experiment changes the deployed model
+or opens locked evaluation.
+
 ## Configuration ownership
 
 Standalone Phase 2 runs use

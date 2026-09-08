@@ -1,0 +1,40 @@
+[pipeline]
+experiment = "PE_25"
+run = "run_1"
+
+[run_definitions.PE_25]
+title = "Restricted TabPFN blend on saved nested predictions"
+description = "Exploratory follow-up to PE_24: select a small TabPFN weight and a maximum control-predicted RUL using only each outer fold's inner OOF predictions."
+
+[[run_definitions.PE_25.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_restricted_tabpfn.py"
+arguments = ["--workflow", "PE_25", "--check"]
+script_chain = "restricted_tabpfn"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_25.steps]]
+name = "screen_restricted_blend"
+script = "2_architecture_experiments/1_pipeline_experiments/run_restricted_tabpfn.py"
+arguments = ["--workflow", "PE_25"]
+script_chain = "restricted_tabpfn"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.restricted_tabpfn]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_restricted_tabpfn.py"]
+
+[restricted_tabpfn_workflows.PE_25]
+source_predictions = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_24/runs/run_1/reporting/fold_predictions.csv"
+source_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_24/runs/run_1/reporting/winner_manifest.json"
+source_outer_folds = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_24/runs/run_1/reporting/outer_folds.csv"
+source_inner_folds = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_24/runs/run_1/reporting/inner_folds.csv"
+source_split_seeds = [20261007, 20261017, 20261027]
+outer_fold_count = 5
+inner_fold_count = 4
+weights = [0.0, 0.10, 0.25, 0.50]
+prediction_thresholds = [50.0, 75.0, 100.0]
+minimum_fold_wins = 12
+minimum_relative_rmse_improvement = 0.02
+minimum_pooled_r2 = 0.90
+# Screening only in code: passing never promotes a production model.
