@@ -32,6 +32,7 @@ PIPELINE_OWNED_TABLES = (
     "tabular_confirmation_workflows",
     "combined_confirmation_workflows",
     "final_candidate_workflows",
+    "regime_tabpfn_workflows",
 )
 
 

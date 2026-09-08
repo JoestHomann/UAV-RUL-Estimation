@@ -164,9 +164,11 @@ def cross_fit_outer_blend(
     for outer_fold, held in outer_rows.groupby("outer_fold", sort=True):
         training = selection_rows.loc[selection_rows.outer_fold.eq(outer_fold)]
         if training.empty:
-            raise ValueError(f"PE_18 has no inner predictions for fold {outer_fold}")
+            raise ValueError(
+                f"Outer blend has no inner predictions for fold {outer_fold}"
+            )
         if set(training.uav_id.astype(str)) & set(held.uav_id.astype(str)):
-            raise ValueError("PE_18 blend selection has UAV overlap")
+            raise ValueError("Outer blend selection has UAV overlap")
         scored = []
         for weight in weights:
             estimate = (
@@ -191,7 +193,7 @@ def cross_fit_outer_blend(
             }
         )
     if not np.isfinite(prediction).all():
-        raise ValueError("PE_18 blend predictions are incomplete")
+        raise ValueError("Outer blend predictions are incomplete")
     return prediction, provenance
 
 

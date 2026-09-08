@@ -427,7 +427,10 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
         )
         return self.training_summary
 
-    def _predict_raw(self, data: Any) -> NDArray[np.float64]:
+    def _predict_raw_with_diagnostics(
+        self,
+        data: Any,
+    ) -> tuple[NDArray[np.float64], dict[str, NDArray[np.float64]]]:
         member_predictions = np.column_stack(
             [model.predict(data) for model in self.members]
         )
@@ -446,18 +449,45 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
             disagreement,
         )
         correction = np.asarray(self.residual_model.predict(matrix), dtype=np.float64)
-        return base - self.correction_strength * correction
+        raw_prediction = base - self.correction_strength * correction
+        return raw_prediction, {
+            "base_prediction": np.asarray(base, dtype=np.float64),
+            "uncertainty_std": np.asarray(uncertainty_std, dtype=np.float64),
+            "uncertainty_range": np.asarray(uncertainty_range, dtype=np.float64),
+            "family_disagreement": np.asarray(disagreement, dtype=np.float64),
+        }
+
+    def _predict_raw(self, data: Any) -> NDArray[np.float64]:
+        prediction, _ = self._predict_raw_with_diagnostics(data)
+        return prediction
+
+    def predict_with_diagnostics(self, data: Any) -> pd.DataFrame:
+        """Return the final prediction and inference-time ensemble diagnostics."""
+
+        if not self._is_fitted:
+            raise ModelAdapterError("Residual-corrected tree ensemble is not fitted")
+        raw_prediction, diagnostics = self._predict_raw_with_diagnostics(data)
+        prediction = np.asarray(
+            self.prediction_policy.adjust_predictions(raw_prediction),
+            dtype=np.float64,
+        ).reshape(-1)
+        prediction = np.maximum(prediction, self.prediction_minimum)
+        result = pd.DataFrame(
+            {
+                "predicted_rul": prediction,
+                **diagnostics,
+            }
+        )
+        if len(result) != len(data) or not np.isfinite(result.to_numpy(float)).all():
+            raise ModelAdapterError(
+                "Residual-corrected ensemble produced invalid diagnostics"
+            )
+        return result
 
     def predict(self, data: Any) -> NDArray[np.float64]:
         """Return residual-corrected RUL without applying target inversion twice."""
 
-        if not self._is_fitted:
-            raise ModelAdapterError("Residual-corrected tree ensemble is not fitted")
-        predictions = np.asarray(self._predict_raw(data), dtype=np.float64).reshape(-1)
-        if len(predictions) != len(data) or not np.isfinite(predictions).all():
-            raise ModelAdapterError("Residual-corrected ensemble produced invalid predictions")
-        predictions = self.prediction_policy.adjust_predictions(predictions)
-        return np.maximum(predictions, self.prediction_minimum)
+        return self.predict_with_diagnostics(data)["predicted_rul"].to_numpy(float)
 
     def detach_training_monitor(self) -> None:
         for model in getattr(self, "members", []):

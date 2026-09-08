@@ -2,9 +2,9 @@
 
 Research date: 7 September 2026. Scope confirmed by the user: unseen-UAV Kaggle performance, building on PE_1–PE_13, with literature from any year.
 
-**Recommendation.** Carry the promoted Run 7 plus full-feature TabPFN blend into multi-seed confirmation, and give highest priority to a complete outer refit of PE_15's forecast-history candidate. The TabPFN gain is too small to close the Kaggle gap by itself; forecast history is the only completed screen with a large enough effect to do so if it survives nested evaluation. Do not expand the failed population, residual-coverage, compact-feature, or broad neural searches.
+**Recommendation.** Retain Run 7 as the validated control and reject the current forecast-history implementation. Test whether the small TabPFN gain can be concentrated with one shallow inference-time regime gate; global blending is too small to close the Kaggle gap. Do not expand the failed population, residual-coverage, compact-feature, or broad neural searches.
 
-Implementation update, 7 September 2026: PE_14–PE_19 are complete as experiment-owned workflows. PE_18 promoted a small full-feature TabPFN blend; PE_15 produced a larger forecast-history screening candidate. PE_20–PE_23 now implement the required nested history confirmation, two-seed TabPFN confirmation, gated combined evaluation, and final all-UAV submission build. These follow-up runs are pending. No new locked evaluation was opened and no Kaggle submission was made. The earlier September 1 strategy and implementation plan are historical: several of their proposed experiments have now failed, and Phase 3 Run 7 is already complete.
+Implementation update, 8 September 2026: PE_20 rejected forecast history after a complete nested refit. PE_21 reproduced a roughly 1.1% global TabPFN blend gain on two new seeds, but it missed the fold-win gate and its bootstrap interval included zero. The gate therefore skipped PE_22 and PE_23, and no Kaggle submission was made. PE_24 now implements a pre-registered three-seed nested test of one shallow regime-aware TabPFN gate.
 
 **Where the project actually stands**
 
@@ -152,12 +152,11 @@ These weights were fitted and scored on the same reused development labels. They
 6. Combine only independently supported changes and re-evaluate the full combination. Seek a meaningful development margin above 0.9, for example around 0.92 under the fixed nominal profile, while treating that as a planning margin rather than a calibrated predictor of Kaggle performance. Do not force a lower confidence bound above 0.9 by repeated selection on the same data.
 7. Freeze the final procedure before any genuinely held-back confirmation. Previously examined locked artifacts are historical evidence, not a reusable fresh holdout. Kaggle public feedback must not become the inner optimization loop.
 
-**Execution status:** PE_14–PE_19 are complete. PE_20–PE_23 are implemented and
-pending. PE_20 performs the complete nested forecast-history refit, PE_21 adds
-two grouped split seeds for TabPFN, PE_22 combines only independently confirmed
-winners, and PE_23 fits all 100 training UAVs and builds a verified submission
-only after the combined gate passes. Run 7's public result is confirmed; no
-duplicate baseline submission is needed.
+**Execution status:** PE_14–PE_21 are complete. PE_20 retained the control after
+history increased mean RMSE by 1.56%. PE_21 also retained the control: the global
+TabPFN blend improved mean RMSE by 1.12% but won 6/10 folds. PE_22 and PE_23 were
+gated off. PE_24 is implemented and pending; it tests the regime-aware blend on
+three fresh seeds without using locked evaluation data or test labels.
 
 **Reproduce this report's new calculations**
 

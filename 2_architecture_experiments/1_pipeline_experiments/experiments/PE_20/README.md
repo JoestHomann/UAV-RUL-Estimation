@@ -9,3 +9,9 @@ training-side predictions for PE_22 blend selection.
 The run contains 25 resumable model cells: five outer evaluations and four inner
 evaluations inside each outer fold. It promotes prediction history only at a 2%
 mean-RMSE gain and four of five fold wins.
+
+The completed confirmation did not promote prediction history. Mean RMSE rose
+from 10.2361 to 10.3962 (a 1.56% regression), pooled R2 fell from 0.90446 to
+0.90149, and prediction history won two of five folds. The UAV-bootstrap 95%
+interval for challenger-minus-control RMSE was 0.016 to 0.310 cycles, so the
+PE_15 screening gain did not survive the complete nested refit.

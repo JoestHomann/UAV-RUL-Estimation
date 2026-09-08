@@ -357,7 +357,7 @@ directory; the Phase 2 run number is retained for manifest identity and Phase
 3 traceability. `--force` is intended for rerunning the selected
 Phase 3 range; it does not change the TOML catalog.
 
-## R² improvement and confirmation experiments PE_14–PE_23
+## R² improvement and confirmation experiments PE_14–PE_24
 
 The September 2026 R² research program is implemented in six co-located runs:
 
@@ -374,10 +374,12 @@ after the exact package and checkpoint preflight succeeds. Shared reports includ
 pooled and fold metrics, target-region diagnostics, paired UAV-bootstrap
 intervals, explicit promotion gates, and leakage provenance.
 
-PE_14–PE_19 are complete. PE_18 promoted a small full-feature TabPFN blend at
+PE_14–PE_21 are complete. PE_18 promoted a small full-feature TabPFN blend at
 pooled R² 0.9067, a 1.30% mean-RMSE gain with four of five fold wins. PE_15
-retained forecast history as a stronger screening candidate that still needs a
-complete outer refit. PE_14 reached pooled nominal R² 0.9011 with Run 7 but
+retained forecast history as a stronger screening candidate, but PE_20's complete
+nested refit rejected it with a 1.56% RMSE regression. PE_21 repeated a small
+1.12% TabPFN blend gain on two fresh seeds but won only six of ten folds and
+retained the control. PE_14 reached pooled nominal R² 0.9011 with Run 7 but
 missed its fold-win gate; PE_16 and PE_19 made smaller improvements that missed
 their 1% gates. See the experiment register for the measured results and the
 distinction between screening and complete outer evaluation.
@@ -403,6 +405,18 @@ Run the resumable, gate-aware sequence with:
 The chain runs PE_20 and PE_21 sequentially to avoid competing CPU, memory, and
 GPU workloads. It stops normally when a scientific gate rejects a candidate.
 Use `--status` to inspect progress and `--list` to print each command.
+
+`PE_24` is the pre-registered follow-up to PE_21. It evaluates one depth-two
+regime gate on three fresh grouped split seeds. The gate learns a bounded
+row-specific TabPFN weight from inner OOF Run 7 predictions, ensemble uncertainty,
+tree-family disagreement, and the TabPFN gap. Only the regime blend can promote,
+and it must pass 12/15 fold wins, 2% mean-RMSE improvement, pooled R² 0.90, and
+a wholly favorable UAV-bootstrap interval. Run or resume it with:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_24\run.py
+```
 
 ## Configuration ownership
 

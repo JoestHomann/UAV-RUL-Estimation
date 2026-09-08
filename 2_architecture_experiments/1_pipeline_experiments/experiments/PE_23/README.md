@@ -9,3 +9,6 @@ The history model and both component prediction files are checkpointed. The
 manifest records package/checkpoint hashes, verifies finite nonnegative values
 and the exact test ID set, and explicitly records that no test labels or test
 metrics were used.
+
+The confirmation chain did not run PE_23 because PE_22 was gated off. No final
+candidate or Kaggle submission was produced by this chain.

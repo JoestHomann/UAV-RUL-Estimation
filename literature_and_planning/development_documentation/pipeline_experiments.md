@@ -1,6 +1,6 @@
 # Pipeline Experiments
 
-Last updated: 2026-09-01
+Last updated: 2026-09-08
 
 ## Purpose
 
@@ -772,4 +772,29 @@ The full resumable chain is:
 ```powershell
 & .\.venv\Scripts\python.exe `
   .\2_architecture_experiments\1_pipeline_experiments\run_r2_confirmation_chain.py
+```
+
+PE_20 and PE_21 completed without promotion, so the chain correctly skipped
+PE_22 and PE_23. PE_20's history model regressed mean RMSE by 1.56%. PE_21's
+TabPFN blend improved it by 1.12% but won only 6/10 folds and retained a
+bootstrap interval spanning zero.
+
+### PE_24: regime-aware TabPFN confirmation
+
+PE_24 tests one pre-registered depth-two gate on grouped split seeds 20261007,
+20261017, and 20261027. Every outer and inner partition independently refits
+Run 7 and TabPFN. The gate is then fitted on inner OOF rows using only quantities
+available at inference: the control prediction, ensemble standard deviation,
+ensemble range, XGBoost-versus-ExtraTrees disagreement, and the TabPFN-control
+gap. It produces TabPFN weights constrained to 0–50%.
+
+The regime blend is the only promotion-eligible method. It requires 12/15 fold
+wins, at least 2% mean-RMSE improvement, pooled R² at least 0.90, and a
+UAV-bootstrap 95% RMSE-delta interval wholly below zero. The PE_21 global blend
+grid and standalone TabPFN are retained only as diagnostic anchors. Run or
+resume all 75 evaluation jobs with:
+
+```powershell
+& .\.venv\Scripts\python.exe `
+  .\2_architecture_experiments\1_pipeline_experiments\experiments\PE_24\run.py
 ```

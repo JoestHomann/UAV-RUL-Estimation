@@ -1,4 +1,4 @@
-"""Shared contracts for PE_14 through PE_19 development experiments."""
+"""Shared contracts for the PE_14 and later R2 development experiments."""
 
 from __future__ import annotations
 
@@ -271,6 +271,9 @@ def method_report(
     uses_locked_evaluation: bool = False,
     promotion_allowed: bool = True,
     method_improvement_thresholds: dict[str, float] | None = None,
+    promotion_eligible_methods: set[str] | None = None,
+    require_bootstrap_improvement: bool = False,
+    minimum_pooled_r2: float | None = None,
 ) -> dict[str, Any]:
     reporting = root / "reporting"
     reporting.mkdir(parents=True, exist_ok=True)
@@ -391,12 +394,34 @@ def method_report(
         required_improvement = float(
             threshold_overrides.get(str(row.method), minimum_relative_rmse_improvement)
         )
+        bootstrap_low = float(np.quantile(bootstrap_delta, 0.025))
+        bootstrap_high = float(np.quantile(bootstrap_delta, 0.975))
+        eligible = (
+            promotion_eligible_methods is None
+            or str(row.method) in promotion_eligible_methods
+        )
+        bootstrap_passes = not require_bootstrap_improvement or bootstrap_high < 0.0
+        pooled_r2_passes = minimum_pooled_r2 is None or float(row.pooled_r2) >= minimum_pooled_r2
         decisions.append(
-            {"method": row.method, "fold_wins": wins, "relative_rmse_improvement": improvement,
-             "required_relative_rmse_improvement": required_improvement,
-             "paired_rmse_delta_bootstrap_low": float(np.quantile(bootstrap_delta, 0.025)),
-             "paired_rmse_delta_bootstrap_high": float(np.quantile(bootstrap_delta, 0.975)),
-             "passes_gate": wins >= minimum_fold_wins and improvement >= required_improvement}
+            {
+                "method": row.method,
+                "promotion_eligible": eligible,
+                "fold_wins": wins,
+                "relative_rmse_improvement": improvement,
+                "required_relative_rmse_improvement": required_improvement,
+                "pooled_r2": float(row.pooled_r2),
+                "required_pooled_r2": minimum_pooled_r2,
+                "paired_rmse_delta_bootstrap_low": bootstrap_low,
+                "paired_rmse_delta_bootstrap_high": bootstrap_high,
+                "bootstrap_supports_improvement": bootstrap_high < 0.0,
+                "passes_gate": (
+                    eligible
+                    and wins >= minimum_fold_wins
+                    and improvement >= required_improvement
+                    and bootstrap_passes
+                    and pooled_r2_passes
+                ),
+            }
         )
     decision_table = pd.DataFrame(decisions)
     passing = decision_table.loc[decision_table.passes_gate] if not decision_table.empty else decision_table
@@ -426,6 +451,13 @@ def method_report(
         "selection_scope": "complete_outer_evaluation" if promotion_allowed else "screening_only",
         "minimum_fold_wins": minimum_fold_wins,
         "minimum_relative_rmse_improvement": minimum_relative_rmse_improvement,
+        "promotion_eligible_methods": (
+            None
+            if promotion_eligible_methods is None
+            else sorted(promotion_eligible_methods)
+        ),
+        "require_bootstrap_improvement": require_bootstrap_improvement,
+        "minimum_pooled_r2": minimum_pooled_r2,
         "uses_locked_evaluation": uses_locked_evaluation,
         "uses_test_labels": False,
         "bootstrap_unit": "uav_id",

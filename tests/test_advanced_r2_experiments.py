@@ -1,4 +1,4 @@
-"""Leakage and configuration tests for PE_14 through PE_23."""
+"""Leakage and configuration tests for PE_14 through PE_24."""
 
 from __future__ import annotations
 
@@ -27,12 +27,14 @@ for directory in (
 from advanced_r2_utils import (  # noqa: E402
     causal_filter_features,
     cross_fit_residual,
+    method_report,
     prediction_history_features,
     subset_dataset,
 )
 from confirmation_utils import (  # noqa: E402
     evaluation_jobs,
     fixed_partitions,
+    generated_partitions,
     validate_partitions,
 )
 from experiment_config import read_experiment_config  # noqa: E402
@@ -42,15 +44,18 @@ from history_corrected_tree_system import (  # noqa: E402
 )
 from model_registry import ModelAdapterFactory  # noqa: E402
 from models.tabular.residual_corrected_tree_ensemble import (  # noqa: E402
+    ResidualCorrectedTreeEnsembleAdapter,
     ScaledRidgeResidualRegressor,
     calibration_sample_weights,
 )
 from no_op_training_monitor import NoOpTrainingMonitor  # noqa: E402
+from policies import PredictionPolicy  # noqa: E402
 from run_marginal_ensemble import cross_fit_blend  # noqa: E402
 from run_population_degradation import degradation_features  # noqa: E402
+from run_regime_tabpfn_confirmation import cross_fit_regime_blend  # noqa: E402
 from run_residual_refinement import distinct_calibration_manifest  # noqa: E402
 from run_tabular_prior import cross_fit_outer_blend  # noqa: E402
-from tabular_data_adapter import TabularDataAdapter  # noqa: E402
+from tabular_data_adapter import TabularDataAdapter, TabularDataset  # noqa: E402
 
 
 class AdvancedR2ExperimentTests(unittest.TestCase):
@@ -79,6 +84,7 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             "tabular_confirmation_workflows": "PE_21",
             "combined_confirmation_workflows": "PE_22",
             "final_candidate_workflows": "PE_23",
+            "regime_tabpfn_workflows": "PE_24",
         }
         for table, workflow in expected.items():
             self.assertIn(workflow, config[table])
@@ -156,7 +162,7 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
         )
 
     def test_each_new_experiment_has_one_launcher_and_artifact_root(self) -> None:
-        for number in range(14, 24):
+        for number in range(14, 25):
             root = PIPELINE_ROOT / "experiments" / f"PE_{number}"
             self.assertTrue((root / "run.py").is_file())
             self.assertTrue((root / "settings.toml").is_file())
@@ -196,6 +202,52 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
         self.assertEqual(workflow["challenger_weights"], [0.0, 0.05, 0.1, 0.15, 0.25])
         self.assertEqual(workflow["minimum_fold_wins"], 8)
         self.assertEqual(workflow["feature_set"], "screened_drift_pruned")
+
+    def test_pe24_freezes_fresh_seeds_and_one_strict_primary_gate(self) -> None:
+        workflow = read_experiment_config(
+            PIPELINE_ROOT / "experiments" / "PE_24" / "settings.toml"
+        )["regime_tabpfn_workflows"]["PE_24"]
+        self.assertEqual(
+            workflow["split_seeds"],
+            [20261007, 20261017, 20261027],
+        )
+        self.assertTrue(
+            set(workflow["split_seeds"]).isdisjoint({20260814, 20260917, 20260927})
+        )
+        self.assertEqual(workflow["gate_maximum_depth"], 2)
+        self.assertEqual(workflow["gate_minimum_samples_leaf"], 40)
+        self.assertEqual(workflow["gate_maximum_tabpfn_weight"], 0.5)
+        self.assertEqual(
+            workflow["gate_features"],
+            [
+                "control_prediction",
+                "uncertainty_std",
+                "uncertainty_range",
+                "family_disagreement",
+                "challenger_gap",
+            ],
+        )
+        self.assertEqual(workflow["minimum_fold_wins"], 12)
+        self.assertEqual(workflow["minimum_pooled_r2"], 0.9)
+        self.assertTrue(workflow["require_bootstrap_improvement"])
+        outer, inner = generated_partitions(
+            history_summary_path=workflow["history_summary"],
+            split_seeds=workflow["split_seeds"],
+            outer_fold_count=workflow["outer_fold_count"],
+            inner_fold_count=workflow["inner_fold_count"],
+        )
+        validate_partitions(
+            outer,
+            inner,
+            expected_outer_folds=5,
+            expected_inner_folds=4,
+        )
+        jobs = evaluation_jobs(outer, inner, include_inner=True)
+        self.assertEqual(len(jobs), 75)
+        self.assertEqual(sum(job.evaluation_level == "outer" for job in jobs), 15)
+        self.assertTrue(
+            all(not (job.training_uavs & job.validation_uavs) for job in jobs)
+        )
 
     def test_fixed_lag_history_is_strictly_past_and_excludes_cap(self) -> None:
         metadata = pd.DataFrame(
@@ -411,6 +463,100 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
             all(row["selected_challenger_weight"] == 1.0 for row in provenance)
         )
 
+    def test_pe24_regime_gate_is_training_only_and_bounded(self) -> None:
+        features = [
+            "control_prediction",
+            "uncertainty_std",
+            "uncertainty_range",
+            "family_disagreement",
+            "challenger_gap",
+        ]
+        selection = pd.DataFrame(
+            {
+                "outer_fold": [0] * 4,
+                "uav_id": ["T0", "T1", "T2", "T3"],
+                "observed_rul": [10.0, 10.0, 80.0, 80.0],
+                "control_prediction": [20.0, 20.0, 80.0, 80.0],
+                "challenger_prediction": [10.0, 10.0, 90.0, 90.0],
+                "uncertainty_std": [2.0, 3.0, 2.0, 3.0],
+                "uncertainty_range": [4.0, 6.0, 4.0, 6.0],
+                "family_disagreement": [1.0, 1.0, 1.0, 1.0],
+                "challenger_gap": [-10.0, -10.0, 10.0, 10.0],
+            }
+        )
+        held = pd.DataFrame(
+            {
+                "outer_fold": [0, 0],
+                "uav_id": ["H0", "H1"],
+                "observed_rul": [-999.0, -999.0],
+                "control_prediction": [20.0, 80.0],
+                "challenger_prediction": [10.0, 90.0],
+                "uncertainty_std": [2.5, 2.5],
+                "uncertainty_range": [5.0, 5.0],
+                "family_disagreement": [1.0, 1.0],
+                "challenger_gap": [-10.0, 10.0],
+            }
+        )
+        prediction, weights, provenance = cross_fit_regime_blend(
+            held,
+            selection,
+            feature_columns=features,
+            maximum_depth=1,
+            minimum_samples_leaf=1,
+            maximum_tabpfn_weight=0.5,
+            minimum_challenger_gap=1.0,
+            random_state=7,
+        )
+        changed = held.copy()
+        changed["observed_rul"] = [1e9, 1e9]
+        changed_prediction, changed_weights, _ = cross_fit_regime_blend(
+            changed,
+            selection,
+            feature_columns=features,
+            maximum_depth=1,
+            minimum_samples_leaf=1,
+            maximum_tabpfn_weight=0.5,
+            minimum_challenger_gap=1.0,
+            random_state=7,
+        )
+        np.testing.assert_allclose(prediction, changed_prediction)
+        np.testing.assert_allclose(weights, changed_weights)
+        np.testing.assert_allclose(weights, [0.5, 0.0])
+        np.testing.assert_allclose(prediction, [15.0, 80.0])
+        self.assertEqual(provenance[0]["uav_overlap"], 0)
+
+    def test_method_report_can_restrict_promotion_to_primary_method(self) -> None:
+        rows = pd.DataFrame(
+            {
+                "outer_fold": [0, 0, 1, 1],
+                "uav_id": ["A", "B", "C", "D"],
+                "observed_rul": [10.0, 20.0, 30.0, 40.0],
+                "cutoff": [100.0, 100.0, 100.0, 100.0],
+            }
+        )
+        methods = {
+            "control": np.array([12.0, 22.0, 32.0, 42.0]),
+            "diagnostic": np.array([10.0, 20.0, 30.0, 40.0]),
+            "primary": np.array([12.0, 22.0, 32.0, 42.0]),
+        }
+        root = REPOSITORY_ROOT / ".tmp" / "method_report_gate_test"
+        manifest = method_report(
+            rows,
+            methods,
+            root=root,
+            control="control",
+            minimum_fold_wins=2,
+            minimum_relative_rmse_improvement=0.01,
+            promotion_eligible_methods={"primary"},
+            require_bootstrap_improvement=True,
+            minimum_pooled_r2=0.9,
+        )
+        decisions = pd.read_csv(root / "reporting" / "promotion_decisions.csv")
+        self.assertEqual(manifest["winner"], "control")
+        diagnostic = decisions.loc[decisions.method.eq("diagnostic")].iloc[0]
+        self.assertFalse(bool(diagnostic.promotion_eligible))
+        self.assertFalse(bool(diagnostic.passes_gate))
+
     def test_scaled_ridge_residual_head_preserves_feature_contract(self) -> None:
         x = pd.DataFrame({"a": [0.0, 1.0, 2.0], "b": [2.0, 1.0, 0.0]})
         model = ScaledRidgeResidualRegressor(alpha=1.0).fit(
@@ -419,6 +565,58 @@ class AdvancedR2ExperimentTests(unittest.TestCase):
         self.assertEqual(model.predict(x).shape, (3,))
         with self.assertRaisesRegex(ValueError, "feature order"):
             model.predict(x[["b", "a"]])
+
+    def test_residual_ensemble_diagnostics_match_public_prediction(self) -> None:
+        class FixedMember:
+            def __init__(self, values: list[float]) -> None:
+                self.values = np.asarray(values, dtype=float)
+
+            def predict(self, data: object) -> np.ndarray:
+                return self.values.copy()
+
+        class ZeroResidual:
+            @staticmethod
+            def predict(features: pd.DataFrame) -> np.ndarray:
+                return np.zeros(len(features), dtype=float)
+
+        model = object.__new__(ResidualCorrectedTreeEnsembleAdapter)
+        model._is_fitted = True
+        model.member_seeds = (13, 37, 73)
+        model.members = [
+            FixedMember([10.0, 12.0]),
+            FixedMember([11.0, 13.0]),
+            FixedMember([12.0, 14.0]),
+            FixedMember([20.0, 22.0]),
+            FixedMember([21.0, 23.0]),
+            FixedMember([22.0, 24.0]),
+        ]
+        model.xgboost_weight = 0.5
+        model.prediction_minimum = 0.0
+        model.correction_strength = 1.0
+        model.residual_features = ()
+        model.residual_model = ZeroResidual()
+        model.prediction_policy = PredictionPolicy()
+        data = TabularDataset(
+            features=pd.DataFrame(index=range(2)),
+            metadata=pd.DataFrame({"cutoff": [100.0, 120.0]}),
+            target=None,
+            sample_weights=None,
+        )
+        diagnostics = model.predict_with_diagnostics(data)
+        np.testing.assert_allclose(
+            model.predict(data),
+            diagnostics["predicted_rul"],
+        )
+        np.testing.assert_allclose(diagnostics["predicted_rul"], [16.0, 18.0])
+        self.assertTrue(
+            {
+                "base_prediction",
+                "uncertainty_std",
+                "uncertainty_range",
+                "family_disagreement",
+            }.issubset(diagnostics)
+        )
+        self.assertTrue((diagnostics["uncertainty_std"] > 0.0).all())
 
     def test_run6_factory_accepts_fold_local_calibration_contract(self) -> None:
         settings = read_experiment_config(

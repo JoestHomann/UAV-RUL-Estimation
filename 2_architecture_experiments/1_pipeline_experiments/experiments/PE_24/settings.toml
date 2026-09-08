@@ -1,0 +1,54 @@
+[pipeline]
+experiment = "PE_24"
+run = "run_1"
+
+[run_definitions.PE_24]
+title = "Regime-aware TabPFN blend confirmation"
+description = "Test one frozen shallow gate on three fresh grouped split seeds using only inner OOF control predictions and ensemble uncertainty."
+
+[[run_definitions.PE_24.steps]]
+name = "confirm_regime_tabpfn_blend"
+script = "2_architecture_experiments/1_pipeline_experiments/run_regime_tabpfn_confirmation.py"
+arguments = ["--workflow", "PE_24"]
+script_chain = "regime_tabpfn_confirmation"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.regime_tabpfn_confirmation]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_regime_tabpfn_confirmation.py"]
+
+[regime_tabpfn_workflows.PE_24]
+tabular_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_3/runs/run_1/PE3_features_drift/phase2/2_tabular_data_adapter/artifacts/tabular_dataset_manifest.json"
+feature_set = "screened_drift_pruned"
+history_summary = "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv"
+split_seeds = [20261007, 20261017, 20261027]
+outer_fold_count = 5
+inner_fold_count = 4
+source_contract = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_contract.json"
+specification = "3_final_model_training_and_inference/runs/run_7/1_winning_architecture_selection/artifacts/residual_ensemble_phase_2_specification.json"
+model_seed = 13
+target_cap = 125.0
+gate_features = [
+  "control_prediction",
+  "uncertainty_std",
+  "uncertainty_range",
+  "family_disagreement",
+  "challenger_gap",
+]
+gate_maximum_depth = 2
+gate_minimum_samples_leaf = 40
+gate_maximum_tabpfn_weight = 0.50
+gate_minimum_challenger_gap = 1.0
+gate_random_state = 20261001
+global_anchor_weights = [0.0, 0.05, 0.10, 0.15, 0.25]
+minimum_fold_wins = 12
+minimum_relative_rmse_improvement = 0.02
+minimum_pooled_r2 = 0.90
+require_bootstrap_improvement = true
+
+[regime_tabpfn_workflows.PE_24.tabpfn]
+version = "8.5.0"
+checkpoint = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_18/checkpoints/tabpfn-v3-regressor-v3_default.ckpt"
+sha256 = "311CE18D97E9533D8585EAADAFE040FBDD8070533209ED8696641DADC97A7301"
+device = "auto"
+required = true
