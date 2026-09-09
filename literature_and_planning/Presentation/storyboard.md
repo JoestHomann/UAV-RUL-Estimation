@@ -1,13 +1,13 @@
 # Storyboard — How we reached a public R² of 0.87652
 
-Deck: `UAV_RUL_Project_20min.pptx` · Template: University of Stuttgart 16:9 (10 × 5.625 in)
-Evidence cut-off for every number in the deck: **8 September 2026**.
+Deck: `UAV_RUL_Project_20min.pptx` · Template: University of Stuttgart 16:9 (10 × 5.625 in) · 17 main slides + divider + 10 backup slides
+Evidence cut-off for every number in the deck: **9 September 2026**.
 
-The deck answers one question: **how did this project reach a recorded Kaggle
-public R² of 0.87652, and which decision at each step produced it?** Every main
-slide names a decision, shows the evidence that settled it, and — where the
-decision produced a submission — states what it was worth on the public
-leaderboard. Claim IDs (`C##`) link each number to `evidence_ledger.csv`.
+The deck answers one question: **how did this project reach a recorded Kaggle public R² of 0.87652, and which decision at each step produced it?**
+
+After the 9 September review the front half of the talk is Phase 0 and Phase 1. That is not padding: the single largest public-score movement in the project, +0.30377, came from a decision about the evaluation target and the validation cutoffs, and both halves of that decision were read directly off Phase 0 and Phase 1 evidence. Slides 3–11 are the audit and the dataset construction; slides 12–16 are the modelling chain they made possible.
+
+Claim IDs (`C##`) link every number to `evidence_ledger.csv` (192 claims).
 
 ---
 
@@ -21,257 +21,287 @@ leaderboard. Claim IDs (`C##`) link each number to `evidence_ledger.csv`.
 | Run 6 | Conditional conservative calibration, q = 0.55 | PE_4, PE_5 | 0.86741 | +0.00216 |
 | Run 7 | Cross-fitted residual correction on six seeded members | PE_11 | 0.87652 | +0.00911 |
 
-Each row is a submission-to-submission difference, not an isolated ablation: a
-run can carry more than one change. The deck says so on slides 2 and 14.
+Each row is a submission-to-submission difference, not an isolated ablation: a run can carry more than one change. The deck says so on slides 2 and 17.
 
 ---
 
 ## Time budget
 
-| Slide | Title | Minutes | Cumulative |
-| ---: | --- | ---: | ---: |
-| 1 | How we reached a public R² of 0.87652 | 0.75 | 0.75 |
-| 2 | Five submissions, five decisions | 1.25 | 2.00 |
-| 3 | Phase 0 decided which channels may carry information | 1.25 | 3.25 |
-| 4 | Phase 1 decided what every later number is measured against | 2.00 | 5.25 |
-| 5 | Decision 1: bounded scenarios and a fitting cap at 125 | 2.00 | 7.25 |
-| 6 | Decision 2: which engineered features earn their place | 1.50 | 8.75 |
-| 7 | Decision 3: the model family, chosen under one locked protocol | 2.00 | 10.75 |
-| 8 | Decision 4: a cross-fitted residual correction | 2.00 | 12.75 |
-| 9 | Decision 5: conditional conservative calibration | 1.00 | 13.75 |
-| 10 | What Run 7 still gets wrong | 1.25 | 15.00 |
-| 11 | Why the chain stops at 0.87652 | 1.75 | 16.75 |
-| 12 | Development performance and public performance | 1.00 | 17.75 |
-| 13 | What the next comparison can resolve | 0.75 | 18.50 |
-| 14 | How we reached 0.87652 | 0.50 | 19.00 |
-| — | Transitions and pauses | 1.00 | **20.00** |
+| Slide | Title | Layout | Minutes | Cumulative |
+| ---: | --- | --- | ---: | ---: |
+| 1 | How we reached a public R² of 0.87652 | `title` | 0.75 | 0.75 |
+| 2 | Five submissions, five decisions | `figure` | 1.00 | 1.75 |
+| 3 | Six of twenty-eight channels carry no information | `figure` | 0.75 | 2.50 |
+| 4 | Ten channels move with age inside every UAV | `figure` | 1.50 | 4.00 |
+| 5 | Variance decomposition assigns each channel its role | `split_figure` | 1.25 | 5.25 |
+| 6 | Train and test differ in age, not in distribution | `figure` | 1.00 | 6.25 |
+| 7 | The screening matrix that Phase 1 inherited | `split_figure` | 1.25 | 7.50 |
+| 8 | Phase 1 fixed what every later number is measured against | `phase1_design` | 1.25 | 8.75 |
+| 9 | Cutoffs are drawn from the observed test history lengths | `figure_notes` | 1.25 | 10.00 |
+| 10 | 606 prefix features, and four sets to compare them with | `features` | 1.25 | 11.25 |
+| 11 | The benchmark: age alone predicts nothing | `figure_notes` | 1.25 | 12.50 |
+| 12 | Decision 1: bounded scenarios and a fitting cap at 125 | `figure` | 1.25 | 13.75 |
+| 13 | Decision 2: pruned features and a calibrated tree blend | `figure` | 1.25 | 15.00 |
+| 14 | Decision 3: conditional conservative calibration | `figure` | 0.75 | 15.75 |
+| 15 | Decision 4: a cross-fitted residual correction | `ensemble` | 1.25 | 17.00 |
+| 16 | Why the chain stops at 0.87652 | `screen` | 1.25 | 18.25 |
+| 17 | How we reached 0.87652 | `conclusions` | 0.75 | 19.00 |
+| | **Total** | | **19.00** | |
 
-Backup slides B1–B6 follow a divider and are not part of the 20 minutes.
+Sections: slides 1–2 orientation (1.75 min) · **Phase 0, slides 3–7 (5.75 min)** · **Phase 1, slides 8–11 (5.00 min)** · Phase 2/3 decision chain, slides 12–16 (5.75 min) · close, slide 17 (0.75 min).
 
 ---
 
 ## Figure policy
 
-The user's instruction was to use the figures the repository has already
-generated. Of the 17 figures in `sources/figures/`:
+Charts come from the repository's own plotting code wherever that code exists. `sources/figure_manifest.csv` records provenance, source path and placement for every figure.
 
-| Provenance | Count | What it means |
+| Provenance | Count | Meaning |
 | --- | ---: | --- |
-| Repository figure, unchanged | 10 | Byte-identical copy of a generated PNG |
-| Repository figure, cropped to one panel | 3 | Same image, cropped; nothing re-plotted |
-| Repository script re-run on a channel subset | 1 | `temporal_rul_analysis.py`, same code and colours |
-| Generated for this talk | 3 | No repository figure exists for that evidence |
+| `repository figure, unchanged` | 13 | Byte-identical copy |
+| `repository script re-run at slide size` | 6 | Unmodified script, presentation canvas |
+| `repository figure, cropped …` | 2 | Same image, cropped to one panel |
+| `generated for the talk` | 4 | No repository figure or script covers it |
 
-`sources/figure_manifest.csv` records each figure's source path, provenance and
-the slide it is placed on.
+### Why the Phase 0 figures are re-run rather than copied
 
-**Why three figures were cropped.** The Phase 0 history-length figure is a
-15 × 4.8 in three-panel strip and the two PE_2 paired-comparison figures are
-11.9 × 7.9 in two-panel stacks. Scaled to fit this template's 10 × 5.625 in
-canvas they render at roughly 4–6 pt. Each was cropped to the single panel the
-slide argues from — the empirical CDF, and the paired-RMSE panel. The cropped
-PE_2 panels lose the legend that sits in the upper panel, so the colour key
-(blue = ExtraTrees, orange = XGBoost) is stated in each slide's subtitle.
+The Phase 0 figures are drawn on canvases between 11 × 9 in and 19 × 10 in, sized for a monitor. Scaled onto this template's 10 × 5.625 in canvas their axis labels arrive at three to four points, which is not readable from a lecture room.
 
-**Why one script was re-run.** `temporal_rul_summary.png` is 19 × 10 in because
-it plots all 28 channels. It was regenerated with the repository's own script,
-same statistics and same colours, restricted with `--channels` to the eight
-channels the slide discusses, with the fixed canvas scaled to the channel
-count. The command is in `sources/README.md`.
+`sources/run_repo_figure.py` imports the repository script **unmodified** and overrides exactly four presentation quantities before calling its `main()`: the figure canvas size; the tick-label size used by the shared `style_axis` helper, which hard-codes `labelsize=8`; the matplotlib base font size; and the figure-title size, which a few scripts hard-code at 14 pt. No repository file is copied with edits. Every statistic, colour, ordering and label still comes from the repository code.
 
-**The three generated figures.** The prediction-cutoff timeline, the public
-score chain and the development-versus-public panels have no repository
-equivalent. They use the repository's own Phase 0 palette and axis styling from
-`0_data_analysis/broad_data_review/plotting_common.py`.
+`build_figures.py` then re-reads the CSV each re-run wrote and compares it with the repository's own CSV for the same analysis, reporting the largest numeric difference. On the build shipped with this deck all six comparisons return zero, except the temporal/RUL summary at 8.4 × 10⁻¹⁵ (float ordering; that run is restricted to twelve channels, so only the shared rows are compared). The check line is stored in the manifest's `note` column.
 
-**Native PowerPoint drawings, not charts.** The nested whole-UAV schematic
-(slide 4), the retained-model schematic (slide 8) and every table are drawn as
-editable PowerPoint shapes, because the repository has no figure for them and
-the brief asks for editable diagrams.
+### Cropping
 
-Two repository figures were copied but not placed: `pe20_comparison.png` (a
-two-bar chart whose difference is invisible at slide size — the PE_20 result is
-given numerically on slide 11) and `development_overprediction_diagnostics.png`
-(superseded by the prediction scatter on slide 10). Both are in
-`sources/figures/` and are marked "not placed" in the manifest.
+Two figures are cropped rather than re-run, because the PE_2 experiment's plotting code was not available here: its two paired-comparison figures stack a paired-R² panel above a paired-RMSE panel on an 11.9 × 7.9 in canvas. The deck shows the lower panel, which carries the category labels. The legend lives in the upper panel, so the colour key (blue = ExtraTrees, orange = XGBoost) is stated in the slide subtitle instead.
+
+### Figures generated here
+
+| Figure | Why no repository figure exists |
+| --- | --- |
+| `prediction_timeline.png` | No repository figure shows the prediction cutoff itself |
+| `public_score_chain.png` | Kaggle scores are stored as a CSV with no plotting script |
+| `cycle_only_baseline.png` | Phase 1 records the baseline's coefficients and metrics but stores no figure |
+| `development_versus_public.png` | The two scopes are never joined in any repository figure |
+
+All four use the repository's Phase 0 palette (`#0072B2`, `#56B4E9`, `#D55E00`, `#7A7A7A`, `#D9D9D9`) and a local copy of `plotting_common.style_axis`.
+
+### Figures collected but not placed
+
+- `correlation_heatmaps.png` — Phase 0 core review: row- and UAV-level redundancy heatmaps
+- `anomaly_summary.png` — Phase 0 core review: extreme readings, jumps and persistent shifts
+- `grouped_permutation_importance.png` — FE_run_1 model-guided grouped permutation importance
+- `representative_trajectories.png` — Phase 0 core review: six representative UAV trajectories
+- `temporal_architecture_comparison.png` — Dedicated temporal study, architecture study run 7
+- `pe20_comparison.png` — PE_20 complete nested refit of the forecast-history recipe
+- `development_overprediction_diagnostics.png` — Phase 3 Run 7 development overprediction diagnostics
+- `pe2_signal_family_ablation_rmse_panel.png` — Lower panel (paired RMSE improvement) of the generated PE_2 figure
 
 ---
 
 ## Slide-by-slide plan
 
-### 1 — How we reached a public R² of 0.87652 (0.75 min)
-Sets the task and the target number. Figure: prediction-cutoff timeline built
-from `UAV_0019` (complete life 229 cycles, cut at 148). Claims C01–C04.
+### 1. How we reached a public R² of 0.87652
 
-### 2 — Five submissions, five decisions (1.25 min)
-The whole answer on one axis, then the talk walks it. Figure: public score
-chain, each point labelled with the decision that run introduced. Carries the
-two qualifications: submissions are not isolated ablations, and the deltas
-shrink by two orders of magnitude. Claims C05–C12.
+*Estimating remaining useful life from a partial UAV telemetry history*
 
-### 3 — Phase 0 decided which channels may carry information (1.25 min)
-- **Question:** what can 28 anonymous channels be trusted to carry?
-- **Evidence:** within-UAV correlation and trend consistency, not pooled
-  correlation. Channels 21 and 19 move the same way in 100/100 UAVs; 25 and 16
-  the opposite way; 18 has almost no within-UAV relationship and 96% of its
-  variance between UAVs; 20 is flat.
-- **Decision:** a channel taxonomy — 10 degradation candidates, 4 context
-  channels, 1 state channel, 6 removals. Claims C13–C19.
+- **Layout** `title` · **0.75 min** · claims **C01–C04** (4)
+- **Figure** `prediction_timeline.png` — generated for the talk
+- **Source label** Figure: generated for this talk from data/train.csv · claims C01-C04
 
-### 4 — Phase 1 decided what every later number is measured against (2.00 min)
-- **Question:** what has to be held out for a result to mean "generalises to an
-  unseen UAV"?
-- **Evidence:** 100 UAVs but 24,720 rows; the empirical CDF showing 47 of 100
-  test UAVs stopping before cycle 145.
-- **Decision:** whole-UAV outer folds with training-side inner selection,
-  test-like cutoffs, prefix-only features, equal UAV weight, UAV-level
-  bootstrap. Claims C20–C27.
+### 2. Five submissions, five decisions
 
-### 5 — Decision 1: bounded scenarios and a fitting cap at 125 (2.00 min)
-- **Comparison:** 2 × 2 — scenario profile × fitting target, everything else
-  fixed, paired against the unchanged control, both model families.
-- **Evidence:** capping alone loses about 5 cycles; bounded scenarios with a raw
-  target gain about 6; both together gain 18–20.
-- **Caveat carried on the slide:** the two bounded cells restrict true
-  validation RUL to 1–125, which changes the task and the R² denominator.
-- **Decision and its public effect:** freeze the joint policy; Run 3 → Run 4,
-  +0.30377. Claims C28–C35.
+*Each point is a submitted model; the label names the decision that run introduced*
 
-### 6 — Decision 2: which engineered features earn their place (1.50 min)
-- **Comparison:** matched signal-family ablation against age + latest values.
-- **Evidence:** the inverse pair 15/23 is the strongest single family; all four
-  families together are worth about 10 cycles and ΔR² 0.17, 5/5 folds for both
-  models; the channel-07 state family failed.
-- **Decision:** the Run 5 feature set. Three further representation experiments
-  were rejected on the same folds (backup B5). Claims C36–C42.
+- **Layout** `figure` · **1.00 min** · claims **C05–C12** (8)
+- **Figure** `public_score_chain.png` — generated for the talk
+- **Source label** Figure: generated from kaggle_scores.csv and pipeline_experiments.md · claims C05-C12
 
-### 7 — Decision 3: the model family (2.00 min)
-- **Comparison:** locked architecture study, 20 locked scenarios × 100 unseen
-  UAVs, three seeds, protocol frozen before any result was seen.
-- **Evidence:** XGBoost 0.804, Random Forest 0.783, Extra Trees 0.764, then a
-  wide gap to trajectory retrieval 0.507, sensor-graph TCN 0.429, multi-scale
-  CNN 0.361; TCN unstable at −2.423. The later matched hybrid rematch is
-  summarised verbally and shown in backup B2.
-- **Decision:** retain engineered-feature trees, stated for the architectures,
-  representations and budgets tested here. Claims C43–C53.
+### 3. Six of twenty-eight channels carry no information
 
-### 8 — Decision 4: a cross-fitted residual correction (2.00 min)
-- **Comparison:** six-member mean, median, trimmed mean and nonnegative blend
-  against a cross-fitted residual correction, identical folds.
-- **Evidence:** 11.5080 → 11.0243 cycles, 4.20%, 5/5 fold wins; simple averaging
-  landed near 12.0.
-- **Mechanism:** editable schematic of the retained contract, including that
-  out-of-fold calibration predictions come from models that excluded that UAV.
-- **Public effect:** Run 6 → Run 7, +0.00911. Claims C54–C60.
+*Red: unique-value count and numeric range at the effectively-constant threshold*
 
-### 9 — Decision 5: conditional conservative calibration (1.00 min)
-- **Evidence:** the pre-declared quantile sweep; a monotone trade-off between
-  accuracy and RMS overprediction; q = 0.55 selected within 0.005 R² of the
-  best.
-- **Public effect:** Run 5 → Run 6, +0.00216, the smallest retained step.
-  Claims C61–C65.
+- **Layout** `figure` · **0.75 min** · claims **C13–C18** (6)
+- **Figure** `constant_features.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_constant_features.py · claims C13-C18
 
-### 10 — What Run 7 still gets wrong (1.25 min)
-Prediction alignment on the saved development out-of-fold set; the error is
-concentrated in RUL 51–125 and in short histories; the short-history specialist
-gained 0.389% and was rejected. Claims C66–C73.
+### 4. Ten channels move with age inside every UAV
 
-### 11 — Why the chain stops at 0.87652 (1.75 min)
-The forecast-history screen (−13.0%, 5/5) and its collapse under a complete
-nested refit (+1.56% worse, 2/5), plus a table of the five other post-Run-7
-candidates and their gates. Nothing passed, so nothing was submitted.
-Claims C74–C84.
+*Twelve of the twenty-two channels: the ten degradation candidates, plus telemetry_18 and 26*
 
-### 12 — Development performance and public performance (1.00 min)
-Two panels, deliberately not one curve. Development mean-fold 0.89274 → 0.90041,
-pooled 0.90446 as a different aggregation; recorded public 0.84513 → 0.87652;
-the remaining 0.02348 gap needs about 10.0% lower RMSE. Claims C85–C93.
+- **Layout** `figure` · **1.50 min** · claims **C19–C27** (9)
+- **Figure** `temporal_rul_summary_subset.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run on a channel subset · 0_data_analysis/core_data_analysis/temporal_rul_analysis.py · claims C19-C27
 
-### 13 — What the next comparison can resolve (0.75 min)
-PE_28's ten feature representations × two model recipes, its declared gates, and
-its **pending** status on 8 September 2026. Claims C94–C99.
+### 5. Variance decomposition assigns each channel its role
 
-### 14 — How we reached 0.87652 (0.50 min)
-The decision chain as a table with the phase that owned each decision, and what
-is not claimed. Claim C100.
+*Dark: variation inside one UAV over time. Light: persistent differences between UAVs.*
+
+- **Layout** `split_figure` · **1.25 min** · claims **C28–C34** (7)
+- **Figure** `within_between_variance.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_within_between_variance.py · claims C28-C34
+
+### 6. Train and test differ in age, not in distribution
+
+*Left two panels: raw shift. Right two: the same comparison at matched flight cycle.*
+
+- **Layout** `figure` · **1.00 min** · claims **C35–C41** (7)
+- **Figure** `train_test_drift.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run at slide size · 0_data_analysis/core_data_analysis/train_test_drift.py · claims C35-C41
+
+### 7. The screening matrix that Phase 1 inherited
+
+*A blue cell means the channel meets that documented threshold. Roles are not exclusive.*
+
+- **Layout** `split_figure` · **1.25 min** · claims **C42–C50** (9)
+- **Figure** `channel_classification.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run at slide size · 0_data_analysis/core_data_analysis/channel_classification.py · claims C42-C50
+
+### 8. Phase 1 fixed what every later number is measured against
+
+*Whole-UAV nested cross-validation, and ten automated assertions that must pass*
+
+- **Layout** `phase1_design` · **1.25 min** · claims **C51–C59** (9)
+- **Figure** none; native PowerPoint drawing and tables
+- **Source label** Sources: 1_dataset_construction/2_UAV_grouped_validation_folds and 10_automated_leakage_checks/artifacts/verification_report.json · claims C51-C59
+
+### 9. Cutoffs are drawn from the observed test history lengths
+
+*Test UAVs are younger than training UAVs, so training samples must be truncated the same way*
+
+- **Layout** `figure_notes` · **1.25 min** · claims **C60–C68** (9)
+- **Figure** `history_length_distributions.png` — repository script re-run at slide size
+- **Source label** Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_history_length_distributions.py · claims C60-C68
+
+### 10. 606 prefix features, and four sets to compare them with
+
+*Every feature is computed from cycles at or before the cutoff, and scaled inside each fold*
+
+- **Layout** `features` · **1.25 min** · claims **C69–C77** (9)
+- **Figure** none; native PowerPoint drawing and tables
+- **Source label** Sources: 1_dataset_construction steps 5-7 · feature_catalog.csv and preprocessing_config.json · claims C69-C77
+
+### 11. The benchmark: age alone predicts nothing
+
+*A weighted linear fit on the cutoff cycle, evaluated on the same 20 locked scenarios*
+
+- **Layout** `figure_notes` · **1.25 min** · claims **C78–C86** (9)
+- **Figure** `cycle_only_baseline.png` — generated for the talk
+- **Source label** Figure: generated from 1_dataset_construction/9_cycle_only_baseline artifacts · claims C78-C86
+
+### 12. Decision 1: bounded scenarios and a fitting cap at 125
+
+*PE_2 paired RMSE improvement, mean-fold, blue ExtraTrees and orange XGBoost. Public: +0.30377*
+
+- **Layout** `figure` · **1.25 min** · claims **C87–C94** (8)
+- **Figure** `pe2_target_scenario_2x2_rmse_panel.png` — repository figure, cropped from y=0.462H
+- **Source label** Figure: lower panel of the generated PE_2 figure · experiments/PE_2/runs/run_1 · claims C87-C94
+
+### 13. Decision 2: pruned features and a calibrated tree blend
+
+*Locked architecture comparison, architecture study run 5, five held-out UAV folds. Public: +0.02012*
+
+- **Layout** `figure` · **1.25 min** · claims **C95–C103** (9)
+- **Figure** `r2_comparison.png` — repository figure, unchanged
+- **Source label** Figure: repository figure, unchanged · 2_model_architecture_study/runs/run_5 · claims C95-C103
+
+### 14. Decision 3: conditional conservative calibration
+
+*PE_4: a quantile shift applied only where the model is likely to overpredict. Public: +0.00216*
+
+- **Layout** `figure` · **0.75 min** · claims **C104–C108** (5)
+- **Figure** `calibration_tradeoff.png` — repository figure, unchanged
+- **Source label** Figure: repository figure, unchanged · experiments/PE_4/runs/run_1 · claims C104-C108
+
+### 15. Decision 4: a cross-fitted residual correction
+
+*PE_11: a small model that predicts the ensemble's own error from its disagreement. Public: +0.00911*
+
+- **Layout** `ensemble` · **1.25 min** · claims **C109–C116** (8)
+- **Figure** `bagging_residual_comparison.png` — repository figure, unchanged
+- **Source label** Figure: repository figure, unchanged · experiments/PE_11/runs/run_1 · claims C109-C116
+
+### 16. Why the chain stops at 0.87652
+
+*Run 7 development out-of-fold predictions, and every candidate evaluated since*
+
+- **Layout** `screen` · **1.25 min** · claims **C117–C127** (11)
+- **Figure** `development_prediction_scatter.png` — repository figure, unchanged
+- **Source label** Figures and tables: run_7/7_post_run_reporting and experiments/PE_15-PE_28 · claims C117-C127
+
+### 17. How we reached 0.87652
+
+*Ordered by the submission that carried each decision*
+
+- **Layout** `conclusions` · **0.75 min** · claims **C128–C132** (5)
+- **Figure** none; native PowerPoint drawing and tables
+- **Source label** Sources: kaggle_scores.csv, pipeline_experiments.md, phase_0 and phase_1 artifacts · claims C128-C132
 
 ---
 
 ## Backup slides
 
-| # | Topic | Why it is held back |
-| --- | --- | --- |
-| B1 | Full locked architecture comparison, all eight families, seed SD and bootstrap intervals | Slide 7 shows the chart; the numbers are question material |
-| B2 | Sequence and hybrid models in full: the matched run-8 rematch and the dedicated temporal study | Needed only if someone asks whether neural models got a fair chance |
-| B3 | Complete cap/scenario matrix and the target-support explanation | Needed only if someone questions the R² denominator argument on slide 5 |
-| B4 | Residual correction, nested UAV calibration and the full PE_4 policy table | Implementation-level detail |
-| B5 | Seven rejected representation experiments | Question material, not talk material |
-| B6 | Uncertainty, endpoint duplication and public-score provenance | Methodological caveats questions usually reach |
+Ten backup slides follow a divider. The brief asked for four to six; the expanded Phase 0 and Phase 1 emphasis added four (B1–B4) on top of the six that already existed. They are held for questions and are not spoken.
+
+- **B1** Backup: the complete Phase 0 broad review · claims C133–C140 (8)
+- **B2** Backup: redundancy, anomalies, and what was not removed · claims C141–C148 (8)
+- **B3** Backup: the 27 features derived from every channel · claims C149–C153 (5)
+- **B4** Backup: the cycle-only baseline, group by group · claims C154–C159 (6)
+- **B5** Backup: full locked architecture comparison · claims C160–C163 (4)
+- **B6** Backup: sequence and hybrid models, in full · claims C164–C167 (4)
+- **B7** Backup: the complete cap and scenario matrix · claims C168–C169 (2)
+- **B8** Backup: residual correction, calibration and the safety table · claims C170–C172 (3)
+- **B9** Backup: representation experiments that were rejected · claims C173–C186 (14)
+- **B10** Backup: uncertainty, endpoint duplication and score provenance · claims C187–C192 (6)
 
 ---
 
-## Experiments deliberately left out of the main deck
+## Scope rules held on-slide
 
-| Omitted | Reason |
-| --- | --- |
-| PE_5 target-tail variants | Confirms the cap decision already made on slide 5 |
-| PE_6 sequence sampling, PE_7 stacking | Preparatory or blocked; PE_7 never ran |
-| PE_8 onset targets, PE_9 drift pruning, PE_17 population features | Rejected formulations; collected in backup B5 |
-| PE_10 multi-resolution hybrid | Subsumed by the hybrid result on slide 7 and backup B2 |
-| PE_12 test-like weighting | Confirms the slide-8 decision under a reweighting |
-| PE_16 residual-head variants | Missed its 1% gate; same lesson as slide 11 |
-| PE_19 temporal ensemble weights, Run 9 censored/horizon targets | Same conclusion as slide 7 by a different mechanism |
-| PE_25 restricted blending | Screening variant of the PE_24 result on slide 11 |
-| Seed enumeration, Optuna plumbing, checkpoint formats, TensorBoard views | Reproducibility machinery, not evidence that changes a conclusion |
+- Phase 0 evidence is labelled by the view it comes from: pooled, age-controlled, within-UAV, or between-UAV. Slide 4 exists because those four views disagree about telemetry_18.
+- Nothing in Phase 0 is presented as a model result. Screening outcomes are called candidates, and slides 4, 5 and 7 each say that grouped validation decides.
+- Cutoff sampling from the test length distribution is named on slide 9 as a design choice that uses test *inputs*, never test labels.
+- The 2×2 cells on slide 12 are not on a common R² scale, because changing the evaluation target changes the denominator; the panel shown is paired RMSE improvement within each fold.
+- Architecture studies from run 5, run 7 and run 8 are kept on separate axes and never combined.
+- Fitting cap 125, evaluation on raw endpoint labels, and the nonnegative prediction clip are stated as three different things.
+- Development and public scores never share a curve. Slide 17 states the 0.90041 development figure and the 0.87652 public figure separately and quantifies the gap.
+- Fresh split seeds (PE_21, PE_28 confirmation) are described as robustness checks on the same UAV population, not as fresh holdouts.
+- The retained model is called "retained", never "deployed".
 
 ---
 
-## Template adaptation notes
+## Template adaptation
 
-- Base file: the supplied `UAVRULEstimation_presentation.pptx` (University of
-  Stuttgart, "UNI COLOUR" theme, Arial, 10 × 5.625 in). Work was done on a copy;
-  the original is unmodified.
-- Masters, layouts, theme colours, logo and footer/slide-number placeholders are
-  the template's own. The ten sample slides were removed after inspection.
-- Layouts used: `Titelfolie` (slide 1), `Titel und Inhalt` (content and backup
-  slides), `Kapitel` (backup divider).
-- Type scale is the template's own: 18 pt bold titles, 14 pt subtitle line,
-  8–12 pt inside diagrams and tables. On this 10-inch-wide canvas an 18 pt title
-  projects the same size as 24 pt on a 13.33-inch deck.
-- Schematic colour roles follow the template theme: dark blue `#00519E` for
-  model members and outputs, cyan `#00BEFF` for the selected step, yellow
-  `#FFD500` for the element under discussion, grey `#9F9998` for intermediate
-  state. The repository figures keep their own original colours; the deck does
-  not restyle them.
+- The supplied file is untouched; `build_deck.py` opens a copy.
+- Masters, layouts, theme colours, Arial and the university logo are reused as they are. The ten sample slides are removed from `sldIdLst` and their relationships dropped.
+- The canvas is 10 × 5.625 in, not 13.33 in. A point on this canvas projects like 1.33 points on a 13.33 in deck, so the master's 18 pt title and 16 pt body already read like 24 pt and 21 pt. Titles are therefore left at the master's 18 pt bold rather than pushed to 28–36 pt, which would not fit the placeholder.
+- Titles are kept under about 76 characters, the one-line limit at 18 pt across the 9.02 in content width.
+- Date, footer and slide-number placeholders are cloned onto each slide, because python-pptx does not inherit them automatically.
+- The title slide keeps the layout's own design: dark title panel on the right, presenter circle, logo. The prediction-timeline figure occupies the free left half in place of the layout's photograph placeholder.
+- No stock photography, decorative icons or gradients were added.
 
 ---
 
 ## Rehearsal estimate
 
-The main-deck narration is **2,332 spoken words**. At an unhurried 125 words per
-minute that is **18.7 minutes**, against a planned 19.0 minutes of content plus
-1.0 minute of transitions and pauses. The per-slide table is at the end of
-`speaker_notes.md`.
-
-This is an arithmetic estimate, not a rehearsal. Slides 4, 5, 7 and 11 carry the
-scope caveats and should not be the ones cut if a live run goes long.
+- Main-deck narration: **2,425 words**
+- At 125 words per minute: **19.40 min**, against 19.00 min of planned content and a 20-minute slot.
+- At 135 words per minute: 17.96 min.
+- The brief's band was 2,100–2,350 words; this draft sits about 60 words above it, which leaves little slack for questions inside the slot. The three longest slides to cut first are 9, 10 and 11.
 
 ---
 
 ## Verification performed
 
-- All 21 slides were exported to PDF with LibreOffice 24.2 and inspected as
-  images at presentation size for clipping, overlap, contrast and label
-  legibility.
-- A geometry pass confirmed that no shape falls outside the slide and that every
-  slide carries speaker notes.
-- Every number printed as slide text was matched back to `evidence_ledger.csv`,
-  to `sources/chart_data/`, or to the deck's own source files; the check reports
-  no unmatched values.
-- `build_ledger.py` validates the ledger's claim numbering, slide ordering and
-  status vocabulary before writing it.
+- Every re-run repository script's output CSV was compared with the repository's own CSV for the same analysis; largest numeric difference zero (temporal/RUL: 8.4 × 10⁻¹⁵ on shared rows).
+- `build_ledger.py` validates field names, sequential claim IDs, non-decreasing slide order and status values: 192 claims.
+- Every number printed as slide text was extracted from the built `.pptx` and matched against the ledger, `chart_data/` and the deck sources. Result: no unmatched numbers.
+- Shape geometry was checked against the slide canvas, and every main slide was checked for speaker notes. Result: clean.
+- All 28 slides were rendered to PDF with LibreOffice and inspected as images.
 
-Not verified: the deck has **not** been opened in Microsoft PowerPoint. Font
-substitution in the LibreOffice render is Liberation Sans for Arial, which is
-metrically identical, so the layout checks hold; kerning and the template's
-autofit behaviour should still be confirmed on the target machine.
+## Standing limitations
+
+- The deck has **not** been opened in Microsoft PowerPoint. It was checked by rendering to PDF with LibreOffice 24.2 and inspecting every page. Liberation Sans substitutes metrically for Arial, so line breaks should hold, but that is not the same as opening it in PowerPoint.
+- PE_27's screen numbers could not be read from their artifact: the file sits deeper than the file bridge's folder-depth limit. They are not asserted on any slide. The run's `winner_manifest.json` was reachable and records `status: no_promotion` with the control retained.
+- The narration is about 60 words above the brief's upper word band.
+

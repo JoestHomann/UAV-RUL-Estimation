@@ -1,0 +1,43 @@
+[pipeline]
+experiment = "PE_29"
+run = "run_1"
+
+[run_definitions.PE_29]
+title = "XGBoost weight-scale audit and conditional all-cycle comparison"
+description = "Reuse verified PE_28 references, audit one fixed regularization correction, conditionally compare training density, then confirm one frozen candidate against Run 7."
+
+[[run_definitions.PE_29.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_weight_scale_audit.py"
+arguments = ["--workflow", "PE_29", "--check"]
+script_chain = "weight_scale_audit"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_29.steps]]
+name = "evaluate_weight_scale_audit"
+script = "2_architecture_experiments/1_pipeline_experiments/run_weight_scale_audit.py"
+arguments = ["--workflow", "PE_29"]
+script_chain = "weight_scale_audit"
+status_artifact = "reporting/winner_manifest.json"
+supports_force = true
+
+[script_chains.weight_scale_audit]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_weight_scale_audit.py"]
+
+[weight_scale_workflows.PE_29]
+source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
+feature_variant = "B_other"
+reference_prefix_count = 20
+audit_split_seed = 20270107
+confirmation_split_seeds = [20270217, 20270227]
+max_workers = 2
+cpu_threads = 4
+audit_minimum_relative_rmse_improvement = 0.02
+audit_minimum_fold_wins = 4
+density_minimum_relative_rmse_improvement = 0.02
+density_minimum_fold_wins = 4
+reference_minimum_relative_rmse_improvement = 0.02
+reference_minimum_fold_wins = 4
+confirmation_minimum_relative_rmse_improvement = 0.02
+confirmation_minimum_fold_wins = 8
+confirmation_minimum_pooled_r2 = 0.90

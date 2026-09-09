@@ -28,8 +28,8 @@ FIELDS = ["claim_id", "slide_number", "claim", "source_path",
           "status", "limitation"]
 
 VALID_STATUS = {"verified", "documented", "unverified"}
-SLIDE_ORDER = {str(number): number for number in range(1, 15)}
-SLIDE_ORDER.update({f"B{number}": 100 + number for number in range(1, 7)})
+SLIDE_ORDER = {str(number): number for number in range(1, 18)}
+SLIDE_ORDER.update({f"B{number}": 100 + number for number in range(1, 11)})
 
 
 def main():

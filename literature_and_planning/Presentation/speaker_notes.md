@@ -24,229 +24,296 @@ Delivery notes:
 
 A fleet of inspection UAVs records twenty-eight anonymous telemetry channels once per flight cycle. We are given a UAV we have never seen, observed up to some cutoff, and asked how many cycles it has left.
 
-This is a real training UAV: two hundred and twenty-nine cycles before failure. Cut it at cycle one hundred and forty-eight, the median observed test length, and everything right of the line is unknown. Those eighty-one cycles are the quantity to predict.
+This is a real training UAV: two hundred and twenty-nine cycles to failure. Cut it at cycle one hundred and forty-eight, the median test length, and everything right of the line is unknown. Those eighty-one cycles are what we predict.
 
-Our best submitted model scores zero point eight seven six five two on the public leaderboard. The rest of this talk is the answer to one question: which decisions produced that number.
+Our best submitted model scores zero point eight seven six five two. This talk answers one question: which decisions produced that number. Most were made before any model was trained.
 
-> **Speaker reference (not spoken).** Planned 0.75 min · 110 words · about 0.88 min at 125 wpm.  
+> **Speaker reference (not spoken).** Planned 0.75 min · 106 words · about 0.85 min at 125 wpm.  
 > Figure: generated for this talk from data/train.csv · claims C01-C04
 
 ## Slide 2 — Five submissions, five decisions
 
 *Each point is a submitted model; the label names the decision that run introduced*
 
-Here is the whole answer on one axis, and then we will walk it.
+Here is the whole answer on one axis.
 
-Run three was a tuned XGBoost on the raw remaining-life target under our original validation scenarios. Zero point five four. Run four changed the validation scenarios and capped the fitting target at a hundred and twenty-five, and jumped to zero point eight four five. Run five brought the drift-pruned feature set and a calibrated fifty-fifty tree blend: zero point eight six five. Run six added conditional conservative calibration: zero point eight six seven. Run seven added a cross-fitted residual correction on six seeded tree members: zero point eight seven six five.
+Run three: a tuned XGBoost on the raw remaining-life target under our original scenarios, zero point five four. Run four changed the validation scenarios and capped the fitting target at a hundred and twenty-five: zero point eight four five. Run five brought the drift-pruned features and a calibrated tree blend. Run six added conditional calibration, run seven a cross-fitted residual correction: zero point eight seven six five.
 
-Two honest qualifications. Each point is a submission, not an isolated ablation, so a run can carry more than one change; the development experiment that motivated each one is named under it. And the deltas shrink by two orders of magnitude across the chain. One decision is worth three tenths of R squared. Everything after it is worth about three hundredths in total.
+Two qualifications. Each point is a submission, not an isolated ablation, so a run can carry more than one change. And the deltas shrink by two orders of magnitude: one decision is worth three tenths of R squared, everything after it about three hundredths. That first decision is about the data and the evaluation, not the model. So we start there.
 
-> **Speaker reference (not spoken).** Planned 1.25 min · 168 words · about 1.34 min at 125 wpm.  
+> **Speaker reference (not spoken).** Planned 1.00 min · 136 words · about 1.09 min at 125 wpm.  
 > Figure: generated from kaggle_scores.csv and pipeline_experiments.md · claims C05-C12
 
-## Slide 3 — Phase 0 decided which channels may carry information
+## Slide 3 — Six of twenty-eight channels carry no information
 
-*Consistency inside a UAV, not pooled correlation, is what generalises to an unseen UAV*
+*Red: unique-value count and numeric range at the effectively-constant threshold*
 
-The channels are anonymous, so we can only ask how they behave.
+Phase 0 is a reproducible audit of the data before any model exists. Its first job is subtraction.
 
-The two right-hand panels are the ones that decided things. Channel twenty-one and channel nineteen have a strong median within-UAV correlation with remaining life and move in the same direction in one hundred per cent of UAVs. Channel twenty-five and channel sixteen do the same in the opposite direction. Those are the degradation candidates.
+Two channels, twenty and twenty-seven, take exactly one value in the whole training set. Four more — three, eight, fourteen and seventeen — vary only at machine precision: between ninety-three and ninety-eight percent of their rows sit inside a flatline run of at least five identical cycles. All six fail the effectively-constant test.
 
-Channel eighteen is the interesting counter-example. It has a clear pooled and age-controlled association, and almost no within-UAV relationship: ninety-six per cent of its variance sits between UAVs. That is operating context, not degradation, so we use it as a baseline rather than as a trend. Channel twenty is flat everywhere; six such channels were removed, leaving twenty-two.
+Twenty-eight channels become twenty-two, and the six never enter any feature set. That decision comes from the data, not from a model score.
 
-The decision from this phase was a taxonomy, not a model: ten degradation candidates, four context channels, one state channel, six removals.
+> **Speaker reference (not spoken).** Planned 0.75 min · 92 words · about 0.74 min at 125 wpm.  
+> Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_constant_features.py · claims C13-C18
+
+## Slide 4 — Ten channels move with age inside every UAV
+
+*Twelve of the twenty-two channels: the ten degradation candidates, plus telemetry_18 and 26*
+
+The second job is to find which of the twenty-two remaining channels track degradation. Four views, one per panel.
+
+The left panel pools every row — the weakest evidence, because it mixes UAVs of different ages. The second controls for flight cycle. The third computes the correlation inside each UAV separately, and the fourth gives the share of UAVs trending the same way.
+
+The declared threshold is a within-UAV correlation of at least zero point three, with the same direction in at least seventy percent of UAVs. Ten channels pass. Seven, thirteen, nineteen, twenty-one and twenty-two increase in one hundred percent of UAVs; sixteen, twenty-five and twenty-eight decrease in one hundred percent.
+
+Now telemetry eighteen. Visible age-controlled association in the second panel; essentially nothing in the third, at minus zero point zero one nine. A pooled analysis would have promoted it as a degradation signal. Inside a single UAV it does not move with remaining life at all.
+
+A correlation is still not predictive value. These ten are candidates; whether they help is settled later by grouped validation.
+
+> **Speaker reference (not spoken).** Planned 1.50 min · 177 words · about 1.42 min at 125 wpm.  
+> Figure: repository script re-run on a channel subset · 0_data_analysis/core_data_analysis/temporal_rul_analysis.py · claims C19-C27
+
+## Slide 5 — Variance decomposition assigns each channel its role
+
+*Dark: variation inside one UAV over time. Light: persistent differences between UAVs.*
+
+The previous slide asked whether a channel moves with age. This one asks where its variation lives, and the answer decides what kind of feature it should become.
+
+Each bar splits a channel's total variance into the part that happens inside one UAV over time, dark blue, and the part that is a persistent difference between UAVs, light blue.
+
+Seventeen channels are within-UAV dominated, including all ten degradation candidates, at seventy-four to eighty-seven percent. Those get temporal features: slope, rolling statistics, recent change, deviation from the UAV's own baseline.
+
+Four are between-UAV dominated. Telemetry eighteen is the extreme case: ninety-six percent of its variance is simply that different UAVs sit at different levels. With the previous slide that is a coherent story — eighteen describes the UAV, not its degradation — so it is kept only as a baseline and level description.
+
+The six removed channels appear as constant, with no bar at all: the same conclusion by a different route.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 159 words · about 1.27 min at 125 wpm.  
+> Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_within_between_variance.py · claims C28-C34
+
+## Slide 6 — Train and test differ in age, not in distribution
+
+*Left two panels: raw shift. Right two: the same comparison at matched flight cycle.*
+
+Before trusting any of it, one question: are the test UAVs the same kind of object as the training UAVs?
+
+The two left panels compare raw distributions and look alarming. The two right panels compare each test endpoint only against training UAVs observed at the same flight cycle. Almost all of the apparent shift disappears: the median age-matched shift is below zero point two seven training interquartile ranges for every channel.
+
+So test UAVs are younger, not different. That is a statement about validation design, and it is the bridge into Phase 1.
+
+Two channels stay on a watch list: telemetry five, with sixteen percent of its endpoints outside the same-age training range, and twenty-two with nine. Neither was removed on that evidence.
+
+> **Speaker reference (not spoken).** Planned 1.00 min · 123 words · about 0.98 min at 125 wpm.  
+> Figure: repository script re-run at slide size · 0_data_analysis/core_data_analysis/train_test_drift.py · claims C35-C41
+
+## Slide 7 — The screening matrix that Phase 1 inherited
+
+*A blue cell means the channel meets that documented threshold. Roles are not exclusive.*
+
+Everything Phase 0 found, in one matrix. Each row is a channel, each column a documented threshold, each blue cell a channel that meets it. The roles are deliberately not exclusive.
+
+Six removal candidates, ten degradation candidates, four context channels, one state channel. On top of that, ten channels flagged for anomaly review, fourteen for redundancy, fifteen for drift.
+
+The important point is what we did not do with the last three columns. Nothing was removed for being correlated, for containing extreme readings, or for drifting. Telemetry nineteen and twenty-one correlate almost perfectly at UAV level and both were kept. A screening matrix summarises statistical evidence; it does not measure predictive value. Every warning became an experiment later, and several were answered with no.
+
+Telemetry seven is the interesting row: it meets five criteria at once, so it is represented as a discrete operating state rather than a continuous sensor.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 150 words · about 1.20 min at 125 wpm.  
+> Figure: repository script re-run at slide size · 0_data_analysis/core_data_analysis/channel_classification.py · claims C42-C50
+
+## Slide 8 — Phase 1 fixed what every later number is measured against
+
+*Whole-UAV nested cross-validation, and ten automated assertions that must pass*
+
+Phase 1 turns a hundred complete run-to-failure histories into something we can honestly measure a model on.
+
+The split is by UAV, never by row. A hundred training UAVs become five outer folds of twenty, balanced by terminal lifetime. Inside each outer round the eighty training UAVs split again into four inner folds. Features, hyperparameters, early stopping and blend weights are all selected on the inner folds; the twenty outer UAVs only ever evaluate the selected procedure. Twenty inner rounds in total, and every UAV held out exactly once.
+
+Why nest rather than take one eighty-twenty split? With a hundred UAVs and large UAV-to-UAV differences, one split is not a measurement.
+
+None of this is trusted on faith. Ten assertions are re-checked automatically. The one to point at is prefix causality: the checker recomputes features for ten prefixes after replacing every post-cutoff telemetry value with extreme artificial numbers, and requires the features to come out unchanged. The status is passed.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 160 words · about 1.28 min at 125 wpm.  
+> Sources: 1_dataset_construction/2_UAV_grouped_validation_folds and 10_automated_leakage_checks/artifacts/verification_report.json · claims C51-C59
+
+## Slide 9 — Cutoffs are drawn from the observed test history lengths
+
+*Test UAVs are younger than training UAVs, so training samples must be truncated the same way*
+
+This is the single most consequential slide in Phase 1.
+
+Training histories run from a hundred and forty-five to five hundred and twenty-five cycles, median two hundred and twenty. Test histories run from thirty-eight to four hundred and seventy-five, median a hundred and forty-eight. Read the empirical CDF at a hundred and forty-five: about forty-seven percent of test UAVs stop before the shortest complete training lifetime begins.
+
+So a model trained on complete run-to-failure sequences is asked to do something it has never seen. The fix is to truncate: every training UAV gets twenty distinct cutoffs, drawn from the actual test history lengths and shorter than its own life.
+
+Each of a UAV's twenty prefixes carries weight one twentieth, so a five-hundred-cycle UAV and a hundred-and-fifty-cycle one influence training equally; otherwise long-lived UAVs would dominate simply by having more rows.
+
+One honest weakness: the cutoffs come from the test length distribution, which is information from the test inputs. No label is used, and the audit checks that, but it is worth naming.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 172 words · about 1.38 min at 125 wpm.  
+> Figure: repository script re-run at slide size · 0_data_analysis/broad_data_review/plot_history_length_distributions.py · claims C60-C68
+
+## Slide 10 — 606 prefix features, and four sets to compare them with
+
+*Every feature is computed from cycles at or before the cutoff, and scaled inside each fold*
+
+A prefix is a variable-length sequence, and the models we intend to use need a fixed-width row. So each prefix becomes twenty-seven summaries per channel.
+
+Five groups: where the channel is now, where it started, how far it has moved from its own baseline, how the whole history behaves, and what happened over the last five, twenty and fifty cycles. Comparing those windows lets a tree see acceleration, not only level.
+
+Twenty-two channels times twenty-seven, plus ten state features, plus flight cycle and its logarithm, is six hundred and six.
+
+Rather than pick one set, four nested sets were declared in advance, each answering a different question — is age alone predictive, does the current snapshot add anything, do the Phase 0 roles help, did the screening discard something useful.
+
+Scaling is median and interquartile range, refitted for every fold and feature set on the training UAVs alone. Twelve of the four thousand seven hundred and ten fitted scales fell back to unit scale, and they are recorded rather than silently dropped.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 171 words · about 1.37 min at 125 wpm.  
+> Sources: 1_dataset_construction steps 5-7 · feature_catalog.csv and preprocessing_config.json · claims C69-C77
+
+## Slide 11 — The benchmark: age alone predicts nothing
+
+*A weighted linear fit on the cutoff cycle, evaluated on the same 20 locked scenarios*
+
+The last thing Phase 1 builds is the simplest model that could work: predicted remaining life is a hundred and eighty-seven point three minus zero point five four two times the cutoff cycle, floored at zero. No telemetry at all.
+
+On the left is why it fails. At any cutoff the true remaining life spans hundreds of cycles, because UAVs do not all live the same length. Age tells you almost nothing about which one you hold.
+
+R squared of minus zero point zero zero five — slightly worse than the mean predictor — RMSE sixty-four and a half cycles, bias plus seventeen point seven, bootstrap interval minus zero point one five to plus zero point one three.
+
+This is the reference for everything after it. An RMSE of eleven cycles means nothing alone; eleven against sixty-four and a half on the same locked scenarios means the engineered features carry real information. The interval resamples whole UAVs, because each UAV appears in twenty scenarios and resampling rows would be falsely narrow.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 169 words · about 1.35 min at 125 wpm.  
+> Figure: generated from 1_dataset_construction/9_cycle_only_baseline artifacts · claims C78-C86
+
+## Slide 12 — Decision 1: bounded scenarios and a fitting cap at 125
+
+*PE_2 paired RMSE improvement, mean-fold, blue ExtraTrees and orange XGBoost. Public: +0.30377*
+
+With the protocol fixed, the first experiment crossed two choices: which validation scenarios to score on, and whether to cap the fitting target.
+
+Capping means fitting against remaining life truncated at a hundred and twenty-five cycles, while evaluation still uses the raw label. A UAV with four hundred cycles left and one with two hundred look identical, so forcing the model to separate them wastes capacity on a region nobody scores. Bounding the scenarios means concentrating validation cutoffs on the bands the test set actually contains — the Phase 1 history-length finding, applied.
+
+Both help, and they help together. The four cells are not on a common R squared scale — changing the evaluation target changes the denominator — so this is paired RMSE improvement within each fold.
+
+Run four carried both changes and moved the public score from zero point five four to zero point eight four five. Three tenths of R squared from deciding what to fit and what to measure. No new model, no new feature.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 166 words · about 1.33 min at 125 wpm.  
+> Figure: lower panel of the generated PE_2 figure · experiments/PE_2/runs/run_1 · claims C87-C94
+
+## Slide 13 — Decision 2: pruned features and a calibrated tree blend
+
+*Locked architecture comparison, architecture study run 5, five held-out UAV folds. Public: +0.02012*
+
+Two things changed between run four and run five, and both trace back to Phase 0.
+
+The feature set became the drift-pruned screened set: two hundred and ninety-eight features, taking the Phase 0 screened definition and removing features whose train-test behaviour did not hold up. That is the drift-warning column being acted on at last — by experiment, not assumption.
+
+The model family was chosen here, under one locked protocol, with every architecture given the same folds, the same cutoffs and the same features. The two tree families come out ahead and, more usefully, they make different mistakes, so a fifty-fifty blend beats either alone. The blend weight is selected on training-side data only.
+
+Public score: zero point eight six five two five. Two hundredths. Notice the ratio — the model family, what people usually call the modelling decision, was worth about a fifteenth of the target and scenario decision.
+
+> **Speaker reference (not spoken).** Planned 1.25 min · 148 words · about 1.18 min at 125 wpm.  
+> Figure: repository figure, unchanged · 2_model_architecture_study/runs/run_5 · claims C95-C103
+
+## Slide 14 — Decision 3: conditional conservative calibration
+
+*PE_4: a quantile shift applied only where the model is likely to overpredict. Public: +0.00216*
+
+Run seven's predecessor overpredicts remaining life more often than it underpredicts, and in maintenance an overprediction is the expensive direction.
+
+PE_4 swept a conservative quantile shift and measured the cost. Shifting everything hurts accuracy. Applying the shift only conditionally, at quantile zero point five five, and only where the model's own signals say overprediction is likely, keeps almost all of the accuracy and removes part of the bias.
+
+It is worth two thousandths of public R squared. I show it because it is the one decision in the chain taken partly for a reason other than the score.
+
+> **Speaker reference (not spoken).** Planned 0.75 min · 99 words · about 0.79 min at 125 wpm.  
+> Figure: repository figure, unchanged · experiments/PE_4/runs/run_1 · claims C104-C108
+
+## Slide 15 — Decision 4: a cross-fitted residual correction
+
+*PE_11: a small model that predicts the ensemble's own error from its disagreement. Public: +0.00911*
+
+The last retained decision. Six tree members — three XGBoost and three ExtraTrees at seeds thirteen, thirty-seven and seventy-three — are averaged within family and then blended.
+
+A small histogram gradient model, seven leaves and a hundred iterations, then predicts that base prediction's residual. Its inputs are the base prediction, the observed history length, how much the six members disagree, and a few baseline deltas and slopes. Member disagreement is a usable signal about where the ensemble is unreliable.
+
+The leakage question matters here, so: the out-of-fold predictions that fit the residual model come from models which excluded that UAV, and calibration endpoints are restricted to training UAVs. True future remaining life is never an input.
+
+Development effect: eleven point five one down to eleven point zero two cycles, four point two percent better, winning in all five folds. Public score zero point eight seven six five two.
 
 > **Speaker reference (not spoken).** Planned 1.25 min · 146 words · about 1.17 min at 125 wpm.  
-> Figure: repository Phase 0 script re-run for the eight channels shown · claims C13-C19
+> Figure: repository figure, unchanged · experiments/PE_11/runs/run_1 · claims C109-C116
 
-## Slide 4 — Phase 1 decided what every later number is measured against
+## Slide 16 — Why the chain stops at 0.87652
 
-*One hundred UAVs, not 24,720 rows: the UAV is the independent unit*
+*Run 7 development out-of-fold predictions, and every candidate evaluated since*
 
-This slide is why the later numbers mean anything, so it is worth two minutes.
+Where the remaining error is, and why we stopped.
 
-We have twenty-four thousand seven hundred and twenty cycle rows, but only one hundred independent machines. Splitting rows at random would put cycles from the same UAV on both sides and answer the wrong question. So every fold is a whole-UAV fold: five outer folds of twenty UAVs, and inside each outer-training partition four inner folds that do all feature, model and hyperparameter selection. An automated check re-verifies this, including recomputing prefix features after corrupting post-cutoff telemetry.
+On the left are the out-of-fold development predictions. The structure is systematic, not random: the model compresses towards the middle, so long remaining lives are underpredicted and short ones overpredicted. That is what the fitting cap buys us, and it is also the ceiling it imposes.
 
-The figure decided the cutoffs. Test histories are systematically shorter than complete training lifetimes: the empirical CDF shows forty-seven of a hundred test UAVs stopping before cycle one hundred and forty-five, which is the shortest complete training life we have. So we never validate on complete run-to-failure histories. We sample cutoffs from the observed test length distribution, twenty per training UAV, and build every feature from cycles at or before the cutoff.
+On the right, six candidates tried after run seven, each with a promotion gate declared beforehand. A full nested refit of the most promising screen came back one point six percent worse. Extra seeds, a regime gate and a short-history specialist all failed. One TabPFN blend is promising and unconfirmed.
 
-Two more rules follow. Each UAV carries a total training weight of one, so a five-hundred-cycle UAV does not outvote a hundred-and-fifty-cycle one. And uncertainty resamples whole UAVs: extra prefixes and extra seeds do not create extra independent machines.
+So nothing was promoted, nothing was submitted, and the public score is still zero point eight seven six five two. I would rather report that than a number obtained by submitting until something stuck.
 
-> **Speaker reference (not spoken).** Planned 2.00 min · 203 words · about 1.62 min at 125 wpm.  
-> Figure: empirical-CDF panel of the repository Phase 0 history-length figure · claims C20-C27
+> **Speaker reference (not spoken).** Planned 1.25 min · 139 words · about 1.11 min at 125 wpm.  
+> Figures and tables: run_7/7_post_run_reporting and experiments/PE_15-PE_28 · claims C117-C127
 
-## Slide 5 — Decision 1: bounded scenarios and a fitting cap at 125
+## Slide 17 — How we reached 0.87652
 
-*Run 3 → Run 4, +0.30377 public. Blue = ExtraTrees, orange = XGBoost, paired against the control*
+*Ordered by the submission that carried each decision*
 
-This one decision is worth more than everything after it combined, so it deserves the most scrutiny.
+The answer to the question in the title.
 
-Offline scores and the leaderboard disagreed, and the hypothesis was that we were asking for exact remaining life very early in a UAV's life, where it is barely identifiable. We tested it as a two-by-two: validation scenario profile crossed with fitting target, everything else fixed. Each bar is the paired fold improvement over the unchanged control, for both model families.
+Three tenths of R squared came from deciding what to fit and what to measure it on — and both halves of that decision were read off Phase 0 and Phase 1 evidence: the history-length distributions and the age-matched drift comparison. Two hundredths came from the feature set and the model family. Roughly one hundredth came from calibration and the residual correction together.
 
-Capping alone, under the original scenarios, made things clearly worse: about five cycles of RMSE lost. Bounded scenarios with a raw target gained about six. Bounded scenarios plus the cap gained about eighteen to twenty cycles, and both model families agree.
+If there is one thing to take away, it is that the audit and the dataset construction were not preliminaries to the modelling. They were the modelling.
 
-Now the caveat that this slide exists to carry. The two right-hand cells restrict true validation remaining life to one through one hundred and twenty-five. That is not the same evaluation: it changes the difficulty and it changes the denominator of R squared. So the development gain is not a clean measurement of model quality.
-
-What we can say is narrower and is what the leaderboard confirmed. We froze the joint policy, bounded scenarios together with the cap, not capping in isolation; and the public score moved from zero point five four to zero point eight five. Every number after this slide uses that policy, with metrics still computed against raw labels.
-
-> **Speaker reference (not spoken).** Planned 2.00 min · 230 words · about 1.84 min at 125 wpm.  
-> Figure: lower panel of the generated PE_2 paired comparison · claims C28-C35
-
-## Slide 6 — Decision 2: which engineered features earn their place
-
-*Blue = ExtraTrees, orange = XGBoost, each treatment paired against the same control*
-
-Every channel becomes twenty-seven numbers: the latest value, a baseline from the first ten cycles, the deviation between them, the slope over the whole prefix, and level, spread and slope over the last five, twenty and fifty cycles. All computed from cycles at or before the cutoff.
-
-The question was whether those summaries actually add anything. The control here is cycle age plus the latest value of every nonconstant channel. Each treatment adds one degradation-signal family, with folds, models and search budget fixed.
-
-The inverse pair fifteen and twenty-three is the strongest single family, worth about six cycles of RMSE and about zero point one two R squared to both models. All four families together are worth about ten cycles and zero point one seven, improving in five folds out of five for both families. The discrete state channel, oh seven, is the one treatment that did not survive.
-
-This is what the Run 5 feature set was built from. Three further representation experiments were rejected on the same folds: compressed health indices, denser training prefixes and per-UAV normalisation. Those are in the backup.
-
-> **Speaker reference (not spoken).** Planned 1.50 min · 184 words · about 1.47 min at 125 wpm.  
-> Figure: lower panel of the generated PE_2 paired comparison · claims C36-C42
-
-## Slide 7 — Decision 3: the model family, chosen under one locked protocol
-
-*Twenty locked scenarios, 100 unseen UAVs, three seeds; no result was seen before the protocol froze*
-
-We did not assume trees. Sixteen model families were declared, and the sequence models got the same folds, the same UAV weighting and their own tuning budget.
-
-This is the locked comparison on the original task. XGBoost at zero point eight zero four, Random Forest at zero point seven eight, Extra Trees at zero point seven six. Then a wide gap: trajectory retrieval at zero point five one, sensor-graph TCN at zero point four three, multi-scale CNN at zero point three six. The mean baseline is negative because it predicts a constant, and the TCN at minus two point four was unstable across seeds rather than merely weak.
-
-We ran the fairest rematch we could later, under the current protocol, where hybrid models get the raw telemetry window and all two hundred and ninety-eight engineered features as well. The tree blend was at eleven point five one cycles, hybrid GRU at fourteen point six, hybrid CNN at seventeen point seven, and neither hybrid won a single fold out of five. A separate dedicated temporal study reached mean R squared zero point six five with an LSTM.
-
-Read that narrowly. It says the architectures, representations and budgets we tested here did not beat engineered-feature trees on one hundred UAVs. It does not say deep learning cannot do this task.
-
-> **Speaker reference (not spoken).** Planned 2.00 min · 218 words · about 1.74 min at 125 wpm.  
-> Figure: repository architecture study run 5 comparison, unchanged · claims C43-C53
-
-## Slide 8 — Decision 4: a cross-fitted residual correction
-
-*Run 6 → Run 7, +0.00911 public. Averaging six members did not help; learning their residual did*
-
-This is the last decision in the chain and the one that produced zero point eight seven six five two.
-
-Three XGBoost models and three ExtraTrees models, seeds thirteen, thirty-seven and seventy-three. Each family is averaged, and the weight between the families is chosen on the training side only. That gives a base prediction. A deliberately small second model then predicts the residual of that base prediction from the base prediction itself, the observed history length, the spread and range across the six members, the disagreement between the two families, and eight sensor features. Seven leaves, one hundred iterations. The correction is subtracted and the estimate is clipped at zero.
-
-The calibration step is where a stack like this normally leaks. The out-of-fold predictions used to fit the correction come from models that excluded the corresponding UAV, and calibration endpoints are filtered to training UAVs. The true future remaining life is never an input.
-
-The chart is why we attribute the gain to the correction rather than to bagging. Averaging the six members, taking their median, or trimming them all land near twelve cycles, worse than the frozen control at eleven point five one. The residual correction reached eleven point zero two, four point two per cent better, winning all five folds. On the leaderboard that became plus zero point zero zero nine one one.
-
-> **Speaker reference (not spoken).** Planned 2.00 min · 225 words · about 1.80 min at 125 wpm.  
-> Figure: repository PE_11 comparison, unchanged · claims C54-C60
-
-## Slide 9 — Decision 5: conditional conservative calibration
-
-*Run 5 → Run 6, +0.00216 public. A monotone trade-off: safety is bought with accuracy*
-
-Predicting more life than a UAV has is a different kind of error from predicting less. We tested whether that asymmetry can be reduced without paying for it.
-
-The correction is a function of predicted remaining life, fitted on four folds and applied to the fifth, and it can only lower a prediction. The control is top right: R squared zero point eight nine four, root-mean-square overprediction seven point two five cycles. Moving left buys safety and sells accuracy, monotonically. We selected quantile zero point five five, the safest policy still within zero point zero zero five R squared of the best.
-
-On the leaderboard this was the smallest retained step, plus zero point zero zero two. And it is an error property measured on development data, not evidence about flight safety or certification.
-
-> **Speaker reference (not spoken).** Planned 1.00 min · 134 words · about 1.07 min at 125 wpm.  
-> Figure: repository PE_4 trade-off, unchanged · claims C61-C65
-
-## Slide 10 — What Run 7 still gets wrong
-
-*Development out-of-fold predictions: 500 rows, 100 UAVs, 444 distinct endpoints*
-
-These are the retained model's own saved development predictions. Read the left panel; the right one is a diagnostic offset that we do not apply.
-
-The scatter is tight below about forty cycles and fans out above it. The band from fifty-one to one hundred and twenty-five holds ninety and a half per cent of the squared error, and the bias flips sign inside it — plus five cycles between seventy-six and one hundred, minus four and a half above that, the signature of the cap.
-
-By observed history it is sharper: the rows with at most a hundred cycles are twenty-one per cent of rows and thirty-two and a half per cent of the error.
-
-That suggested a specialist for short histories. A hundred and fifty model fits later, the combined predictor gained zero point three nine per cent and won six folds of fifteen. Diagnosing a subgroup did not establish that the obvious remedy fixes it.
-
-> **Speaker reference (not spoken).** Planned 1.25 min · 157 words · about 1.26 min at 125 wpm.  
-> Figure: repository Phase 3 Run 7 report, unchanged · claims C66-C73
-
-## Slide 11 — Why the chain stops at 0.87652
-
-*The strongest post-Run-7 candidate lost its entire gain under a complete nested refit*
-
-Six things were tried after Run 7. None replaced it, and the reason is the most useful thing in this talk.
-
-On the left, features built from the model's own earlier forecasts: what did we predict two, five, ten and twenty cycles ago, and how has it changed. Screened on saved predictions it cut mean RMSE from eleven point zero to nine point six, thirteen per cent, winning all five folds, with a bootstrap interval below zero. The strongest single result anyone produced here.
-
-It was labelled screening-only, because the base predictions came from a global out-of-fold table. So we rebuilt it: for every evaluation fold, refit the six tree members, select the blend weight, and fit both residual heads entirely inside the remaining UAVs. On the right is the result. One and a half per cent worse than its control, two folds of five. The thirteen per cent was a property of the evaluation procedure, not of the features.
-
-The other five are variations on the same lesson. A pretrained tabular blend gained one point three per cent on five folds, then one point one on two new seeds, then one point nine on three more with eleven of fifteen fold wins against a declared bar of twelve, with a bootstrap interval still spanning zero. A short-history specialist gained zero point four. None was promoted, so no submission was made, so the score is still zero point eight seven six five two.
-
-> **Speaker reference (not spoken).** Planned 1.75 min · 243 words · about 1.94 min at 125 wpm.  
-> Figure: repository PE_15 comparison, unchanged; later results as numbers · claims C74-C84
-
-## Slide 12 — Development performance and public performance
-
-*Development R² above 0.9; the recorded public score is 0.87652*
-
-Two panels, deliberately not one curve.
-
-Left, development performance on held-out UAV folds: run six at mean-fold R squared zero point eight nine two seven, run seven at zero point nine zero zero four. The third bar pools the same five hundred predictions instead of averaging by fold. A different aggregation, not a better result.
-
-Right, the recorded public score for those submissions. Run seven is zero point eight seven six five two. Encouragingly, the public gain from run six corresponds to three and a half per cent lower RMSE, close to the three and a half per cent we measured in development, so the two are moving together.
-
-The honest headline is the gap: reaching zero point nine on that scored set needs about ten per cent lower RMSE. The objective is met in development and is not demonstrated publicly.
-
-> **Speaker reference (not spoken).** Planned 1.00 min · 141 words · about 1.13 min at 125 wpm.  
-> Figure: generated from run_6/run_7 report_summary.json and kaggle_scores.csv · claims C85-C93
-
-## Slide 13 — What the next comparison can resolve
-
-*PE_28: ten feature representations × two model recipes — training started, no winner yet*
-
-One open question is whether the feature representation is the limiting factor. An alternative script outside our pipeline was reported to score zero point eight seven eight eight publicly. That is user-reported, for a different script, and not a matched experiment. What it gives us is a specific representation to test: two hundred and sixty-six features from twenty-two sensors against our two hundred and ninety-eight.
-
-So we cross ten representations, from fifty to three hundred and ten features, with two model recipes, varying one factor at a time.
-
-Status today: training started, no complete winner manifest.
-
-> **Speaker reference (not spoken).** Planned 0.75 min · 96 words · about 0.77 min at 125 wpm.  
-> Source: PE_28 README.md and run_1 input_verification.json, inspected 8 September 2026 · claims C94-C99
-
-## Slide 14 — How we reached 0.87652
-
-*One decision did most of the work; four smaller ones did the rest*
-
-Ranked by what they were worth publicly: defining the validation scenarios and the fitting target together, zero point three. The feature set and tree blend, zero point zero two. The residual correction, zero point zero zero nine. Conservative calibration, zero point zero zero two.
-
-Evaluation and target design dominated model choice, and after Run 7 nothing passed a nested confirmation. Development R squared is above zero point nine; the public score is not.
-
-Happy to take questions.
-
-> **Speaker reference (not spoken).** Planned 0.50 min · 77 words · about 0.62 min at 125 wpm.  
-> Source: evidence_ledger.csv · claims C100
+> **Speaker reference (not spoken).** Planned 0.75 min · 97 words · about 0.78 min at 125 wpm.  
+> Sources: kaggle_scores.csv, pipeline_experiments.md, phase_0 and phase_1 artifacts · claims C128-C132
 
 ---
 
 ## Backup slides (not timed)
 
-**B1 — Backup: full locked architecture comparison**  
-Architecture study run 5, settings version 11; 20 locked scenarios × 100 UAVs  
-Source: runs/run_5/7_architecture_comparison/architecture_comparison.csv
+**B1 — Backup: the complete Phase 0 broad review**  
+Nine analyses, and the decision each one contributed  
+Source: literature_and_planning/development_documentation/phase_0_dataAnalysis.md
 
-**B2 — Backup: sequence and hybrid models, in full**  
-The matched rematch under the current protocol, and the dedicated temporal study  
-Figure: repository architecture study run 8, unchanged; run 7 temporal summary
+**B2 — Backup: redundancy, anomalies, and what was not removed**  
+The strongest correlated pairs and the anomaly rates; every warning became an experiment  
+Source: 0_data_analysis/core_data_analysis/figures/feature_redundancy and figures/anomalies
 
-**B3 — Backup: the complete cap and scenario matrix**  
-Why the two scenario profiles cannot share one R² axis  
-Source: pipeline_experiments.md; _internal/shared_settings.toml
+**B3 — Backup: the 27 features derived from every channel**  
+All computed from cycles at or before the cutoff; verified by the prefix-causality assertion  
+Source: 1_dataset_construction/5_prefix_feature_engineering and 6_feature_sets/artifacts/feature_catalog.csv
 
-**B4 — Backup: residual correction, nested calibration and the safety table**  
-How the Run 7 adapter avoids leaking, and what the calibration bought  
-Source: residual_ensemble_contract.json; PE_4 calibration_summary.csv; r2 research report
+**B4 — Backup: the cycle-only baseline, group by group**  
+The same held-out predictions, reported by cutoff band, outer fold and terminal-lifetime quintile  
+Source: 1_dataset_construction/9_cycle_only_baseline/artifacts/metrics/
 
-**B5 — Backup: representation experiments that were rejected**  
-Seven matched comparisons, all development-only, all with their control retained  
-Source: pipeline_experiments.md experiment register
+**B5 — Backup: full locked architecture comparison**  
+Architecture study run 5, five held-out UAV folds, identical folds and cutoffs for every entry  
+Source: 2_model_architecture_study/runs/run_5/7_architecture_comparison/architecture_comparison.csv
 
-**B6 — Backup: uncertainty, endpoint duplication and score provenance**  
-What the bootstrap intervals do and do not cover  
-Source: diagnostic_summary.json; kaggle_scores.csv; PE_14 notes in the r2 report
+**B6 — Backup: sequence and hybrid models, in full**  
+Architecture study run 8: hybrid combinations of a tree ensemble with a sequence encoder  
+Source: 2_model_architecture_study/runs/run_8
+
+**B7 — Backup: the complete cap and scenario matrix**  
+PE_2, all four cells, with the target policy of each cell stated explicitly  
+Source: experiments/PE_2/runs/run_1/reporting
+
+**B8 — Backup: residual correction, calibration and the safety table**  
+PE_11 and PE_4 in detail, with the nested-calibration guarantee stated in full  
+Source: experiments/PE_11 and PE_4, runs/run_1/reporting
+
+**B9 — Backup: representation experiments that were rejected**  
+Every row is a matched development comparison whose control was retained  
+Source: experiments/PE_5, PE_6, PE_7, PE_9, PE_13, PE_22, PE_28
+
+**B10 — Backup: uncertainty, endpoint duplication and score provenance**  
+How the intervals are built, what the repeated endpoints do, and where each score comes from  
+Source: r2_research_2026_09_07/ and kaggle_scores.csv
 
 ---
 
@@ -254,21 +321,24 @@ Source: diagnostic_summary.json; kaggle_scores.csv; PE_14 notes in the r2 report
 
 | Slide | Topic | Planned min | Words | Spoken min at 125 wpm |
 | ---: | --- | ---: | ---: | ---: |
-| 1 | How we reached a public R² of 0.87652 | 0.75 | 110 | 0.88 |
-| 2 | Five submissions, five decisions | 1.25 | 168 | 1.34 |
-| 3 | Phase 0 decided which channels may carry information | 1.25 | 146 | 1.17 |
-| 4 | Phase 1 decided what every later number is measured against | 2.00 | 203 | 1.62 |
-| 5 | Decision 1: bounded scenarios and a fitting cap at 125 | 2.00 | 230 | 1.84 |
-| 6 | Decision 2: which engineered features earn their place | 1.50 | 184 | 1.47 |
-| 7 | Decision 3: the model family, chosen under one locked protocol | 2.00 | 218 | 1.74 |
-| 8 | Decision 4: a cross-fitted residual correction | 2.00 | 225 | 1.80 |
-| 9 | Decision 5: conditional conservative calibration | 1.00 | 134 | 1.07 |
-| 10 | What Run 7 still gets wrong | 1.25 | 157 | 1.26 |
-| 11 | Why the chain stops at 0.87652 | 1.75 | 243 | 1.94 |
-| 12 | Development performance and public performance | 1.00 | 141 | 1.13 |
-| 13 | What the next comparison can resolve | 0.75 | 96 | 0.77 |
-| 14 | How we reached 0.87652 | 0.50 | 77 | 0.62 |
-| | **Total** | **19.00** | **2332** | **18.66** |
+| 1 | How we reached a public R² of 0.87652 | 0.75 | 106 | 0.85 |
+| 2 | Five submissions, five decisions | 1.00 | 136 | 1.09 |
+| 3 | Six of twenty-eight channels carry no information | 0.75 | 92 | 0.74 |
+| 4 | Ten channels move with age inside every UAV | 1.50 | 177 | 1.42 |
+| 5 | Variance decomposition assigns each channel its role | 1.25 | 159 | 1.27 |
+| 6 | Train and test differ in age, not in distribution | 1.00 | 123 | 0.98 |
+| 7 | The screening matrix that Phase 1 inherited | 1.25 | 150 | 1.20 |
+| 8 | Phase 1 fixed what every later number is measured against | 1.25 | 160 | 1.28 |
+| 9 | Cutoffs are drawn from the observed test history lengths | 1.25 | 172 | 1.38 |
+| 10 | 606 prefix features, and four sets to compare them with | 1.25 | 171 | 1.37 |
+| 11 | The benchmark: age alone predicts nothing | 1.25 | 169 | 1.35 |
+| 12 | Decision 1: bounded scenarios and a fitting cap at 125 | 1.25 | 166 | 1.33 |
+| 13 | Decision 2: pruned features and a calibrated tree blend | 1.25 | 148 | 1.18 |
+| 14 | Decision 3: conditional conservative calibration | 0.75 | 99 | 0.79 |
+| 15 | Decision 4: a cross-fitted residual correction | 1.25 | 146 | 1.17 |
+| 16 | Why the chain stops at 0.87652 | 1.25 | 139 | 1.11 |
+| 17 | How we reached 0.87652 | 0.75 | 97 | 0.78 |
+| | **Total** | **19.00** | **2410** | **19.28** |
 
 Transitions and pauses: 1.00 min. Planned content 19.00 min plus transitions = 20.00 min.
 

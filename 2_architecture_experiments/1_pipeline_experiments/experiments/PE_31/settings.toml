@@ -1,0 +1,61 @@
+[pipeline]
+experiment = "PE_31"
+run = "run_1"
+
+[run_definitions.PE_31]
+title = "Pipeline reproduction, interaction benchmark and nested joint search"
+description = "Reproduce the original submission, evaluate six training policies and two anchors, then evaluate a complete training-side policy/model/blend selection procedure."
+
+[[run_definitions.PE_31.steps]]
+name = "reproduce_submission"
+script = "2_architecture_experiments/1_pipeline_experiments/reproduce_simple_submission.py"
+arguments = []
+script_chain = "reference_reproduction"
+status_artifact = "reproduction/reproduction_manifest.json"
+
+[[run_definitions.PE_31.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_campaign.py"
+arguments = ["--stage", "check"]
+script_chain = "campaign"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_31.steps]]
+name = "interaction_benchmark"
+script = "2_architecture_experiments/1_pipeline_experiments/run_campaign.py"
+arguments = ["--stage", "benchmark"]
+script_chain = "campaign"
+status_artifact = "stages/benchmark/reporting/winner_manifest.json"
+
+[[run_definitions.PE_31.steps]]
+name = "nested_joint_search"
+script = "2_architecture_experiments/1_pipeline_experiments/run_campaign.py"
+arguments = ["--stage", "search"]
+script_chain = "campaign"
+status_artifact = "stages/search/reporting/winner_manifest.json"
+
+[script_chains.reference_reproduction]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/reproduce_simple_submission.py"]
+
+[script_chains.campaign]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_campaign.py"]
+
+[campaign_workflows.PE_31]
+source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
+run7_submission = "3_final_model_training_and_inference/runs/run_7/6_submission_verification/artifacts/submission.csv"
+alternative_submission = ""
+test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
+split_seeds = [20270417, 20270427]
+model_seeds = [0, 37]
+endpoint_seeds = [20270401, 20270402, 20270403]
+selection_folds = 3
+max_workers = 2
+cpu_threads = 4
+maximum_recipe_evaluations = 1400
+bootstrap_seed = 20270430
+bootstrap_repetitions = 1000
+blend_weights = [0.0, 0.25, 0.5, 0.75, 1.0]
+minimum_relative_improvement = 0.02
+minimum_pooled_r2 = 0.90
+nominal_maximum_regression = 0.01
+stress_maximum_regression = 0.05

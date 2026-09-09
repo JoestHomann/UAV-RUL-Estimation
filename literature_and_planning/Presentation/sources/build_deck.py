@@ -3,9 +3,11 @@ Stuttgart template.
 
 The template's masters, layouts, theme colours, fonts and logo are reused
 unchanged; only the ten sample slides are removed. Every scientific chart is a
-figure the repository already generated (see ``figure_manifest.csv``); the only
-native PowerPoint drawings are the nested-split schematic, the retained-model
-schematic and the tables, because the repository has no figure for those.
+figure the repository already generated or produced by re-running an unmodified
+repository script (see ``figure_manifest.csv``); the only native PowerPoint
+drawings are the nested-split schematic, the feature catalogue, the
+retained-model schematic and the tables, because the repository has no figure
+for those.
 
     python build_deck.py --template <path to the supplied .pptx> --out <path>
 """
@@ -43,7 +45,7 @@ L, R = 0.51, 9.53
 CONTENT_TOP, CONTENT_BOTTOM = 1.06, 5.16
 W = R - L
 FOOTER_TEXT = "UAV remaining useful life estimation"
-FOOTER_DATE = "8 September 2026"
+FOOTER_DATE = "9 September 2026"
 
 LAYOUT = {}
 
@@ -231,7 +233,7 @@ def slide_title(prs, item):
             color=BLUE, bold=True)
     place_picture(slide, item["figure"], (0.22, 2.18, 4.88, 2.42))
     textbox(slide, 0.30, 4.66, 4.72, 0.24,
-            ["University of Stuttgart · 8 September 2026"], size=10,
+            ["University of Stuttgart · 9 September 2026"], size=10,
             color=GREY)
     textbox(slide, 0.30, 4.92, 4.72, 0.20, [item["source"]], size=8,
             color=GREY)
@@ -241,64 +243,195 @@ def slide_title(prs, item):
 def slide_figure(prs, item):
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       notes_text(item))
-    place_picture(slide, item["figure"], (L, CONTENT_TOP + 0.04, W, 3.78))
-    source_label(slide, item["source"])
+    place_picture(slide, item["figure"], (L, CONTENT_TOP + 0.02, W, 3.86))
+    source_label(slide, item["source"], y=CONTENT_BOTTOM - 0.16)
     return slide
 
 
-def slide_split_diagram(prs, item):
-    """Phase 1: nested whole-UAV design (no repository figure) beside the
-    repository's train/test history-length figure."""
+def panel_column(slide, x, y, width, height, panels, size=9.5):
+    """Stack the item's headed panels in one column."""
+    gap = 0.09
+    each = (height - gap * (len(panels) - 1)) / len(panels)
+    for index, (head, lines) in enumerate(panels):
+        headed_box(slide, x, y + index * (each + gap), width, each, head,
+                   [f"· {line}" for line in lines], size=size)
+
+
+def slide_split_figure(prs, item):
+    """One repository figure beside the panel that says what it decided."""
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       notes_text(item))
-    left_width = 4.30
+    figure_width = item.get("figure_width", 5.42)
+    place_picture(slide, item["figure"],
+                  (L, CONTENT_TOP + 0.02, figure_width, 3.86))
+    x = L + figure_width + 0.22
+    panel_column(slide, x, CONTENT_TOP + 0.02, R - x, 3.72, item["panels"])
+    source_label(slide, item["source"], y=CONTENT_BOTTOM - 0.16)
+    return slide
 
-    textbox(slide, L, 1.08, left_width, 0.22,
-            ["Nested whole-UAV design, all five outer folds"],
-            size=11, bold=True, color=BLUE)
 
-    row_y = 1.36
-    fold_width = (left_width - 4 * 0.05) / 5
+def slide_figure_notes(prs, item):
+    """A wide repository figure above three panels."""
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      notes_text(item))
+    figure_height = item.get("figure_height", 2.44)
+    place_picture(slide, item["figure"],
+                  (L, CONTENT_TOP, W, figure_height), top_align=True)
+    y = CONTENT_TOP + figure_height + 0.10
+    height = CONTENT_BOTTOM - 0.22 - y
+    panels = item["panels"]
+    gap = 0.18
+    width = (W - gap * (len(panels) - 1)) / len(panels)
+    for index, (head, lines) in enumerate(panels):
+        headed_box(slide, L + index * (width + gap), y, width, height, head,
+                   [f"· {line}" for line in lines], size=9)
+    source_label(slide, item["source"], y=CONTENT_BOTTOM - 0.16)
+    return slide
+
+
+def slide_phase1_design(prs, item):
+    """Phase 1: the nested whole-UAV design and the automated leakage gate.
+    The repository stores these as configuration and a verification report,
+    not as a figure, so both halves are drawn natively."""
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      notes_text(item))
+    left_width = 5.10
+    top = CONTENT_TOP + 0.02
+
+    textbox(slide, L, top, left_width, 0.22,
+            ["100 training UAVs · 5 outer folds, balanced by terminal lifetime"],
+            size=10.5, bold=True, color=BLUE)
+
+    row_y = top + 0.28
+    fold_width = (left_width - 4 * 0.06) / 5
     for index in range(5):
-        x = L + index * (fold_width + 0.05)
+        x = L + index * (fold_width + 0.06)
         held = index == 0
-        box = rounded(slide, x, row_y, fold_width, 0.42,
+        box = rounded(slide, x, row_y, fold_width, 0.44,
                       YELLOW if held else BLUE, shape=MSO_SHAPE.RECTANGLE)
-        set_text(box.text_frame, [f"fold {index + 1}\n20 UAVs"], size=8,
+        set_text(box.text_frame, [f"fold {index + 1}", "20 UAVs"], size=8.5,
                  color=DARK if held else WHITE, align=PP_ALIGN.CENTER,
                  space_after=0)
         box.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-    textbox(slide, L, 1.82, left_width, 0.20,
-            ["fold 1 held out; folds 2-5 are the 80 training UAVs"],
+    textbox(slide, L, row_y + 0.48, left_width, 0.20,
+            ["Outer round 1: fold 1 held out, folds 2-5 are the 80 training "
+             "UAVs. Every UAV is held out exactly once."],
             size=9, color=DARK)
 
-    textbox(slide, L, 2.12, left_width, 0.22,
-            ["Inside those 80: four inner folds select everything"],
-            size=11, bold=True, color=BLUE)
-    inner_y = 2.40
-    inner_width = (left_width - 3 * 0.05) / 4
+    inner_label_y = row_y + 0.90
+    textbox(slide, L, inner_label_y, left_width, 0.22,
+            ["Inside those 80 UAVs · 4 inner folds select everything"],
+            size=10.5, bold=True, color=BLUE)
+    inner_y = inner_label_y + 0.28
+    inner_width = (left_width - 3 * 0.06) / 4
     for index in range(4):
-        x = L + index * (inner_width + 0.05)
-        box = rounded(slide, x, inner_y, inner_width, 0.38,
+        x = L + index * (inner_width + 0.06)
+        box = rounded(slide, x, inner_y, inner_width, 0.40,
                       CYAN if index == 0 else LBLUE, shape=MSO_SHAPE.RECTANGLE)
-        set_text(box.text_frame, [f"inner {index + 1}"], size=8, color=DARK,
-                 align=PP_ALIGN.CENTER, space_after=0)
+        set_text(box.text_frame, [f"inner {index + 1}", "60 train / 20 val"],
+                 size=8, color=DARK, align=PP_ALIGN.CENTER, space_after=0)
         box.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-    textbox(slide, L, 2.82, left_width, 0.20,
-            ["features, hyperparameters, early stopping, blend weights"],
+    textbox(slide, L, inner_y + 0.44, left_width, 0.20,
+            ["Features, hyperparameters, early stopping and blend weights. "
+             "5 x 4 = 20 inner rounds."],
             size=9, color=DARK)
 
-    headed_box(slide, L, 3.12, left_width, 1.62, "Rules that follow", [
-        "· Every prefix of one UAV stays in one fold.",
-        "· Features use only cycles at or before the cutoff.",
-        "· Scalers refitted inside each training partition.",
-        "· Each UAV carries total training weight 1.",
-        "· Uncertainty resamples whole UAVs, never rows.",
-    ], size=10)
+    headed_box(slide, L, inner_y + 0.74, left_width, 1.36,
+               "Rules that follow from splitting by UAV", [
+                   "· Every prefix of one UAV stays inside one fold.",
+                   "· Features use only cycles at or before the cutoff.",
+                   "· Scalers are refitted inside each training partition.",
+                   "· Each UAV carries a total training weight of 1.",
+                   "· Uncertainty resamples whole UAVs, never rows.",
+               ], size=9.5)
 
-    place_picture(slide, item["figure"],
-                  (L + left_width + 0.22, 1.30, W - left_width - 0.22, 3.10))
-    source_label(slide, item["source"])
+    x = L + left_width + 0.24
+    width = R - x
+    headed_box(slide, x, top, width, 2.34,
+               "Ten assertions re-checked automatically", [
+                   "· Outer folds disjoint: 5 x 20 UAVs.",
+                   "· Outer-validation UAVs absent from every inner fold.",
+                   "· Development and locked cutoffs reproduce the exact test "
+                   "history-length multiset.",
+                   "· Feature tables finite; no target or future term in any "
+                   "feature name.",
+                   "· Prefix causality: replacing all post-cutoff telemetry "
+                   "with extreme values leaves the prefix features unchanged.",
+                   "· Saved scaler parameters match a fresh recomputation.",
+                   "· Baseline predictions carry each UAV's own held-out fold.",
+               ], size=9)
+
+    status = rounded(slide, x, top + 2.46, width, 0.62, YELLOW)
+    set_text(status.text_frame,
+             ["verification_report.json · status: passed · "
+              "2,000 training rows · 500 development and 2,000 locked "
+              "validation rows · 100 test rows · 606 features"],
+             size=9.5, color=DARK, space_after=0)
+    status.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    source_label(slide, item["source"], y=CONTENT_BOTTOM - 0.16)
+    return slide
+
+
+FEATURE_SETS = [
+    ["age_only", "2", "flight cycle and log(1 + cycle)",
+     "is age alone predictive?"],
+    ["last_values", "24", "age plus the latest value of each channel",
+     "does the current snapshot help?"],
+    ["screened", "310", "all temporal features of the 10 degradation "
+     "channels, 7 level statistics of the 4 context channels",
+     "do the Phase 0 roles help?"],
+    ["all_nonconstant", "606", "every generated feature of all 22 channels",
+     "did screening discard something useful?"],
+]
+
+
+def slide_features(prs, item):
+    """Phase 1 steps 5-7. Catalog and preprocessing counts, no figure."""
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      notes_text(item))
+    top = CONTENT_TOP + 0.02
+
+    headed_box(slide, L, top, 3.30, 1.94,
+               "27 features per channel, from the prefix only", [
+                   "· current and first value",
+                   "· baseline mean of the first 10 cycles, and the deviation "
+                   "from it",
+                   "· history mean, SD, minimum, maximum, slope",
+                   "· latest change, mean and maximum absolute change",
+                   "· mean, SD, slope, net change and latest-value deviation "
+                   "over the last 5, 20 and 50 cycles",
+               ], size=9)
+    headed_box(slide, L, top + 2.04, 3.30, 1.02,
+               "22 x 27 + 10 + 2 = 606 candidates", [
+                   "· 10 state features for telemetry_07 and 16",
+                   "· 2 age features",
+                   "· no feature may reference terminal lifetime or any "
+                   "post-cutoff cycle",
+               ], size=9)
+
+    x = L + 3.30 + 0.24
+    width = R - x
+    table(slide, x, top, width,
+          ["feature set", "count", "contents", "question it answers"],
+          FEATURE_SETS, [1.08, 0.57, 2.20, 1.63], size=8,
+          row_height=0.46, highlight={2})
+
+    scaling = rounded(slide, x, top + 2.42, width, 0.64, WHITE, line=GREY)
+    set_text(scaling.text_frame,
+             ["Fold-fitted scaling: value minus the training-fold median, "
+              "divided by IQR / 1.349. 4,405 features scaled by IQR, 293 by a "
+              "standard-deviation fallback, 12 by unit fallback."],
+             size=9, color=DARK, space_after=0)
+    scaling.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    note = rounded(slide, x, top + 3.14, width, 0.42, YELLOW)
+    set_text(note.text_frame,
+             ["The final set is not chosen here. It is chosen on the inner "
+              "folds."], size=9.5, color=DARK, space_after=0)
+    note.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    source_label(slide, item["source"], y=CONTENT_BOTTOM - 0.16)
     return slide
 
 
@@ -371,10 +504,12 @@ def slide_screen(prs, item):
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       notes_text(item))
     figure_width = 5.15
-    place_picture(slide, item["figure"],
-                  (L, CONTENT_TOP + 0.10, figure_width, 3.40))
-    textbox(slide, L, CONTENT_TOP + 3.52, figure_width, 0.24,
-            ["PE_15 screen: 11.02 → 9.59 cycles, −13.0%, 5 of 5 folds"],
+    picture = place_picture(slide, item["figure"],
+                            (L, CONTENT_TOP + 0.10, figure_width, 3.40))
+    caption_y = (picture.top + picture.height) / 914400 + 0.10
+    textbox(slide, L, caption_y, figure_width, 0.24,
+            ["Run 7 development out-of-fold predictions: the error is "
+             "systematic, not random"],
             size=9.5, color=BLUE, bold=True)
 
     x = L + figure_width + 0.24
@@ -499,19 +634,210 @@ def divider(prs):
                      ["Not part of the 20-minute talk. Held for questions."],
                      size=14, color=GREY)
     slide.notes_slide.notes_text_frame.text = (
-        "End of the main deck. Six backup slides follow: the full locked "
+        "End of the main deck. Nine backup slides follow: the complete Phase 0 "
+        "broad review, redundancy and anomaly evidence, the Phase 1 feature "
+        "derivation, the cycle-only baseline group by group, the full locked "
         "architecture table, the sequence and hybrid studies, the complete "
-        "cap/scenario matrix, residual-correction and calibration detail, "
-        "rejected representation experiments, and uncertainty and score "
-        "provenance.")
+        "cap/scenario matrix, residual-correction and calibration detail, and "
+        "rejected experiments with score provenance.")
     return slide
 
 
 def build_backups(prs):
     items = {item["n"]: item for item in C.BACKUP}
 
-    # --- B1 full locked architecture comparison
+    # --- B1 the complete Phase 0 broad review
     item = items["B1"]
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      "Use if asked what else Phase 0 looked at, or why a "
+                      "particular preprocessing choice was made.")
+    table(slide, L, CONTENT_TOP + 0.06, W,
+          ["analysis", "what it showed", "what it decided"],
+          [["Cycle-wise fleet trends",
+            "6 channels flat across all cycles; late cycles have few surviving "
+            "UAVs", "removal shortlist; treat late-cycle trends cautiously"],
+           ["Descriptive statistics",
+            "channel medians span about 11 to about 50,000",
+            "robust scaling for scale-sensitive models; trees need none"],
+           ["Tukey extreme-value screen",
+            "~97% of extremes in 04/10/11 are isolated single cycles; 01 and 18 "
+            "form long runs in 8-9 UAVs",
+            "spike flags vs regime flags; bounds fitted inside each fold"],
+           ["Row-level statistics",
+            "asymmetry concentrated in 07, 16, 18, 23, 25",
+            "robust scaling or Yeo-Johnson for linear and neural models"],
+           ["UAV-level statistics",
+            "01, 06, 12, 18, 26 differ strongly between UAVs",
+            "candidates for context and baseline features"],
+           ["Age-band statistics",
+            "14 channels change monotonically across the 1-50 / 51-100 / "
+            "101-200 / >200 bands",
+            "prioritised for temporal features; report metrics by band"],
+           ["Histograms and box plots",
+            "05, 07, 16, 18 are discrete or regime-like",
+            "operating-state features rather than smooth sensors"],
+           ["Flatline duration",
+            "20 and 27 are 100% flatlined; 03/08/14/17 above 92%; 07 at 96.5%",
+            "removal for the six; state features for 07 and 16"]],
+          [1.86, 3.66, 3.50], size=8, row_height=0.32)
+    textbox(slide, L, CONTENT_TOP + 3.06, W, 0.60,
+            ["No channel was removed on distribution evidence alone. Skewness, "
+             "extremes, flatlines and regimes are reasons to represent a "
+             "channel differently; only UAV-grouped validation decides whether "
+             "it earns its place."],
+            size=9.5, color=DARK)
+    source_label(slide, item["source"])
+
+    # --- B2 redundancy and anomalies
+    item = items["B2"]
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      "Use if asked why highly correlated channels were kept, "
+                      "or whether anomalous rows were deleted. The repository's "
+                      "four correlation heat maps are 28 x 28 and are not "
+                      "readable at projection size, so the strongest pairs are "
+                      "tabulated instead.")
+    column = (W - 0.30) / 2
+    top = CONTENT_TOP + 0.04
+    textbox(slide, L, top, column, 0.22,
+            ["Strongest correlated pairs"], size=10.5, bold=True, color=BLUE)
+    table(slide, L, top + 0.26, column,
+          ["pair", "row r", "UAV r", "group"],
+          [["telemetry_19 / 21", "0.963", "0.999", "1"],
+           ["telemetry_06 / 12", "-0.839", "-0.999", "4"],
+           ["telemetry_13 / 28", "-0.744", "-0.995", "3"],
+           ["telemetry_25 / 28", "0.853", "0.993", "3"],
+           ["telemetry_16 / 22", "-0.677", "-0.992", "3"],
+           ["telemetry_15 / 23", "-0.954", "-0.983", "2"]],
+          [1.62, 0.92, 0.92, 0.90], size=9, row_height=0.26)
+    textbox(slide, L, top + 2.16, column, 0.80,
+            ["Groups: 1 = 19/21 · 2 = 15/23 · 3 = 13/16/22/25/28 · "
+             "4 = 06/07/11/12/24.",
+             "Fourteen of the twenty-two channels have a peer above 0.90 in at "
+             "least one correlation view. None was removed here."],
+            size=9, color=DARK)
+
+    x = L + column + 0.30
+    textbox(slide, x, top, column, 0.22,
+            ["Anomaly diagnostics, training split"], size=10.5, bold=True,
+            color=BLUE)
+    table(slide, x, top + 0.26, column,
+          ["channel", "extreme rows", "UAVs", "jump rows", "UAVs"],
+          [["telemetry_26", "8.45%", "48", "2.02%", "8"],
+           ["telemetry_18", "7.25%", "9", "19.48%", "84"],
+           ["telemetry_01", "5.28%", "8", "0.00%", "0"],
+           ["telemetry_24", "4.63%", "99", "3.54%", "99"],
+           ["telemetry_10", "1.80%", "99", "3.43%", "99"],
+           ["telemetry_04", "1.80%", "99", "3.41%", "99"]],
+          [1.16, 1.06, 0.62, 0.90, 0.62], size=9, row_height=0.26)
+
+    box = rounded(slide, x, top + 2.16, column, 1.24, YELLOW)
+    set_text(box.text_frame,
+             [("Nothing was deleted", 0),
+              ("Extremes in 04, 10 and 24 occur in almost every UAV, which "
+               "reads as normal operating behaviour. Those in 01 and 18 sit in "
+               "8 and 9 UAVs, so they read as UAV-specific regimes. Persistent "
+               "shifts appear only in 19 and 21, five UAVs each, and became "
+               "candidate change-point features.", 0)],
+             size=9, color=DARK, space_after=3)
+    box.text_frame.paragraphs[0].runs[0].font.bold = True
+    source_label(slide, item["source"])
+
+    # --- B3 prefix feature derivation
+    item = items["B3"]
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      "Use if asked exactly what a feature is, or how the "
+                      "causality check works.")
+    table(slide, L, CONTENT_TOP + 0.06, 5.72,
+          ["group", "features", "what it tells the model"],
+          [["Age", "c, log(1 + c)", "accumulated operating time"],
+           ["Level", "x_1, x_c", "start level and value at prediction time"],
+           ["Baseline", "mean(x_1..x_10), x_c − baseline",
+            "movement from the UAV's own starting level"],
+           ["History", "mean, SD, min, max, OLS slope",
+            "typical level, spread and long-term direction"],
+           ["Change", "x_c − x_(c−1), mean and max |Δx|",
+            "abrupt change and typical volatility"],
+           ["Recent 5 / 20 / 50", "mean, SD, slope, net change, deviation",
+            "short, medium and longer-term behaviour"],
+           ["State (07, 16)", "unique values, transitions, transition rate, "
+            "run length, time since change",
+            "operating mode, dwell time, flatlining"]],
+          [1.16, 2.20, 2.36], size=8.5, row_height=0.36)
+    x = L + 5.72 + 0.24
+    width = R - x
+    headed_box(slide, x, CONTENT_TOP + 0.06, width, 1.50,
+               "How causality is enforced", [
+                   "· Only cycles 1..cutoff enter any calculation.",
+                   "· The raw files are never truncated; the cutoff is applied "
+                   "while computing.",
+                   "· Feature names may not contain RUL, target, terminal, "
+                   "lifetime, final or future.",
+               ], size=9)
+    headed_box(slide, x, CONTENT_TOP + 1.62, width, 1.86,
+               "How it is verified", [
+                   "· 10 prefixes are recomputed after every post-cutoff "
+                   "telemetry value is replaced by an extreme artificial "
+                   "number.",
+                   "· The prefix features must come out identical.",
+                   "· Repeated for training, development, locked and test "
+                   "tables; all four are also checked for missing and "
+                   "non-finite values.",
+               ], size=9)
+    source_label(slide, item["source"])
+
+    # --- B4 cycle-only baseline, group by group
+    item = items["B4"]
+    slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
+                      "Use if asked whether the benchmark is weak only on "
+                      "average, or how much it varies across UAV groups.")
+    column = (W - 0.30) / 2
+    textbox(slide, L, CONTENT_TOP + 0.04, column, 0.22,
+            ["By cutoff band"], size=10.5, bold=True, color=BLUE)
+    table(slide, L, CONTENT_TOP + 0.30, column,
+          ["band", "rows", "R²", "RMSE", "bias"],
+          [["1-50", "80", "-0.014", "37.683", "+4.980"],
+           ["51-100", "340", "-0.012", "61.567", "+11.320"],
+           ["101-200", "1,020", "-0.386", "67.131", "+38.872"],
+           [">200", "560", "-0.375", "64.577", "-15.128"]],
+          [0.94, 0.72, 0.86, 0.98, 0.86], size=9, row_height=0.28)
+
+    textbox(slide, L, CONTENT_TOP + 1.80, column, 0.22,
+            ["By outer fold (20 UAVs each)"], size=10.5, bold=True, color=BLUE)
+    table(slide, L, CONTENT_TOP + 2.06, column,
+          ["fold", "R²", "RMSE", "MAE", "bias"],
+          [["1", "+0.040", "55.570", "46.943", "+30.498"],
+           ["2", "+0.032", "57.025", "49.669", "+22.117"],
+           ["3", "-0.068", "76.307", "59.860", "+11.177"],
+           ["4", "+0.020", "70.106", "53.041", "+5.375"],
+           ["5", "-0.055", "61.306", "50.046", "+19.395"]],
+          [0.70, 0.86, 0.94, 0.94, 0.92], size=9, row_height=0.26)
+
+    x = L + column + 0.30
+    textbox(slide, x, CONTENT_TOP + 0.04, column, 0.22,
+            ["By terminal-lifetime quintile"], size=10.5, bold=True, color=BLUE)
+    table(slide, x, CONTENT_TOP + 0.30, column,
+          ["quintile", "R²", "RMSE", "MAE", "bias"],
+          [["1 shortest", "-3.274", "74.727", "72.359", "+72.359"],
+           ["2", "-0.783", "56.301", "52.649", "+52.649"],
+           ["3", "+0.330", "40.994", "35.108", "+33.089"],
+           ["4", "+0.746", "31.938", "26.764", "+1.286"],
+           ["5 longest", "-0.059", "96.859", "72.680", "-70.821"]],
+          [1.00, 0.78, 0.86, 0.84, 0.88], size=9, row_height=0.26)
+
+    box = rounded(slide, x, CONTENT_TOP + 2.04, column, 1.40, YELLOW)
+    set_text(box.text_frame,
+             [("What the quintiles show", 0),
+              ("A cycle-only fit cannot be right for both short- and "
+               "long-lived UAVs at once: it overpredicts the shortest by 72 "
+               "cycles and underpredicts the longest by 71. Fold R² alone "
+               "ranges from -0.068 to +0.040, which is why a single 80/20 "
+               "split would not have been a measurement.", 0)],
+             size=9.5, color=DARK, space_after=3)
+    box.text_frame.paragraphs[0].runs[0].font.bold = True
+    source_label(slide, item["source"])
+
+    # --- B5 full locked architecture comparison
+    item = items["B5"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use if asked whether the sequence models were given a "
                       "fair chance, or about seed stability.")
@@ -531,8 +857,8 @@ def build_backups(prs):
             color=DARK)
     source_label(slide, item["source"])
 
-    # --- B2 sequence and hybrid models
-    item = items["B2"]
+    # --- B6 sequence and hybrid models
+    item = items["B6"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use if challenged that trees were preferred without a "
                       "fair rematch. The hybrid models receive the raw window "
@@ -565,8 +891,8 @@ def build_backups(prs):
             size=9, color=DARK)
     source_label(slide, item["source"])
 
-    # --- B3 cap/scenario matrix
-    item = items["B3"]
+    # --- B7 cap/scenario matrix
+    item = items["B7"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use if challenged on the claim that the 2x2 cells are "
                       "not on a common scale, or on the difference between "
@@ -589,8 +915,8 @@ def build_backups(prs):
             color=DARK)
     source_label(slide, item["source"])
 
-    # --- B4 residual correction, nested calibration, safety table
-    item = items["B4"]
+    # --- B8 residual correction, nested calibration, safety table
+    item = items["B8"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use if asked how the residual head avoids leaking, or "
                       "what the calibration cost.")
@@ -633,8 +959,8 @@ def build_backups(prs):
             size=9, color=DARK)
     source_label(slide, item["source"])
 
-    # --- B5 rejected representations
-    item = items["B5"]
+    # --- B9 rejected representations
+    item = items["B9"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use if asked what else was tried on the feature side. "
                       "Every row is a matched development comparison whose "
@@ -672,8 +998,8 @@ def build_backups(prs):
             size=10, color=DARK)
     source_label(slide, item["source"])
 
-    # --- B6 uncertainty and provenance
-    item = items["B6"]
+    # --- B10 uncertainty and provenance
+    item = items["B10"]
     slide = new_slide(prs, "Titel und Inhalt", item["title"], item["subtitle"],
                       "Use for methodological questions about the intervals, "
                       "the repeated endpoints, or where the public scores come "
@@ -712,7 +1038,10 @@ def build_backups(prs):
 BUILDERS = {
     "title": slide_title,
     "figure": slide_figure,
-    "split_diagram": slide_split_diagram,
+    "split_figure": slide_split_figure,
+    "figure_notes": slide_figure_notes,
+    "phase1_design": slide_phase1_design,
+    "features": slide_features,
     "ensemble": slide_ensemble,
     "screen": slide_screen,
     "table": slide_table,

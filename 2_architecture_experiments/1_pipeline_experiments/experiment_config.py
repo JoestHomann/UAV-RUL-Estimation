@@ -37,6 +37,9 @@ PIPELINE_OWNED_TABLES = (
     "short_history_workflows",
     "uav_subset_workflows",
     "feature_comparison_workflows",
+    "weight_scale_workflows",
+    "density_workflows",
+    "campaign_workflows",
 )
 
 
