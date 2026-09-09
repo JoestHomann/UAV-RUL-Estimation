@@ -1,0 +1,54 @@
+[pipeline]
+experiment = "PE_33"
+run = "run_1"
+
+[run_definitions.PE_33]
+title = "Optional contrastive TCN futility pilot"
+description = "Three matched TCN arms on two folds only; report a futility decision and never expand automatically."
+
+[[run_definitions.PE_33.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"
+arguments = ["--workflow", "PE_33", "--stage", "check"]
+script_chain = "bounded"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_33.steps]]
+name = "evaluate_pilot"
+script = "2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"
+arguments = ["--workflow", "PE_33", "--stage", "pilot"]
+script_chain = "bounded"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.bounded]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"]
+
+[campaign_workflows.PE_33]
+kind = "contrastive"
+source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
+test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
+endpoint_seeds = [20270401, 20270402, 20270403]
+bootstrap_seed = 20270909
+bootstrap_repetitions = 2000
+nominal_maximum_regression = 0.01
+stress_maximum_regression = 0.05
+cpu_threads = 4
+split_seeds = [20271001]
+model_seeds = [0]
+pilot_folds = [0, 1]
+max_workers = 1
+lookback = 50
+residual_blocks = 2
+channels = 32
+dropout = 0.1
+batch_size = 128
+learning_rate = 0.001
+maximum_epochs = 30
+stopping_patience = 5
+noise_std = 0.05
+temperature = 0.2
+minimum_negative_gap = 0.08
+contrastive_weight = 0.1
+fixed_blend_weight = 0.1
+standalone_minimum_improvement = 0.05
+blend_minimum_improvement = 0.01

@@ -1,0 +1,29 @@
+categories:
+  - name: source_identity
+    fields:
+      - {name: repository_and_code_path, description: "Primary repository, exact source path and available Git blob hash", detail_level: detailed}
+      - {name: paper_and_subset, description: "Original paper, FD003-specific findings and distinction from other datasets", detail_level: moderate}
+      - {name: audit_completion, description: "Separate static code inspection, reported results and unverified paths; no reproduction implied", detail_level: detailed}
+  - name: evaluation
+    fields:
+      - {name: independent_split_unit, description: "Engine versus cycle or overlapping window; scaler fit scope", detail_level: detailed}
+      - {name: checkpoint_selection, description: "Validation selection versus reuse of test labels; final checkpoint restoration", detail_level: detailed}
+      - {name: target_and_inverse_mapping, description: "Raw, capped or normalized labels; unavailable lifetime dependence", detail_level: detailed}
+      - {name: endpoint_population, description: "One final endpoint versus all windows; counts and short-history exclusions", detail_level: detailed}
+      - {name: metric_implementation, description: "RMSE versus mean per-engine RMSE or MAE; R2 denominator", detail_level: detailed}
+      - {name: pretraining_boundary, description: "Training-fold engines, validation/test exposure and external weights", detail_level: detailed}
+  - name: experiment_value
+    fields:
+      - {name: mechanism_ablation, description: "Smallest controlled test separating mechanism from architecture and compute", detail_level: detailed}
+      - {name: prior_project_overlap, description: "Completed architecture studies and PE_15 through PE_31; preserve negative verdicts", detail_level: detailed}
+      - {name: augmentation_validity, description: "Label preservation, discrete sensor treatment, padding and capped healthy plateau", detail_level: moderate}
+      - {name: marginal_ensemble_gain, description: "Training-selected complete blend gain, not merely standalone rank or residual correlation", detail_level: detailed}
+      - {name: budget_and_gate, description: "Bounded candidate recipes, inner-fit accounting and confirmation requirements", detail_level: detailed}
+uncertain:
+  - "Whether any proposed method improves the competition public or private R2."
+  - "Exact historical alternative submission identity; reproduced file needs a user leaderboard score."
+  - "Kaggle notebook executable cells and FD003 use were not verified."
+  - "PCLSSN FD003 prepared-data pipeline and FEI full loader code were not verified."
+  - "Complete self-supervised SSL construction and checkpoint protocol were not verified."
+  - "All existing UAVs have influenced earlier research; new splits are robustness checks."
+

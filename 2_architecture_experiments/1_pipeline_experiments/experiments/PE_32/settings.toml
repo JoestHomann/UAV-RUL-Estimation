@@ -1,0 +1,45 @@
+[pipeline]
+experiment = "PE_32"
+run = "run_1"
+
+[run_definitions.PE_32]
+title = "Bounded LightGBM comparison"
+description = "Four LightGBM recipes against frozen Run 7, training-only blend weights, at most one confirmation candidate."
+
+[[run_definitions.PE_32.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"
+arguments = ["--workflow", "PE_32", "--stage", "check"]
+script_chain = "bounded"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_32.steps]]
+name = "evaluate_lightgbm"
+script = "2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"
+arguments = ["--workflow", "PE_32", "--stage", "all"]
+script_chain = "bounded"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.bounded]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_bounded_comparison.py"]
+
+[campaign_workflows.PE_32]
+kind = "lightgbm"
+source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
+test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
+endpoint_seeds = [20270401, 20270402, 20270403]
+bootstrap_seed = 20270909
+bootstrap_repetitions = 2000
+nominal_maximum_regression = 0.01
+stress_maximum_regression = 0.05
+cpu_threads = 4
+split_seeds = [20270910, 20270920, 20270930]
+model_seeds = [0, 37]
+max_workers = 2
+selection_folds = 3
+blend_weights = [0.0, 0.1, 0.25, 0.5, 1.0]
+learning_rate = 0.03
+maximum_iterations = 2000
+stopping_patience = 75
+minimum_relative_improvement = 0.02
+minimum_pooled_r2 = 0.90

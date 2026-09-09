@@ -1,0 +1,73 @@
+{
+  "research_date": "2026-09-09",
+  "scope": "Public code and published aggregate metrics only; no external datasets, hidden labels or model weights fetched for training.",
+  "audit_status": "Static source review; upstream experiments not executed.",
+  "audits": [
+    {
+      "id": "tree_ensemble",
+      "blob_sha": "18ede36ec3cd4f73aa0ce1f6dd1163cce9ea7bec",
+      "url": "https://github.com/hkmtcn/interpretable-rul-maintenance/blob/main/notebooks/LGMB_CatBoost_GBR.ipynb",
+      "finding": "FD003 code cell (zero-based code cell 2): random row split; id and cycle retained; R2 .9904 and MSE 94.2051 on y_val; grouped add-ons separate."
+    },
+    {
+      "id": "fc_stgnn_training",
+      "url": "https://github.com/Frank-Wang-oss/FCSTGNN/blob/main/FC_STGNN/main_RUL.py",
+      "blob_sha": "ef2e6864ea9520228e4ec7885775188751752597",
+      "finding": "Train_model chooses np.argmin(test_RMSE) among validation-improving epochs. Default args_config selects FD001; FD003 branch present."
+    },
+    {
+      "id": "fc_stgnn_loader",
+      "url": "https://github.com/Frank-Wang-oss/FCSTGNN/blob/main/FC_STGNN/data_loader_RUL.py",
+      "blob_sha": "8f7011fb830689f304d1733d044022e83698c379",
+      "finding": "cross_fold shuffles windows; scaler fitted before split; test uses last window with padding; targets capped and normalized."
+    },
+    {
+      "id": "fsgr_loss",
+      "url": "https://github.com/fuen1590/PhmDeepLearningProjects/blob/master/models/RULPrediction/ContrastiveModules.py",
+      "blob_sha": "dd91b35bfd1524efb91d5d12cea9f37ecf188b08",
+      "finding": "MSE plus weighted InfoNCE; augmented anchor uses Gaussian noise; negative weights use absolute label difference."
+    },
+    {
+      "id": "fsgr_preprocessing",
+      "url": "https://github.com/fuen1590/PhmDeepLearningProjects/blob/master/dataset/cmapss.py",
+      "blob_sha": "c6b900f439f857a6b0891aeed47ed1ff760ff3a6",
+      "finding": "Engine validation then training scaler; every test window; normalized capped RUL; engine 1 forced out of validation."
+    },
+    {
+      "id": "fsgr_training",
+      "url": "https://github.com/fuen1590/PhmDeepLearningProjects/blob/master/train/trainable.py",
+      "blob_sha": "e8c03c82881722c384fa4958f5feec8c66ccb4b7",
+      "finding": "Validation-loss checkpointing; best restored when patience triggers, not unconditionally at epoch limit."
+    },
+    {
+      "id": "kalman_data",
+      "url": "https://github.com/StarMarco/Kalman_DVAE/blob/main/kalman_ruls/data/dataprep.py",
+      "blob_sha": "cffec068b9c16a8edc792995f5c125e4d2791cec",
+      "finding": "Random window validation; normalization before validation split."
+    },
+    {
+      "id": "kalman_evaluation",
+      "url": "https://github.com/StarMarco/Kalman_DVAE/blob/main/testing.py",
+      "blob_sha": "62b79352517e63f5587b029b05f942eadc73e724",
+      "finding": "Main RMSE uses all times; get_final_ruls averages scalar square-root-squared errors, giving MAE. r_mean predictions distinct from label-conditioned fr_mean diagnostics."
+    },
+    {
+      "id": "pclssn_runner",
+      "url": "https://github.com/zhirongzhong/PCLSSN/blob/main/scripts/run_experiments.py",
+      "blob_sha": "a43ad09f93c2acfe9946dd47184e67468e381876",
+      "finding": "Default IGBT; externally prepared MAT splits; validation checkpointing; averages trajectory metrics; not verified FD003 endpoint recipe."
+    },
+    {
+      "id": "feature_screen",
+      "url": "https://github.com/virgil-castillo/turbofan-rul-mlops/blob/main/docs/feature_family_screen_report.md",
+      "blob_sha": "e4c427bfeb471acfe202e6df87a24778483a8893",
+      "finding": "FD003 GRU raw sequence60 beats each added family in screen; source is report, not full training-code audit."
+    },
+    {
+      "id": "ssl_runner",
+      "url": "https://github.com/tilman151/self-supervised-ssl/blob/master/src/run_pretraining.py",
+      "blob_sha": "6e5da825a2dcad7d35e8df92ab9a3a5bda0eb92d",
+      "finding": "Runner inspected; delegates method construction. Full preprocessing/checkpoint implementation not verified."
+    }
+  ]
+}

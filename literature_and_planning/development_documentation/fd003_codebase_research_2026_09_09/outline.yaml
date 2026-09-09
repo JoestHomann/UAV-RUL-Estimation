@@ -1,0 +1,35 @@
+topic: "Public FD003 codebases and experiments toward UAV leaderboard R2 above 0.90"
+research_date: "2026-09-09"
+scope: "All publication years; FD003 interpreted from user wording fold 3"
+status: "Research and static code audits completed; experiments proposed, not implemented"
+baseline_public_r2: 0.87652
+alternative_public_r2_user_reported: 0.87877
+dataset_identity: "Competition identity with original FD003 is not verified"
+items:
+  - {id: fsgr, name: "FSGRI / Dual-Mixer", url: "https://github.com/fuen1590/PhmDeepLearningProjects", review: "preprocessing, loss and training code"}
+  - {id: ssl, name: "Temporal-distance self-supervision", url: "https://github.com/tilman151/self-supervised-ssl", review: "paper and runner; full protocol unverified"}
+  - {id: fcstgnn, name: "FC-STGNN", url: "https://github.com/Frank-Wang-oss/FCSTGNN", review: "training, model and preprocessing code"}
+  - {id: ensemble, name: "Interpretable tree ensemble", url: "https://github.com/hkmtcn/interpretable-rul-maintenance", review: "FD003 notebook and grouped protocol"}
+  - {id: mlops, name: "Turbofan RUL MLOps", url: "https://github.com/virgil-castillo/turbofan-rul-mlops", review: "feature and evaluation reports"}
+  - {id: kalman, name: "Kalman-DVAE", url: "https://github.com/StarMarco/Kalman_DVAE", review: "preprocessing, training and evaluation code"}
+  - {id: pclssn, name: "PCLSSN", url: "https://github.com/zhirongzhong/PCLSSN", review: "paper metadata and runner; FD003 reproduction unverified"}
+  - {id: fei, name: "Frequency-masked Embedding Inference", url: "https://github.com/USTBInnovationPark/Frequency-masked-Embedding-Inference", review: "paper and repository; partial code access"}
+  - {id: toolkit, name: "C-MAPSS prediction toolkit", url: "https://github.com/Jiajun-H/cmaps-rul-prediction", review: "README results only"}
+  - {id: kaggle, name: "RUL prediction using LSTM for Aircraft Engine", url: "https://www.kaggle.com/code/yahyamomtaz/rul-prediction-using-lstm-for-aircraft-engine", review: "metadata only; excluded from performance evidence"}
+experiments:
+  - {id: E1, name: "Matched augmentation and degradation contrastive loss", scientific_priority: 1, max_screen_recipes: 4}
+  - {id: E2, name: "Regularized LightGBM and marginal blend gain", execution_priority: 1, max_screen_recipes: 4}
+  - {id: E3, name: "Temporal-distance pretraining with compute-matched control", priority: "secondary", max_screen_recipes: 3}
+  - {id: E4, name: "Cross-time versus same-time sensor graph", priority: "conditional", max_screen_recipes: 2}
+execution:
+  mode: "Static source audit and proposal only"
+  batch_size: 1
+  items_per_agent: 4
+  output_dir: "."
+  training_launched: false
+  PE_31_modified: false
+evidence:
+  report: "report.md"
+  source_audit: "code_audit.json"
+  fields: "fields.yaml"
+
