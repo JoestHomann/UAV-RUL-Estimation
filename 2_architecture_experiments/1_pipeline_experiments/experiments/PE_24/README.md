@@ -27,3 +27,24 @@ but won 11/15 folds and its UAV-bootstrap 95% RMSE-change interval was
 [-0.5137, +0.0862]. Run 7 remains the control. PE_25 screens one restricted
 TabPFN rule using these saved predictions; PE_26 independently tests an
 early-history specialist.
+
+## User-requested exploratory submission — 11 September 2026
+
+The requested Kaggle trial is saved separately at
+`runs/run_1/exploratory_submission/submission_PE24_regime_tabpfn.csv`.
+It contains 100 verified `id,RUL` rows. This final fit retains the original
+depth-two gate recipe, fitting it on all 1,500 saved outer development OOF rows
+from 100 training UAVs with equal total UAV weight. Its fitting metrics are
+not new validation results. The original no-promotion verdict remains intact.
+
+To reproduce the preparation after completing the PE_25 submission utility:
+
+```powershell
+& .\.venv\Scripts\python.exe .\2_architecture_experiments\1_pipeline_experiments\build_pe24_exploratory_submission.py
+```
+
+The utility verifies and reuses PE_25's Run 7/TabPFN test components, regenerates
+Run 7 uncertainty diagnostics from its unchanged saved model, and fits only the
+small gate. Test labels are never loaded. It records input hashes, gate rules,
+per-UAV weights, and the submission checksum alongside the CSV. It does not
+upload to Kaggle or change the production model.

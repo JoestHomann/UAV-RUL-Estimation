@@ -40,3 +40,33 @@ Run 1 completed during implementation verification. Restricted blending reduced
 mean RMSE from 10.3106 to 10.1143 (1.904%) and reached pooled R2 0.90674, but
 won 10/15 folds and its UAV-bootstrap RMSE-change interval was
 [-0.4695, +0.0307]. It missed the screening gate; Run 7 remains retained.
+
+## User-requested exploratory Kaggle submission — 11 September 2026
+
+A separate final-fit utility now prepares the explicitly requested leaderboard
+trial without changing the screening verdict:
+
+```powershell
+& .\.venv\Scripts\python.exe .\2_architecture_experiments\1_pipeline_experiments\build_pe25_exploratory_submission.py
+```
+
+The verified file is
+`runs/run_1/exploratory_submission_v2/submission_PE25_restricted_tabpfn.csv`.
+It contains 100 rows with `id,RUL` columns. The final rule selects a 25% TabPFN
+weight when Run 7 predicts at most 100 cycles; above 100 it returns Run 7. It
+routes 63 of the test UAVs to the blend. The rule uses the original grid and
+equal-UAV weighting over all saved PE_24 outer development OOF predictions.
+Its fitting score is not an additional held-out validation result.
+
+The utility reuses the saved Run 7 model, checks its predictions against its
+original submission, and fits the pinned TabPFN once on all 2,000 training
+prefixes. The old Run 7 artifact lacks a subsequently introduced optional
+`correction_strength` attribute; the utility restores its contract default of
+1.0 in memory. The original model file remains unchanged. The first preparation
+directory records the attempt that discovered this compatibility issue; v2
+contains the completed preparation with its own immutable input registration.
+
+Input hashes, the frozen rule, component predictions, and the submission SHA-256
+are recorded alongside the CSV. No test labels are used and no Kaggle upload is
+performed automatically. The 1.904% figure refers to historical validation RMSE
+improvement, not an expected percentage-point increase in Kaggle R².
