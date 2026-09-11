@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, KFold
 from sklearn.preprocessing import StandardScaler
 
 from base import (
@@ -181,6 +181,69 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
         self.weight_grid = tuple(float(value) for value in contract["xgboost_weight_grid"])
         if not self.weight_grid or any(not 0.0 <= value <= 1.0 for value in self.weight_grid):
             raise ModelAdapterError("Residual ensemble blend weights must be in [0, 1]")
+        self.adaptive_uav_weighting = self._validate_adaptive_weighting(
+            contract.get("adaptive_uav_weighting")
+        )
+
+    def _validate_adaptive_weighting(
+        self,
+        value: Any,
+    ) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ModelAdapterError("Adaptive UAV weighting contract must be an object")
+        required = {
+            "method",
+            "multiplier",
+            "hard_fraction",
+            "difficulty_folds",
+            "difficulty_seed",
+            "base_ensemble_contract_path",
+            "pilot_promoted",
+            "pilot_eligible",
+            "deployment_purpose",
+        }
+        if set(value) != required:
+            raise ModelAdapterError(
+                "Adaptive UAV weighting contract fields differ from the adapter contract"
+            )
+        method = str(value["method"])
+        multiplier = float(value["multiplier"])
+        expected_multiplier = {
+            "adaptive_uav_1_5": 1.5,
+            "adaptive_uav_2_0": 2.0,
+        }.get(method)
+        if expected_multiplier is None or multiplier != expected_multiplier:
+            raise ModelAdapterError("Adaptive UAV method and multiplier disagree")
+        fraction = float(value["hard_fraction"])
+        folds = int(value["difficulty_folds"])
+        if not 0.0 < fraction < 1.0 or folds < 2:
+            raise ModelAdapterError("Adaptive UAV fraction or fold count is invalid")
+        if value["pilot_promoted"] is not False or value["pilot_eligible"] is not False:
+            raise ModelAdapterError("PE_34 deployment must retain its unpromoted status")
+        if value["deployment_purpose"] != "leaderboard_probe":
+            raise ModelAdapterError("PE_34 deployment purpose is not explicit")
+        base_path = _repository_path(
+            value["base_ensemble_contract_path"],
+            "base_ensemble_contract_path",
+        )
+        try:
+            base_contract = json.loads(base_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ModelAdapterError(
+                f"Cannot read base residual ensemble contract {base_path}: {error}"
+            ) from error
+        if base_contract.get("adaptive_uav_weighting") is not None:
+            raise ModelAdapterError("Adaptive difficulty model cannot itself be adaptive")
+        return {
+            **value,
+            "multiplier": multiplier,
+            "hard_fraction": fraction,
+            "difficulty_folds": folds,
+            "difficulty_seed": int(value["difficulty_seed"]),
+            "base_ensemble_contract_path": str(value["base_ensemble_contract_path"]),
+        }
 
     def _calibration_data(self, training_data: Any) -> Any:
         feature_names = [str(column) for column in training_data.features.columns]
@@ -242,6 +305,110 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
         model.configure_policies(self.target_policy, PredictionPolicy())
         return model
 
+    def _difficulty_model(self) -> ResidualCorrectedTreeEnsembleAdapter:
+        assert self.adaptive_uav_weighting is not None
+        model = ResidualCorrectedTreeEnsembleAdapter(
+            hyperparameters={
+                "ensemble_contract_path": self.adaptive_uav_weighting[
+                    "base_ensemble_contract_path"
+                ]
+            },
+            seed=self.seed,
+            prediction_minimum=self.prediction_minimum,
+            training_monitor=NoOpTrainingMonitor(),
+        )
+        model.configure_policies(self.target_policy, PredictionPolicy())
+        return model
+
+    def _adaptive_training_data(self, training_data: Any) -> Any:
+        settings = self.adaptive_uav_weighting
+        if settings is None:
+            return training_data
+        if training_data.sample_weights is None:
+            raise ModelAdapterError("Adaptive UAV weighting requires sample weights")
+        calibration = self._calibration_data(training_data)
+        uavs = np.asarray(
+            sorted(training_data.metadata["uav_id"].astype(str).unique()),
+            dtype=object,
+        )
+        folds = int(settings["difficulty_folds"])
+        if len(uavs) < folds:
+            raise ModelAdapterError("Too few UAVs for adaptive difficulty fitting")
+        oof_prediction = np.empty(len(calibration), dtype=np.float64)
+        seen = np.zeros(len(calibration), dtype=bool)
+        splitter = KFold(
+            n_splits=folds,
+            shuffle=True,
+            random_state=int(settings["difficulty_seed"]),
+        )
+        for fold_number, (fit_index, held_index) in enumerate(
+            splitter.split(uavs),
+            start=1,
+        ):
+            fitting_uavs = set(uavs[fit_index])
+            held_uavs = set(uavs[held_index])
+            training_mask = training_data.metadata["uav_id"].astype(str).isin(
+                fitting_uavs
+            ).to_numpy()
+            calibration_mask = calibration.metadata["uav_id"].astype(str).isin(
+                held_uavs
+            ).to_numpy()
+            print(
+                "Adaptive UAV difficulty fold "
+                f"{fold_number}/{folds}: fitting unchanged Run 7",
+                flush=True,
+            )
+            model = self._difficulty_model()
+            model.fit(_subset(training_data, training_mask), None)
+            oof_prediction[calibration_mask] = model.predict(
+                _subset(calibration, calibration_mask)
+            )
+            seen[calibration_mask] = True
+        if not seen.all() or not np.isfinite(oof_prediction).all():
+            raise ModelAdapterError("Adaptive difficulty predictions are incomplete")
+
+        scored = calibration.metadata[["uav_id"]].copy()
+        scored["squared_error"] = np.square(
+            oof_prediction - target_values(calibration)
+        )
+        ranking = (
+            scored.groupby("uav_id", as_index=False)["squared_error"]
+            .mean()
+            .assign(rmse=lambda table: np.sqrt(table["squared_error"]))
+            .sort_values(["rmse", "uav_id"], ascending=[False, True])
+        )
+        hard_count = max(
+            1,
+            int(np.ceil(len(ranking) * float(settings["hard_fraction"]))),
+        )
+        hard_uavs = set(ranking.iloc[:hard_count]["uav_id"].astype(str))
+        base_weights = training_data.sample_weights.to_numpy(dtype=np.float64)
+        if not np.isfinite(base_weights).all() or (base_weights <= 0.0).any():
+            raise ModelAdapterError("Adaptive base weights must be finite and positive")
+        relative = np.where(
+            training_data.metadata["uav_id"].astype(str).isin(hard_uavs),
+            float(settings["multiplier"]),
+            1.0,
+        )
+        weights = base_weights * relative
+        weights *= base_weights.sum() / weights.sum()
+        if not np.isclose(weights.sum(), base_weights.sum(), rtol=1e-12, atol=1e-12):
+            raise ModelAdapterError("Adaptive weighting changed total weight mass")
+        self.last_adaptive_weighting = {
+            "training_uavs": len(uavs),
+            "hard_uavs": sorted(hard_uavs),
+            "multiplier": float(settings["multiplier"]),
+            "original_weight_sum": float(base_weights.sum()),
+            "adaptive_weight_sum": float(weights.sum()),
+        }
+        return type(training_data)(
+            features=training_data.features,
+            metadata=training_data.metadata,
+            target=training_data.target,
+            sample_weights=pd.Series(weights, index=training_data.sample_weights.index),
+            fitting_target=training_data.fitting_target,
+        )
+
     def _fit_members(
         self,
         training_data: Any,
@@ -249,6 +416,7 @@ class ResidualCorrectedTreeEnsembleAdapter(ModelAdapter):
         *,
         retain: bool,
     ) -> tuple[NDArray[np.float64], list[ModelAdapter]]:
+        training_data = self._adaptive_training_data(training_data)
         predictions: list[NDArray[np.float64]] = []
         models: list[ModelAdapter] = []
         for family in ("xgboost", "extra_trees"):

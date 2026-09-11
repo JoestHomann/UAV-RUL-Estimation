@@ -1,0 +1,20 @@
+{
+  "run_directory": "runs/run_10",
+  "feature_script": "other_pipelines/uav_rul_pipeline_v4 (1).py",
+  "raw_training": "data/train.csv",
+  "outer_folds": "1_dataset_construction/2_UAV_grouped_validation_folds/artifacts/outer_folds.csv",
+  "historical_endpoints": "1_dataset_construction/runs/FE_run_2/current20/5_prefix_feature_engineering/artifacts/development_validation_features.csv.gz",
+  "test_cutoffs": "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv",
+  "families": ["xgboost", "mlp", "lstm", "multiscale_cnn", "transformer", "trajectory_dtw_knn"],
+  "selection_runs": {"xgboost": 9, "mlp": 3, "lstm": 7, "multiscale_cnn": 7, "transformer": 3, "trajectory_dtw_knn": 5},
+  "model_seeds": [13, 37, 73],
+  "endpoint_seeds": [20270401, 20270402, 20270403],
+  "stopping_split_seed": 20270912,
+  "stopping_fraction": 0.2,
+  "cpu_threads": 4,
+  "bootstrap_repetitions": 2000,
+  "bootstrap_seed": 20270912,
+  "target_cap": 125,
+  "expected_features": 266,
+  "max_workers": 1
+}

@@ -193,6 +193,9 @@ def train_final_model(run_number: int, *, force: bool = False) -> dict[str, Any]
             "reload_prediction_equivalence": True,
             "test_data_loaded": False,
         }
+        adaptive_weighting = getattr(model, "last_adaptive_weighting", None)
+        if adaptive_weighting is not None:
+            summary_payload["adaptive_uav_weighting"] = adaptive_weighting
         write_json(summary_payload, artifact_dir / "final_training_summary.json")
         manifest = {
             "manifest_version": 1,
@@ -206,6 +209,7 @@ def train_final_model(run_number: int, *, force: bool = False) -> dict[str, Any]
             "training_uavs": int(contract["training"]["uav_count"]),
             "reload_prediction_equivalence": True,
             "test_data_loaded": False,
+            "adaptive_uav_weighting_applied": adaptive_weighting is not None,
             "artifacts": {
                 "model": "artifacts/final_model.joblib",
                 "preprocessor": (

@@ -289,6 +289,37 @@ def _residual_ensemble_specification(
             "selected_configurations": repository_relative(selected_path),
         },
     }
+    adaptive_settings = settings.adaptive_uav_weighting
+    if adaptive_settings is not None:
+        base_contract_path = artifact_dir / "residual_ensemble_base_contract.json"
+        write_json(contract, base_contract_path)
+        adaptive_manifest = verification.manifests["pe34_pilot"]
+        candidate = next(
+            value
+            for value in adaptive_manifest["candidates"]
+            if value["method"] == adaptive_settings.method
+        )
+        contract["method"] = adaptive_settings.method
+        contract["source_experiment"] = "PE_34"
+        contract["adaptive_uav_weighting"] = {
+            "method": adaptive_settings.method,
+            "multiplier": float(adaptive_settings.multiplier),
+            "hard_fraction": float(adaptive_settings.hard_fraction),
+            "difficulty_folds": int(adaptive_settings.difficulty_folds),
+            "difficulty_seed": int(adaptive_settings.difficulty_seed),
+            "base_ensemble_contract_path": repository_relative(base_contract_path),
+            "pilot_promoted": False,
+            "pilot_eligible": bool(candidate.get("eligible", False)),
+            "deployment_purpose": "leaderboard_probe",
+        }
+        contract["provenance"].update(
+            pe34_winner_manifest=repository_relative(
+                verification.manifest_paths["pe34_pilot"]
+            ),
+            pe34_experiment_definition=repository_relative(
+                verification.manifest_paths["adaptive_experiment_definition"]
+            ),
+        )
     contract_path = artifact_dir / "residual_ensemble_contract.json"
     write_json(contract, contract_path)
     architecture = {
@@ -296,7 +327,11 @@ def _residual_ensemble_specification(
         "representation": "tabular",
         "feature_sets": [feature_set],
         "lookbacks": [],
-        "variants": ["pe11_residual_corrected"],
+        "variants": [
+            "pe34_adaptive_uav_1_5"
+            if adaptive_settings is not None
+            else "pe11_residual_corrected"
+        ],
         "early_stopping_patience": None,
         "search": {
             "ensemble_contract_path": {
@@ -351,7 +386,17 @@ def build_selection(settings_path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, ob
         ),
         "locked_results_used_for_configuration_tuning": False,
         "test_data_loaded": False,
-        "selection_status": "approved",
+        "selection_status": (
+            "experimental_leaderboard_probe"
+            if settings.adaptive_uav_weighting is not None
+            else "approved"
+        ),
+        "production_replacement_approved": settings.adaptive_uav_weighting is None,
+        "experimental_method": (
+            settings.adaptive_uav_weighting.method
+            if settings.adaptive_uav_weighting is not None
+            else None
+        ),
     }
     source_settings = settings.model_dump(mode="json", exclude_none=True)
     resolved_settings = copy.deepcopy(source_settings)

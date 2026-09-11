@@ -1,7 +1,7 @@
-# PE_11 residual-corrected ensemble deployment.
+# PE_34 adaptive-UAV leaderboard probe based on the Run 7 residual ensemble.
 # Increment the version only when changing this run after Step 2 has produced output.
 settings_version = 1
-run_number = 7
+run_number = 8
 
 # PE_11 won development validation and PE_12's test-like ranking. Its base
 # component data and configurations come from the PE_3 run_1 source study.
@@ -27,6 +27,19 @@ experiment_definition = "2_architecture_experiments/1_pipeline_experiments/exper
 extra_trees_configuration_index = 3
 xgboost_configuration_index = 1
 internal_folds = 4
+
+# PE_34 did not pass its promotion gates. This section deliberately deploys
+# its better 1.5x arm as an experimental Kaggle submission while retaining
+# Phase 3 Run 7 as the validated production choice.
+[adaptive_uav_weighting]
+experiment_definition = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_34/settings.toml"
+result_manifest = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_34/runs/run_1/reporting/winner_manifest.json"
+method = "adaptive_uav_1_5"
+multiplier = 1.5
+hard_fraction = 0.25
+difficulty_folds = 3
+difficulty_seed = 20270910
+allow_unpromoted_pilot = true
 
 [final_search]
 candidate_budget = 1

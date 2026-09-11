@@ -61,14 +61,31 @@ The current TOML must exactly match the settings resolved by Step 1. Once Step
 2 has written any output, a settings change requires a new settings version and
 Phase 3 run number.
 
-Run numbers are phase-local. The current default TOML writes Phase 3 Run 7
-under `3_final_model_training_and_inference/runs/run_7/` and deploys the
-development-selected `PE_11::residual_corrected` method confirmed by PE_12's
-test-like ranking. The base component pair is frozen to the configuration
-selected by the preceding Run 6 search. There is consequently one Phase 3
-candidate rather than another search over the same component grid.
+Run numbers are phase-local. The current default TOML writes Phase 3 Run 8
+under `3_final_model_training_and_inference/runs/run_8/`. It deploys PE_34's
+`adaptive_uav_1_5` treatment as an explicitly unpromoted leaderboard probe on
+top of the Run 7 residual-corrected ensemble. PE_34 did not meet its 2% local
+improvement or paired-bootstrap promotion gates, so Run 7 remains the retained
+production model. Run 8 must not be described as a promoted pipeline change.
 
-For every development fold, the Run 7 adapter partitions only that fold's
+For every member-fitting set, Run 8 first obtains grouped OOF predictions from
+the unchanged Run 7 recipe, ranks only those fitting UAVs by historical RMSE,
+and increases the hardest quarter's relative prefix weight by 1.5. Total
+sample-weight mass is renormalized. Difficulty is recomputed inside each
+residual-calibration fold, so labels belonging to calibration-held UAVs cannot
+determine the base-estimator weights used to predict them.
+
+This exact nested calculation is expensive. Step 2 repeats it across five
+development folds before Step 4 performs the all-UAV deployment fit. A complete
+Run 8 is expected to have roughly the cost of rerunning the substantive PE_34
+pilot. Completed Phase 3 candidates remain resumable through the normal SQLite
+checkpoint.
+
+The underlying base component pair remains frozen to the configuration selected
+by the preceding Run 6 search. There is one Phase 3 candidate rather than
+another search over the same component grid.
+
+For every development fold, the underlying Run 7 adapter partitions only that fold's
 training UAVs into four internal groups. Each internal fit uses all available
 training prefixes from three groups and predicts the established five
 development endpoints for the fourth. Those leakage-safe OOF predictions fit

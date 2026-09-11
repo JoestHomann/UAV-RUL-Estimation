@@ -87,3 +87,23 @@ Artifacts under `runs/run_1/`:
 Preparation verification includes unit tests for weight conservation, stable
 UAV ranking, nested calibration isolation, outer-label perturbation, shared
 difficulty caches, tamper rejection and pilot decision gates.
+
+## Experimental Phase 3 submission
+
+The pilot completed without promotion. The `adaptive_uav_1_5` arm was the
+better treatment at mean-fold RMSE 10.2101, but it missed the preregistered 2%
+historical-gain and paired-bootstrap gates. Phase 3 Run 8 therefore deploys it
+only as a labeled leaderboard probe; Phase 3 Run 7 remains the retained model.
+
+The current workspace has already completed Run 8 Step 1. Continue from the
+repository root with:
+
+```powershell
+& .\.venv\Scripts\python.exe .\3_final_model_training_and_inference\run_phase_3.py --from-step 2
+```
+
+The verified Kaggle file will be written to
+`3_final_model_training_and_inference/runs/run_8/6_submission_verification/artifacts/submission.csv`.
+Run 8 recomputes fit-local grouped difficulty inside every residual-calibration
+fit. Its Step 2 and Step 4 are consequently expensive and are resumable after
+an interruption.

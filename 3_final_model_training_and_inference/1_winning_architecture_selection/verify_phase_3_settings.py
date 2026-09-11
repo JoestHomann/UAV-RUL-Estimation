@@ -88,6 +88,29 @@ class ResidualCorrectedEnsembleSettings(StrictModel):
     internal_folds: int = Field(ge=2, le=10)
 
 
+class AdaptiveUAVWeightingSettings(StrictModel):
+    """Explicitly deploy one completed PE_34 pilot arm for leaderboard testing."""
+
+    experiment_definition: str = Field(min_length=1)
+    result_manifest: str = Field(min_length=1)
+    method: Literal["adaptive_uav_1_5", "adaptive_uav_2_0"]
+    multiplier: Literal[1.5, 2.0]
+    hard_fraction: float = Field(gt=0.0, lt=1.0)
+    difficulty_folds: int = Field(ge=2, le=10)
+    difficulty_seed: int = Field(ge=0, le=MAX_SEED)
+    allow_unpromoted_pilot: Literal[True]
+
+    @model_validator(mode="after")
+    def method_matches_multiplier(self) -> "AdaptiveUAVWeightingSettings":
+        expected = {
+            "adaptive_uav_1_5": 1.5,
+            "adaptive_uav_2_0": 2.0,
+        }[self.method]
+        if self.multiplier != expected:
+            raise ValueError(f"{self.method} requires multiplier = {expected}")
+        return self
+
+
 class Phase3Settings(StrictModel):
     settings_version: int = Field(gt=0)
     run_number: int = Field(gt=0)
@@ -106,6 +129,7 @@ class Phase3Settings(StrictModel):
     submission_policies: list[SubmissionPolicySettings] | None = None
     canonical_submission_policy: str | None = None
     residual_corrected_ensemble: ResidualCorrectedEnsembleSettings | None = None
+    adaptive_uav_weighting: AdaptiveUAVWeightingSettings | None = None
 
     @model_validator(mode="after")
     def family_name_is_normalized(self) -> "Phase3Settings":
@@ -130,6 +154,14 @@ class Phase3Settings(StrictModel):
             raise ValueError(
                 "residual_corrected_tree_ensemble requires "
                 "residual_corrected_ensemble settings"
+            )
+        if (
+            self.adaptive_uav_weighting is not None
+            and self.selected_model_family != RESIDUAL_ENSEMBLE_FAMILY
+        ):
+            raise ValueError(
+                "adaptive_uav_weighting is supported only by "
+                "residual_corrected_tree_ensemble"
             )
         names = [policy.name for policy in (self.submission_policies or [])]
         if len(names) != len(set(names)):
@@ -584,6 +616,72 @@ def _verify_residual_ensemble_reference(
     if not definition_path.is_file():
         raise SettingsError("PE_11 experiment definition is unavailable")
 
+    manifests = {"pe11_promotion": pe11, "pe12_confirmation": pe12}
+    manifest_paths = {
+        "pe11_promotion": pe11_path,
+        "pe12_confirmation": pe12_path,
+        "experiment_definition": definition_path,
+    }
+    adaptive_settings = settings.adaptive_uav_weighting
+    if adaptive_settings is not None:
+        adaptive_definition_path = configured_repository_path(
+            {"definition": adaptive_settings.experiment_definition},
+            "definition",
+            Path("settings.toml"),
+        )
+        adaptive_manifest_path = configured_repository_path(
+            {"manifest": adaptive_settings.result_manifest},
+            "manifest",
+            Path("winner_manifest.json"),
+        )
+        adaptive_manifest = read_json(
+            adaptive_manifest_path,
+            "PE_34 winner manifest",
+        )
+        candidates = adaptive_manifest.get("candidates")
+        candidate = next(
+            (
+                value
+                for value in candidates
+                if isinstance(value, dict)
+                and value.get("method") == adaptive_settings.method
+            ),
+            None,
+        ) if isinstance(candidates, list) else None
+        if (
+            adaptive_manifest.get("completed") is not True
+            or adaptive_manifest.get("status") != "stop_after_pilot"
+            or adaptive_manifest.get("promoted") is not False
+            or adaptive_manifest.get("retained_production_model") != "phase3_run_7"
+            or adaptive_manifest.get("uses_test_labels") is not False
+            or not isinstance(candidate, dict)
+        ):
+            raise SettingsError(
+                "PE_34 does not contain the completed, unpromoted adaptive pilot arm"
+            )
+        try:
+            with adaptive_definition_path.open("rb") as stream:
+                adaptive_definition = tomllib.load(stream)
+            adaptive_workflow = adaptive_definition["campaign_workflows"]["PE_34"]
+        except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+            raise SettingsError(
+                f"Cannot read the PE_34 experiment definition: {error}"
+            ) from error
+        if (
+            float(adaptive_settings.multiplier)
+            not in [float(value) for value in adaptive_workflow.get("multipliers", [])]
+            or float(adaptive_workflow.get("hard_fraction", -1.0))
+            != adaptive_settings.hard_fraction
+            or int(adaptive_workflow.get("difficulty_folds", -1))
+            != adaptive_settings.difficulty_folds
+        ):
+            raise SettingsError("Phase 3 adaptive settings differ from PE_34")
+        manifests["pe34_pilot"] = adaptive_manifest
+        manifest_paths.update(
+            pe34_pilot=adaptive_manifest_path,
+            adaptive_experiment_definition=adaptive_definition_path,
+        )
+
     return Phase2Verification(
         settings_version=settings_version,
         run_number=settings.phase_2_run_number,
@@ -591,12 +689,8 @@ def _verify_residual_ensemble_reference(
         representation="tabular",
         phase_2_specification=specification,
         model_registry=registry,
-        manifests={"pe11_promotion": pe11, "pe12_confirmation": pe12},
-        manifest_paths={
-            "pe11_promotion": pe11_path,
-            "pe12_confirmation": pe12_path,
-            "experiment_definition": definition_path,
-        },
+        manifests=manifests,
+        manifest_paths=manifest_paths,
     )
 
 
