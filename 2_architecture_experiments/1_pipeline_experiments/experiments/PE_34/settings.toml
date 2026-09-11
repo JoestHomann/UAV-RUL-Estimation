@@ -1,0 +1,44 @@
+[pipeline]
+experiment = "PE_34"
+run = "run_1"
+
+[run_definitions.PE_34]
+title = "OOF adaptive UAV weighting pilot"
+description = "Run 7 versus 1.5x/2x relative weighting for the hardest training UAV quarter, with fit-local grouped difficulty and a reused simpler baseline."
+
+[[run_definitions.PE_34.steps]]
+name = "validate_inputs"
+script = "2_architecture_experiments/1_pipeline_experiments/run_adaptive_uav_weighting.py"
+arguments = ["--workflow", "PE_34", "--check"]
+script_chain = "adaptive"
+status_artifact = "reporting/input_verification.json"
+
+[[run_definitions.PE_34.steps]]
+name = "evaluate_adaptive_weights"
+script = "2_architecture_experiments/1_pipeline_experiments/run_adaptive_uav_weighting.py"
+arguments = ["--workflow", "PE_34"]
+script_chain = "adaptive"
+status_artifact = "reporting/winner_manifest.json"
+
+[script_chains.adaptive]
+scripts = ["2_architecture_experiments/1_pipeline_experiments/run_adaptive_uav_weighting.py"]
+
+[campaign_workflows.PE_34]
+kind = "adaptive_uav"
+include_simple_baseline = true
+source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
+reuse_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_32/runs/run_2/reporting/pre_registration.json"
+test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
+endpoint_seeds = [20270401, 20270402, 20270403]
+split_seeds = [20270910]
+difficulty_folds = 3
+hard_fraction = 0.25
+multipliers = [1.0, 1.5, 2.0]
+max_workers = 2
+cpu_threads = 4
+bootstrap_seed = 20270911
+bootstrap_repetitions = 2000
+minimum_relative_improvement = 0.02
+minimum_fold_wins = 4
+nominal_maximum_regression = 0.01
+stress_maximum_regression = 0.05
