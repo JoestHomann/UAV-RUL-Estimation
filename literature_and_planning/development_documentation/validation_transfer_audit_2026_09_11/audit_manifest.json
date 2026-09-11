@@ -1,0 +1,22 @@
+{
+  "input_sha256": {
+    "2_architecture_experiments\\1_pipeline_experiments\\experiments\\PE_31\\runs\\run_1\\reporting\\endpoints.csv": "7ea4d56c69fef1387f59e0ec7d23ebf764fc68cc84e659ea0e1f2095754947ba",
+    "2_architecture_experiments\\1_pipeline_experiments\\experiments\\PE_31\\runs\\run_1\\reproduction\\submission.csv": "1fe5ff8fb9e1b44b6599aab74fe9b80e49ea334096911a2b4996c269b768bf7a",
+    "2_architecture_experiments\\1_pipeline_experiments\\experiments\\PE_31\\runs\\run_1\\stages\\benchmark\\reporting\\predictions.csv.gz": "c176a088d294697c76fc5f0f28137ee9764acab3dfad6021d8e12b9c8243e3cb",
+    "3_final_model_training_and_inference\\runs\\run_7\\6_submission_verification\\artifacts\\submission.csv": "c5da7d4c61bd4823ae0cf60eb0b01bc2e37c19d2823fefb7aa5abef8c6776f29",
+    "data\\test.csv": "7b83f5afa751b2bc19fd7854beee1fca01bfe355cee9b5ffe4b70cc80f6c3272",
+    "data\\train.csv": "3f64a46ee6c7f418324b503b8ebf8c6c4072696514401c156241cb5ac333a78d",
+    "other_pipelines\\uav_rul_pipeline_v4 (1).py": "6943e923a1040cba6d666888132226f50b296943dfa02f3aa1eafbdc84caff43"
+  },
+  "matched_endpoint_identity_verified": true,
+  "matched_protocol_limitation": "PE31 reference used uniform feasible calibration cutoffs, not original test-like assignment.",
+  "new_model_fits": 0,
+  "original_calibration_fraction_raw_rul_over125": 0.21,
+  "original_positional_label_alignment_valid_for_current_file": true,
+  "original_prefix_feature_causality_check_passed": true,
+  "reweighted_and_capped_scores_are_posthoc_diagnostics": true,
+  "run7_prefix_feature_causality_check_passed": true,
+  "test_uavs": 100,
+  "training_uavs": 100,
+  "uses_test_labels": false
+}

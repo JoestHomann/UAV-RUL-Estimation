@@ -1,10 +1,10 @@
 [pipeline]
 experiment = "PE_32"
-run = "run_1"
+run = "run_2"
 
 [run_definitions.PE_32]
 title = "Bounded LightGBM comparison"
-description = "Four LightGBM recipes against frozen Run 7, training-only blend weights, at most one confirmation candidate."
+description = "Four LightGBM recipes against Run 7 and the reproduced simpler pipeline, training-only blend weights, at most one confirmation candidate."
 
 [[run_definitions.PE_32.steps]]
 name = "validate_inputs"
@@ -25,6 +25,7 @@ scripts = ["2_architecture_experiments/1_pipeline_experiments/run_bounded_compar
 
 [campaign_workflows.PE_32]
 kind = "lightgbm"
+include_simple_baseline = true
 source_registration = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_28/runs/run_1/reporting/pre_registration.json"
 test_cutoffs = "1_dataset_construction/1_structural_data_audit/artifacts/test_fligh_cycles_cut_offs.csv"
 endpoint_seeds = [20270401, 20270402, 20270403]

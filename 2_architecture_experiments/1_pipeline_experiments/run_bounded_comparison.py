@@ -14,6 +14,7 @@ from threadpoolctl import threadpool_limits
 
 import bounded_comparison_data as data_tools
 import bounded_lightgbm
+import bounded_reference
 import campaign_reporting as reports
 from advanced_r2_utils import load_workflow
 from campaign_models import fit_run7, training_endpoints
@@ -54,6 +55,8 @@ def validate(w):
         if not 0 < w[key] < 1:
             raise ValueError(f'Invalid parameter: {key}')
     if w['kind'] == 'lightgbm':
+        if type(w.get('include_simple_baseline', False)) is not bool:
+            raise ValueError('include_simple_baseline must be boolean')
         if len(w['split_seeds']) != 3 or len(w['model_seeds']) != 2 or w['selection_folds'] != 3:
             raise ValueError('LightGBM budget is one five-fold screen and two confirmation partitions, two model seeds')
         if w['blend_weights'] != [0., .1, .25, .5, 1.] or not 1 <= w['maximum_iterations'] <= 2000:
@@ -85,7 +88,9 @@ def budget(w):
             'screen_lightgbm_fits_maximum': 5*2*4*4*2,
             'confirmation_lightgbm_fits_maximum': 10*2*1*4*2,
             'screen_run7_base_estimator_fits_maximum': 5*4*30,
-            'confirmation_run7_base_estimator_fits_maximum': 10*4*30}
+            'confirmation_run7_base_estimator_fits_maximum': 10*4*30,
+            'screen_simple_base_estimator_fits_maximum': 60 if w.get('include_simple_baseline') else 0,
+            'confirmation_simple_base_estimator_fits_maximum': 120 if w.get('include_simple_baseline') else 0}
 
 
 class Engine:
@@ -105,11 +110,15 @@ class Engine:
             raise ValueError('Requested UAV coverage incomplete')
         # Run 7 always uses its frozen seed; reuse exactly the same prediction
         # across candidate seeds rather than fitting the deterministic control twice.
-        fit_seed = self.source['model_seed'] if method == 'run7' else seed
+        fit_seed = self.source['model_seed'] if method == 'run7' else 0 if method == 'simple_reproduction' else seed
         identity = {'method': method, 'seed': fit_seed, 'train_uavs': sorted(train_ids), 'held_uavs': sorted(held_ids)}
         path = self.directory/f'{checksum(identity)}.json'
         contract = {**identity, 'training_digest': data_digest(training),
                     'calibration_digest': data_digest(calibration), 'held_digest': data_digest(held)}
+        if method == 'simple_reproduction':
+            contract.update(raw_digest=hashlib.sha256(pd.util.hash_pandas_object(
+                self.data['raw'], index=True).to_numpy().tobytes()).hexdigest(),
+                empirical_cutoffs=list(map(int,self.data['cutoffs'])))
         expected = held.metadata[['uav_id', 'scenario', 'suite', 'endpoint_seed', 'cutoff']].copy()
         expected['observed_rul'] = held.target.to_numpy(float)
         expected['split_seed'], expected['outer_fold'], expected['model_seed'] = self.job.split_seed, self.job.outer_fold, fit_seed
@@ -125,6 +134,8 @@ class Engine:
             print(f"{self.workflow['kind']} split={self.job.split_seed} fold={self.job.outer_fold} {method} seed={fit_seed}: {len(train_ids)} train / {len(held_ids)} held UAVs", flush=True)
             if method == 'run7':
                 prediction, audit = fit_run7(training, training_endpoints(calibration, train_ids), held, self.source)
+            elif method == 'simple_reproduction':
+                prediction, audit = bounded_reference.fit_reference(self.data['raw'],train_ids,held,self.source,self.data['cutoffs'])
             elif method in bounded_lightgbm.RECIPES:
                 prediction, audit = bounded_lightgbm.fit_lightgbm(training, calibration, held, method, fit_seed, self.workflow)
             else:
@@ -158,6 +169,9 @@ def task(arguments):
         for seed in w['model_seeds']:
             control = engine.fit(job.training_uavs, job.validation_uavs, 'run7', seed)
             output.append(control.assign(method='run7'))
+            if w['kind'] == 'lightgbm' and w.get('include_simple_baseline'):
+                baseline = engine.fit(job.training_uavs, job.validation_uavs, 'simple_reproduction', seed)
+                output.append(baseline.assign(method='simple_reproduction'))
             if w['kind'] == 'contrastive':
                 from bounded_contrastive import ARMS
                 for arm in ARMS:
@@ -209,6 +223,11 @@ def lightgbm_decision(summary, comparisons, w, confirmation=False):
             'fold_wins': bool(c.loc['historical', 'fold_wins'] >= (8 if confirmation else 4)),
             'nominal_stable': bool(c.loc['nominal', 'relative_rmse_improvement'] >= -w['nominal_maximum_regression']),
             'stress_stable': bool(c.loc['unrestricted', 'relative_rmse_improvement'] >= -w['stress_maximum_regression'])}
+        if w.get('include_simple_baseline'):
+            baseline = summary.loc[summary.method.eq('simple_reproduction') & summary.suite.eq('historical')]
+            if len(baseline) != 1:
+                raise ValueError('Missing matched simpler-pipeline baseline')
+            checks['beats_simple_baseline'] = bool(s.loc['historical','mean_fold_rmse'] < baseline.iloc[0].mean_fold_rmse)
         if confirmation:
             checks.update(r2_goal=bool(s.loc['historical', 'r2'] >= w['minimum_pooled_r2']),
                           conditional_bootstrap=bool(c.loc['historical', 'bootstrap_high'] < 0))
@@ -253,6 +272,36 @@ def save_costs(root):
     atomic_csv(root/'reporting'/'fit_costs.csv', pd.DataFrame(costs))
 
 
+def report_simple_comparisons(root, stage, rows, w):
+    """Paired scores against the submitted-script adaptation on identical UAVs."""
+    if not w.get('include_simple_baseline'):
+        return
+    keys = [k for k in reports.KEYS if k != 'model_seed']
+    averaged = rows.groupby([*keys,'method'],as_index=False).predicted_rul.mean()
+    result = []
+    for suite, group in averaged.groupby('suite'):
+        base = group.loc[group.method.eq('simple_reproduction')].sort_values(keys)
+        base_fold = base.groupby(['split_seed','outer_fold']).apply(lambda g: reports.metrics(g)['rmse'], include_groups=False)
+        for method, candidate in group.groupby('method'):
+            if method == 'simple_reproduction':
+                continue
+            candidate = candidate.sort_values(keys)
+            if not candidate[keys].reset_index(drop=True).equals(base[keys].reset_index(drop=True)):
+                raise ValueError('Simpler baseline endpoints differ')
+            candidate_fold = candidate.groupby(['split_seed','outer_fold']).apply(lambda g: reports.metrics(g)['rmse'], include_groups=False)
+            a = candidate.assign(sq=(candidate.predicted_rul-candidate.observed_rul)**2).groupby('uav_id').sq.mean()
+            b = base.assign(sq=(base.predicted_rul-base.observed_rul)**2).groupby('uav_id').sq.mean()
+            rng = np.random.default_rng(w['bootstrap_seed'])
+            index = rng.integers(len(a),size=(w['bootstrap_repetitions'],len(a)))
+            delta = np.sqrt(a.to_numpy()[index].mean(axis=1))-np.sqrt(b.to_numpy()[index].mean(axis=1))
+            result.append({'method':method,'reference':'simple_reproduction','suite':suite,
+                'relative_rmse_improvement':float(1-candidate_fold.mean()/base_fold.mean()),
+                'fold_wins':int((candidate_fold < base_fold).sum()),
+                'bootstrap_low':float(np.quantile(delta,.025)), 'bootstrap_high':float(np.quantile(delta,.975)),
+                'bootstrap_scope':'conditional on fitted predictions; whole UAV resampling'})
+    atomic_csv(Path(root)/'stages'/stage/'reporting'/'paired_comparisons_vs_simple.csv',pd.DataFrame(result))
+
+
 def run(w, root, stage, config_path):
     validate(w)
     permitted = ('check', 'all', 'screen', 'confirm') if w['kind'] == 'lightgbm' else ('check', 'all', 'pilot')
@@ -262,7 +311,7 @@ def run(w, root, stage, config_path):
     reporting = root/'reporting'
     reporting.mkdir(parents=True, exist_ok=True)
     source, data, jobs, paths, outer, inner = data_tools.prepare(w)
-    modules = ['run_bounded_comparison.py', 'bounded_comparison_data.py', 'bounded_lightgbm.py',
+    modules = ['run_bounded_comparison.py', 'bounded_comparison_data.py', 'bounded_lightgbm.py', 'bounded_reference.py',
                'campaign_reporting.py', 'campaign_models.py', 'campaign_data.py',
                'followup_experiment_utils.py', 'confirmation_utils.py', 'advanced_r2_utils.py']
     if w['kind'] == 'contrastive':
@@ -281,7 +330,8 @@ def run(w, root, stage, config_path):
     readiness = {'ready': True, 'kind': w['kind'], **budget(w), 'parallel_workers': w['max_workers'],
                  'cpu_threads_per_worker': w['cpu_threads'], 'features': len(data['training'].features.columns),
                  'suite_counts': data['development'].metadata.groupby('suite').size().to_dict(),
-                 'uses_test_labels': False, 'unused_alternative_script_not_required': True}
+                 'uses_test_labels': False, 'unused_alternative_script_not_required': not w.get('include_simple_baseline',False),
+                 'simple_baseline_included':w.get('include_simple_baseline',False)}
     atomic_json(reporting/'input_verification.json', readiness)
     atomic_csv(reporting/'endpoints.csv', data['development'].metadata.assign(observed_rul=data['development'].target))
     atomic_csv(reporting/'outer_folds.csv', outer)
@@ -304,6 +354,7 @@ def run(w, root, stage, config_path):
                 raise ValueError('Expected five screen folds')
             rows = execute(root, screen_jobs, source, data, w, list(bounded_lightgbm.RECIPES))
             reports.report(root, 'screen', rows, w)
+            report_simple_comparisons(root, 'screen', rows, w)
             decision = lightgbm_decision(*tables(root, 'screen'), w)
             # Freeze the one screening choice before any confirmation is fitted.
             selection = {'decision': decision, 'predictions_sha256': checksum(rows.to_dict('records'))}
@@ -320,11 +371,12 @@ def run(w, root, stage, config_path):
                 # Explicit confirmation must not silently train a missing screen.
                 for job in screen_jobs:
                     directory = root/'cells'/f'{job.split_seed}_{job.outer_fold}'
-                    expected = 4 + len(w['model_seeds'])*len(bounded_lightgbm.RECIPES)*4
+                    expected = 4 + len(w['model_seeds'])*len(bounded_lightgbm.RECIPES)*4 + int(w.get('include_simple_baseline',False))
                     if len([p for p in directory.glob('*.json') if not p.name.startswith('selection_')]) != expected:
                         raise ValueError('Screen checkpoint set incomplete; resume --stage screen first')
                 rows = execute(root, screen_jobs, source, data, w, list(bounded_lightgbm.RECIPES))
                 reports.report(root, 'screen', rows, w)
+                report_simple_comparisons(root, 'screen', rows, w)
                 decision = lightgbm_decision(*tables(root, 'screen'), w)
                 freeze(path, {'decision': decision, 'predictions_sha256': checksum(rows.to_dict('records'))})
                 atomic_json(root/'stages/screen/reporting/winner_manifest.json', decision)
@@ -335,6 +387,7 @@ def run(w, root, stage, config_path):
                     raise ValueError('Expected ten confirmation folds')
                 rows = execute(root, confirmation_jobs, source, data, w, [recipe])
                 reports.report(root, 'confirmation', rows, w)
+                report_simple_comparisons(root, 'confirmation', rows, w)
                 decision = lightgbm_decision(*tables(root, 'confirmation'), w, confirmation=True)
                 atomic_json(root/'stages/confirmation/reporting/winner_manifest.json', decision)
     save_costs(root)

@@ -1,6 +1,7 @@
 """Frozen Run 7 inputs and PE_31 endpoint semantics for PE_32/33.
 
-Only the A representation is built. The alternative script is not a dependency.
+The LightGBM representation is A; the optional submitted-script baseline builds
+its own original features inside each training fold.
 """
 from copy import deepcopy
 from dataclasses import replace
@@ -35,7 +36,7 @@ def source_contract(workflow):
     unused = source['reference_implementation'].replace('\\', '/')
     paths = [path]
     for relative, expected in registration['input_sha256'].items():
-        if relative.replace('\\', '/') == unused:
+        if relative.replace('\\', '/') == unused and not workflow.get('include_simple_baseline', False):
             continue
         original = input_path(relative)
         if sha(original) != expected:
@@ -79,5 +80,5 @@ def prepare(workflow):
     paths.extend([cutoff_path, input_path(source['history_summary']),
         Path(campaign_data.__file__), Path(campaign_data.audit_tools.__file__),
         Path(campaign_data.audit_tools.build_feature_table.__code__.co_filename)])
-    return source, {'training': training, 'development': development, 'raw': raw}, evaluation_jobs(
+    return source, {'training': training, 'development': development, 'raw': raw, 'cutoffs': cutoffs}, evaluation_jobs(
         outer, inner, include_inner=False), paths, outer, inner

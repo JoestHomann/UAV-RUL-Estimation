@@ -28,7 +28,10 @@ from test_feature_comparison import raw_fixture, temporary_directory
 
 
 def workflow(name='PE_32'):
-    return read_experiment_config(PIPELINE/f'experiments/{name}/settings.toml')['campaign_workflows'][name]
+    w = read_experiment_config(PIPELINE/f'experiments/{name}/settings.toml')['campaign_workflows'][name]
+    # Legacy unit fixtures isolate the LGB/TCN branches; dedicated tests below
+    # explicitly enable the real-config simpler baseline.
+    return {**w, 'include_simple_baseline': False}
 
 
 def fixture():
@@ -63,6 +66,68 @@ def fake_bad_candidate(training, calibration, held, recipe, seed, workflow):
 
 
 class BoundedComparisonTests(unittest.TestCase):
+    def test_simple_baseline_real_configuration_and_cache(self):
+        actual = read_experiment_config(PIPELINE/'experiments/PE_32/settings.toml')['campaign_workflows']['PE_32']
+        self.assertTrue(actual['include_simple_baseline'])
+        self.assertEqual(runner.budget(actual)['screen_simple_base_estimator_fits_maximum'],60)
+        source, data, jobs = fixture()
+        data['cutoffs'] = np.array([10,60]*8)
+        w = {**workflow(), 'include_simple_baseline':True,'max_workers':1}
+        def simple(raw, ids, held, source, cutoffs):
+            self.assertFalse(set(ids)&set(held.metadata.uav_id))
+            return held.features.signal.to_numpy()+7, {'base_estimator_fits':12}
+        with temporary_directory() as root, redirect_stdout(io.StringIO()), \
+                patch.object(runner,'fit_run7',side_effect=fake_control), \
+                patch.object(lightgbm,'fit_lightgbm',side_effect=fake_bad_candidate), \
+                patch.object(runner.bounded_reference,'fit_reference',side_effect=simple) as reference:
+            args=(root,jobs[0],source,data,w,['lgb_leaves7_leaf20'])
+            rows=runner.task(args)
+            self.assertEqual(reference.call_count,1)
+            self.assertIn('simple_reproduction',set(rows.method))
+            pd.testing.assert_frame_equal(rows,runner.task(args))
+            self.assertEqual(reference.call_count,1)
+            runner.reports.report(root,'screen',rows,w)
+            runner.report_simple_comparisons(root,'screen',rows,w)
+            comparisons=pd.read_csv(root/'stages/screen/reporting/paired_comparisons_vs_simple.csv')
+            self.assertEqual(set(comparisons.reference),{'simple_reproduction'})
+            self.assertTrue((comparisons.relative_rmse_improvement<0).all())
+
+    def test_candidate_cannot_advance_when_simple_is_better(self):
+        w={**workflow(),'include_simple_baseline':True}
+        method='lgb_leaves7_leaf20_blend'
+        summary=pd.DataFrame([{'method':m,'suite':s,'mean_fold_rmse':r,'r2':.92}
+            for m,r in [(method,9.),('simple_reproduction',8.)]
+            for s in ('historical','nominal','unrestricted')])
+        comparisons=pd.DataFrame([{'method':method,'suite':s,'relative_rmse_improvement':.1,
+            'fold_wins':8,'bootstrap_high':-.1} for s in ('historical','nominal','unrestricted')])
+        decision=runner.lightgbm_decision(summary,comparisons,w,True)
+        self.assertFalse(decision['eligible_for_final_review'])
+        self.assertFalse(decision['candidates'][0]['checks']['beats_simple_baseline'])
+
+    def test_submitted_reference_excludes_held_labels_and_future(self):
+        source,data,jobs=fixture()
+        source['reference_implementation']='other_pipelines/uav_rul_pipeline_v4 (1).py'
+        job=jobs[0]; held=select_uavs(data['development'],job.validation_uavs)
+        class SmallModel:
+            def __init__(self,**kwargs): self.best_iteration=2
+            def fit(self,x,y,**kwargs): self.mean=float(np.mean(y));return self
+            def predict(self,x): return np.full(len(x),self.mean)
+            def get_best_iteration(self): return self.best_iteration
+        cutoffs=np.array([10,60]*8)
+        with patch('xgboost.XGBRegressor',SmallModel),patch('catboost.CatBoostRegressor',SmallModel):
+            p,a=runner.bounded_reference.fit_reference(data['raw'],job.training_uavs,held,source,cutoffs)
+            changed=data['raw'].copy()
+            mask=changed.uav_id.isin(job.validation_uavs)
+            changed.loc[mask,'RUL']=999999
+            sensors=[c for c in changed if c.startswith('telemetry')]
+            changed.loc[mask&changed.flight_cycle.gt(60),sensors]=999999
+            q,b=runner.bounded_reference.fit_reference(changed,job.training_uavs,replace(held,target=held.target+999999),source,cutoffs)
+        np.testing.assert_array_equal(p,q)
+        self.assertEqual(a['calibration_assignments'],b['calibration_assignments'])
+        self.assertEqual(a['base_estimator_fits'],12)
+        self.assertFalse(set(a['final_fit_uavs'])&set(a['final_stopping_uavs']))
+        self.assertEqual(set(a['calibration_uavs']),set(job.training_uavs))
+
     def test_catalog_budget_and_hard_limits(self):
         for name in ('PE_32', 'PE_33'):
             w = workflow(name)

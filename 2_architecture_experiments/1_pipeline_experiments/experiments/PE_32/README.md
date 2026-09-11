@@ -4,6 +4,12 @@ Test whether LightGBM improves the complete predictor relative to the retained
 Run 7 residual-corrected XGBoost/ExtraTrees ensemble. This is the next tree
 comparison; PE_33 is a separate, optional neural pilot.
 
+Updated 11 September: `run_2` also includes the simpler pipeline whose unchanged
+full-data reproduction scored 0.88177 on Kaggle. `run_1` preflight files remain
+unchanged. The new run evaluates both baselines and LightGBM on identical outer
+UAVs, endpoints and raw-label scoring. Input checks and implementation tests
+passed; full run_2 model training has not been launched by the audit.
+
 Run from the repository root in PowerShell:
 
 ```powershell
@@ -41,6 +47,29 @@ the best eligible blend recipe; confirm only that recipe on two additional
 five-fold partitions with the same two-seed procedure. Blend weights continue to
 be selected inside each confirmation training fold using the frozen rule.
 
+The candidate must also have strictly lower historical mean-fold RMSE than
+the simpler baseline at screening and confirmation. Existing Run 7 gates
+remain in force. Reports include `simple_reproduction` and a separate
+`paired_comparisons_vs_simple.csv` with fold wins and paired UAV-bootstrap
+intervals. The baseline is not searched or blended into the candidates.
+
+The simpler baseline loads the exact hashed original script and preserves its
+feature ordering, seed zero, all-cycle unit weights, capped fitting/calibration
+labels, five grouped early-stopping CV fits per family, original blend grid,
+and final 90/10 UAV stopping split without refitting the stopping UAVs.
+For an outer-training fold of 80 UAVs, it samples 80 empirical test cutoffs
+without replacement with seed 1000 and applies the original greedy feasible
+assignment. Infeasible complete draws are rejected, with a hard 1,000-attempt
+limit and an audit of attempts/assignments. This necessary size adaptation is
+explicit: it is not the unchanged 100-UAV submission execution. All 15 declared
+outer folds passed the assignment preflight on their first draw. Outer-held
+UAV labels and lifetimes never enter baseline calibration selection.
+
+This corrects PE_31's reference adapter, which used uniform feasible cutoffs
+for blend calibration. The original source and PE_31 results are untouched.
+The fixed seed-zero baseline is cached once per outer fold and copied across
+candidate seed labels for alignment; those copies are not independent fits.
+
 Final review requires at least 2% mean-fold historical RMSE improvement, eight of
 ten fold wins, historical pooled R² >= .90, an upper 95% paired UAV-bootstrap
 RMSE-change bound below zero, and the same nominal/stress constraints. Failure
@@ -59,6 +88,10 @@ before beginning a new run if running alongside PE_31 would compete for resource
 | Screen | at most 320 | 20 | 600 |
 | Confirmation, only after screen passes | at most 160 | 40 | 1,200 |
 
+The simpler baseline adds **60 base fits at screening** (30 XGBoost, 30 CatBoost)
+and at most **120 at confirmation**. It is fitted only on outer tasks, not again
+inside each candidate's blend-weight selection folds.
+
 Each Run 7 evaluation includes its existing internal calibration and residual
 correction. Base-estimator counts cover XGBoost/ExtraTrees, not the smaller
 calibration heads. Controls are cached across all recipes and candidate seeds.
@@ -67,7 +100,7 @@ fits still make this a substantive run, not a quick four-fit benchmark.
 
 ## Results and interpretation
 
-Results are under `runs/run_1/` (or the configured run name):
+Results are under `runs/run_2/` (or the configured run name):
 
 - `reporting/input_verification.json`: input readiness and fit budget.
 - `reporting/pre_registration.json`: frozen provenance, created when fitting starts.
@@ -92,5 +125,6 @@ To run individual stages directly:
 ```
 
 Confirmation revalidates screening checkpoints and the frozen choice. It refuses
-an incomplete screen. The deleted alternative script is explicitly not required:
-this experiment builds only our Run 7 representation and does not replay that script.
+an incomplete screen. The restored original alternative script is required for
+PE_32's baseline and its hash is checked against the registered source. PE_33
+continues to exclude that dependency.
