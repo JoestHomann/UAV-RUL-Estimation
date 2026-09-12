@@ -198,7 +198,12 @@ def build_features(df, sensor_cols, windows=ROLLING_WINDOWS):
     return pd.DataFrame(feats).fillna(0.0)
 
 
-def build_features_tiered(df, sensor_tiers, windows=ROLLING_WINDOWS):
+def build_features_tiered(
+    df,
+    sensor_tiers,
+    windows=ROLLING_WINDOWS,
+    excluded_families=(),
+):
     """Same feature mechanics as build_features, but each sensor only gets the
     feature families appropriate to its tier (strong/medium/weak RUL relevance).
     Cuts feature count substantially for the ~half of sensors that barely
@@ -210,9 +215,14 @@ def build_features_tiered(df, sensor_tiers, windows=ROLLING_WINDOWS):
     feats["flight_cycle_log"] = np.log1p(df["flight_cycle"])
 
     families_by_tier = {"strong": STRONG_FAMILIES, "medium": MEDIUM_FAMILIES, "weak": WEAK_FAMILIES}
+    excluded_families = set(excluded_families)
 
     for tier, sensor_cols in sensor_tiers.items():
-        families = families_by_tier[tier]
+        families = tuple(
+            family
+            for family in families_by_tier[tier]
+            if family not in excluded_families
+        )
         for c in sensor_cols:
             s = df[c]
             exp_mean = g[c].transform(lambda x: x.expanding().mean()) if (
