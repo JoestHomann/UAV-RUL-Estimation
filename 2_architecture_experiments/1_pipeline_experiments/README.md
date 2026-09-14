@@ -536,6 +536,23 @@ fitting UAVs only. Launch it manually with:
 Use `--check` for setup validation without training; it also verifies that a
 truncated trajectory reproduces every state feature exactly.
 
+## PE_39: removing telemetry 05 and 24 together
+
+PE_35 warned that individual removals must not be combined without evaluating
+the combination. Telemetry 05 and 24 were among the cheapest to drop there and
+were the only two channels PE_37 found harmful to add back, so they are the pair
+worth testing. [PE_39](experiments/PE_39/README.md) runs four matched arms —
+baseline, each channel alone, and both together (147 features) — on the same v13
+protocol, and reports an interaction term saying whether the pair costs more
+than its parts predict. It refits PE_35's shared arms rather than importing them
+and checks bitwise reproduction against that run. Four arms and 20 fits:
+
+```powershell
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_39/run.py
+```
+
+Use `--check` for setup validation without training.
+
 ## Compare and record scores
 
 [PE_37](experiments/PE_37/README.md) complements the removal studies with eight

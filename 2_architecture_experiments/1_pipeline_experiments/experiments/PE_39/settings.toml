@@ -1,0 +1,29 @@
+[study]
+name = "PE_39_v13_paired_channel_removal"
+run = "run_1"
+source = "other_pipelines/uav_rul_pipeline_v13.py"
+feature_contract = "3_final_model_training_and_inference/runs/run_9/3_final_training_contract/artifacts/final_training_contract.json"
+train = "data/train.csv"
+test_cutoffs = "data/test.csv"
+channels = ["telemetry_05", "telemetry_24"]
+outer_folds = 5
+stopping_uav_fraction = 0.10
+stopping_seed = 0
+evaluation_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+bootstrap_repetitions = 10000
+bootstrap_seed = 35
+
+# PE_35 fitted this baseline and both single removals under the same protocol.
+# PE_39 refits them rather than importing them, and checks bitwise reproduction
+# against that run when it is present. Set to "" to skip the check.
+reproduction_check = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_35/runs/run_1"
+
+# Pre-declared secondary contrasts, treatment first: the marginal cost of removing
+# the second channel once the first is already gone. Adjusted over their own family.
+secondary_contrasts = [
+    ["drop_05_24", "drop_05"],
+    ["drop_05_24", "drop_24"],
+]
+
+# Tree settings, cap, rolling windows and weighting formulas are imported from
+# v13 and recorded in the run registration. No parameter search or specialist.
