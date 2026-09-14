@@ -1,5 +1,6 @@
-"""Plot completed PE_36 paired effects without fitting or selecting a model."""
+"""Plot completed PE_38 paired effects without fitting or selecting a model."""
 from pathlib import Path
+import importlib.util
 import json
 import tomllib
 
@@ -9,13 +10,20 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+SPEC = importlib.util.spec_from_file_location("pe38_runner", HERE / "run.py")
+runner = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(runner)
+
+LABELS = {"numeric_strong": "strong-tier numeric", "state_only": "state block only",
+          "medium_plus_state": "medium numeric + state", "strong_plus_state": "strong numeric + state",
+          "drop_07": "channel removed"}
 
 
 def main():
     config = tomllib.loads((HERE / "settings.toml").read_text())["study"]
     output = HERE / "runs" / config["run"] / "reporting"
     if not (output / "completion.json").exists():
-        raise RuntimeError("Finish the matched ablation before plotting.")
+        raise RuntimeError("Finish the matched representation study before plotting.")
     diagnostics = pd.DataFrame([
         {key: record[key] for key in ("arm", "fold", "features", "best_iteration", "fit_seconds")}
         for path in sorted((output.parent / "cells").glob("*.json"))
@@ -23,10 +31,9 @@ def main():
     ])
     diagnostics["selected_trees"] = diagnostics.best_iteration + 1
     diagnostics.to_csv(output / "fit_diagnostics.csv", index=False)
-    effects = pd.read_csv(output / "paired_ablation.csv").set_index("arm")
-    summary = pd.read_csv(output / "summary.csv").set_index("arm")
-    order = [f"drop_{channel.removeprefix('telemetry_')}" for channel in config["channels"]] + ["drop_all_four"]
-    effects = effects.loc[order]
+    effects = pd.read_csv(output / "paired_representations.csv")
+    order = [arm for arm in runner.ARMS if arm != "baseline"]
+    effects = effects.set_index("arm").loc[order]
     # Match the presentation palette, with axis text but no title or captions.
     plt.rcParams.update({"figure.facecolor": "white", "axes.facecolor": "white",
                          "axes.edgecolor": "#30343B", "axes.spines.top": False,
@@ -34,8 +41,8 @@ def main():
                          "font.size": 11, "axes.labelsize": 12,
                          "axes.labelcolor": "#30343B", "xtick.color": "#30343B",
                          "ytick.color": "#30343B"})
-    fig, ax = plt.subplots(figsize=(11, 6.2))
-    fig.subplots_adjust(left=0.20, right=0.985, top=0.985, bottom=0.14)
+    fig, ax = plt.subplots(figsize=(11, 5.0))
+    fig.subplots_adjust(left=0.26, right=0.985, top=0.985, bottom=0.17)
     ax.set_axisbelow(True)
     ax.grid(axis="x", color="#D9D9D9", alpha=0.45, linewidth=0.7)
     ax.axvline(0, color="#D55E00", linewidth=1.25, zorder=2)
@@ -47,37 +54,25 @@ def main():
         ax.scatter(row.rmse_change, index, color="#0072B2", s=38,
                    edgecolor="white", linewidth=0.7, zorder=3)
     ax.set_ylim(len(effects) - 0.5, -0.5)
-    labels = ["All eight" if arm == "drop_all_eight" else "All four" if arm == "drop_all_four"
-              else "telemetry_" + arm.removeprefix("drop_") for arm in order]
-    ax.set_yticks(range(len(effects)), labels)
-    ax.set_ylabel("Channel removed", labelpad=12)
-    ax.set_xlabel("RMSE change versus the 153-feature baseline (cycles)", labelpad=12)
+    ax.set_yticks(range(len(effects)), [LABELS[arm] for arm in order])
+    ax.set_ylabel(f"{config['channel']} representation", labelpad=12)
+    ax.set_xlabel("RMSE change versus the 153-feature v13 baseline (cycles)", labelpad=12)
     ax.tick_params(axis="x", labelbottom=True, labeltop=False, length=3, width=0.7, pad=6)
     ax.tick_params(axis="y", labelleft=True, labelright=False, length=0, pad=10)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_linewidth(0.7)
-    fig.savefig(output / "ablation_effects.png", dpi=240, facecolor="white",
+    fig.savefig(output / "representation_effects.png", dpi=240, facecolor="white",
                 bbox_inches="tight", pad_inches=0.025)
-    fig.savefig(output / "ablation_effects.svg", facecolor="white",
+    fig.savefig(output / "representation_effects.svg", facecolor="white",
                 bbox_inches="tight", pad_inches=0.025)
     plt.close(fig)
     report = output / "report.md"
-    marker = "![Paired channel-removal effects](ablation_effects.png)"
+    marker = "![Paired representation effects](representation_effects.png)"
     content = report.read_text(encoding="utf-8")
     if marker not in content:
         content += "\n" + marker + "\n"
-    heading = "\n## Observed outcome\n"
-    content = content.split(heading)[0]
-    individual = effects.drop(index="drop_all_four")
-    all_four = effects.loc["drop_all_four"]
-    findings = [heading, f"Baseline pooled RMSE: {summary.loc['baseline', 'rmse']:.4f} cycles; pooled R2: {summary.loc['baseline', 'r2']:.5f}.", ""]
-    if (individual.rmse_change > 0).all():
-        findings += ["Every individual channel removal slightly worsened pooled RMSE.", ""]
-    findings += [f"Removing all four changed pooled RMSE by {all_four.rmse_change:+.4f} cycles ({all_four.rmse_change_percent:+.2f}%), winning {int(all_four.improved_folds)}/5 folds. Its ordinary paired 95% interval is [{all_four.uav_bootstrap_ci95_low:+.4f}, {all_four.uav_bootstrap_ci95_high:+.4f}] cycles.", ""]
-    if (effects.interpretation == "inconclusive").all():
-        findings += ["None of the five comparisons excludes zero after adjustment for multiple comparisons. Keep the existing feature set provisionally; this screen does not justify an automatic removal or prove that every retained channel is necessary.", ""]
-    report.write_text(content + "\n".join(findings), encoding="utf-8")
-    print(output / "ablation_effects.png")
+    report.write_text(content, encoding="utf-8")
+    print(output / "representation_effects.png")
 
 
 if __name__ == "__main__":

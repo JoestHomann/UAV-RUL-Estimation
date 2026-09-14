@@ -518,6 +518,24 @@ Its standalone, resumable runner writes paired UAV-bootstrap comparisons to
 `experiments/PE_35/runs/run_1/reporting/report.md`. This is a development
 ablation and is separate from the locked comparison table below.
 
+## PE_38: telemetry 07 representation study
+
+Telemetry 07 is both degradation-associated and state-like, and takes exactly
+four values on a uniform grid. [PE_38](experiments/PE_38/README.md) tests which
+representation it should receive: v13's medium-tier numeric baseline, the deeper
+strong-tier numeric recipe, a causal discrete-state block (state, transitions,
+transition rate, run length, highest state reached and dwell share per state),
+both combinations, and removal of the channel. Six arms and 30 fits on the same
+v13 protocol as PE_35 and PE_36. State levels are derived per fold from the
+fitting UAVs only. Launch it manually with:
+
+```powershell
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_38/run.py
+```
+
+Use `--check` for setup validation without training; it also verifies that a
+truncated trajectory reproduces every state feature exactly.
+
 ## Compare and record scores
 
 [PE_37](experiments/PE_37/README.md) complements the removal studies with eight
