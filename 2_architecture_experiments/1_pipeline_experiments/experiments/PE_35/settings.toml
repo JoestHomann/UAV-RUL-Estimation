@@ -1,0 +1,17 @@
+[study]
+name = "PE_35_v13_individual_channel_ablation"
+run = "run_1"
+source = "other_pipelines/uav_rul_pipeline_v13.py"
+feature_contract = "3_final_model_training_and_inference/runs/run_9/3_final_training_contract/artifacts/final_training_contract.json"
+train = "data/train.csv"
+test_cutoffs = "data/test.csv"
+channels = ["telemetry_02", "telemetry_04", "telemetry_05", "telemetry_09", "telemetry_10", "telemetry_11", "telemetry_12", "telemetry_24"]
+outer_folds = 5
+stopping_uav_fraction = 0.10
+stopping_seed = 0
+evaluation_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+bootstrap_repetitions = 10000
+bootstrap_seed = 35
+
+# Tree settings, cap, rolling windows and weighting formulas are imported from
+# v13 and recorded in the run registration. No parameter search or specialist.

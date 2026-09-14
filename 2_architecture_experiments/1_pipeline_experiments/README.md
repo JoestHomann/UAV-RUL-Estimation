@@ -501,7 +501,45 @@ The manager does not create an implicit Cartesian product. Every experiment
 block remains one named scientific question. An `[experiment_groups.*]` table
 only orders explicitly listed experiments and invokes its declared reporter.
 
+## PE_35: v13 individual channel ablation
+
+[PE_35](experiments/PE_35/README.md) tests the v13 main XGBoost with its frozen
+153-feature recipe: baseline, removal of each unclear channel individually,
+and removal of all eight. The 50 fits share five UAV-grouped partitions and
+1,000 test-like evaluation endpoints. Early stopping uses separate training
+UAVs. Settings and features remain fixed apart from the channel removals.
+
+```powershell
+.venv/Scripts/python.exe 2_architecture_experiments/1_pipeline_experiments/experiments/PE_35/run.py --check
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_35/run.py
+```
+
+Its standalone, resumable runner writes paired UAV-bootstrap comparisons to
+`experiments/PE_35/runs/run_1/reporting/report.md`. This is a development
+ablation and is separate from the locked comparison table below.
+
 ## Compare and record scores
+
+[PE_37](experiments/PE_37/README.md) complements the removal studies with eight
+individual unclear-channel additions to the degradation/context baseline.
+It verifies and reuses PE_35's five `drop_all_eight` baseline fits, then fits
+40 new XGBoost models. Start manually with:
+
+```powershell
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_37/run.py
+```
+
+Use `--check` to validate feature sets and baseline reuse without training.
+
+For the analogous operating-condition study, [PE_36](experiments/PE_36/README.md)
+tests removal of telemetry 01, 06, 18 and 26 individually and together using
+the same v13 protocol: six arms and 30 fits. Launch it manually with:
+
+```powershell
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_36/run.py
+```
+
+Use `--check` for setup validation without training.
 
 After one or more Phase 2 studies finish:
 

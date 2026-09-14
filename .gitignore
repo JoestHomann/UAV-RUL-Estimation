@@ -261,3 +261,7 @@ __marimo__/
 # local and reproducible rather than entering Git.
 2_architecture_experiments/1_pipeline_experiments/experiments/PE_*/runs/
 2_architecture_experiments/1_pipeline_experiments/experiment_comparison.csv
+
+# Local presentation materials and temporary deck builds.
+/literature_and_planning/Presentation/
+/.codex-presentation-build/
