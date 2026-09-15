@@ -431,6 +431,7 @@ TARGET_CAPABLE_FAMILIES = {
     "lstm",
     "transformer",
     "rbf_svr",
+    "trajectory_dtw_knn",
     "calibrated_tree_blend",
     "residual_corrected_tree_ensemble",
     "heterogeneous_oof_stack",

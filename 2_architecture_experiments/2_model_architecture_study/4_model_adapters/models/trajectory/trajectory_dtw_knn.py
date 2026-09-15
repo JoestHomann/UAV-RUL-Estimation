@@ -24,6 +24,12 @@ class TrajectoryDTWKNNAdapter(ModelAdapter):
     prefix ending near the query cutoff, using a constrained multivariate DTW
     distance. The matched reference endpoint's cycle-wise remaining life is the
     prediction target for the distance-weighted k-nearest-neighbour estimate.
+
+    The reference library stores raw remaining life. The run's target policy is
+    applied to it at fitting time, so this family fits the same transformed
+    target as every other family -- a capped target stays capped rather than
+    being averaged in raw cycles -- and ``ModelAdapter.predict`` maps the
+    neighbour average back with the matching inverse.
     """
 
     family = "trajectory_dtw_knn"
@@ -47,6 +53,7 @@ class TrajectoryDTWKNNAdapter(ModelAdapter):
             training_monitor=training_monitor,
         )
         self.reference_library: Any | None = None
+        self.reference_targets: tuple[NDArray[np.float64], ...] | None = None
         self.channel_names: tuple[str, ...] | None = None
 
         neighbors = int(hyperparameters["neighbors"])
@@ -88,6 +95,19 @@ class TrajectoryDTWKNNAdapter(ModelAdapter):
         if not channel_names or tuple(references.channel_names) != channel_names:
             raise ModelAdapterError("Trajectory reference channels do not match data")
         self.reference_library = references
+        # The library's remaining life is raw; the cycles double as the cutoffs
+        # a failure-cycle policy needs, so every declared target mode resolves.
+        self.reference_targets = tuple(
+            self.target_policy.transform(
+                np.asarray(remaining_life, dtype=np.float64),
+                np.asarray(cycles, dtype=np.float64),
+            )
+            for remaining_life, cycles in zip(
+                references.remaining_life,
+                references.cycles,
+                strict=True,
+            )
+        )
         self.channel_names = channel_names
         self._is_fitted = True
 
@@ -186,7 +206,7 @@ class TrajectoryDTWKNNAdapter(ModelAdapter):
     ) -> float:
         """Retrieve one query's nearest reference lifetimes."""
 
-        if self.reference_library is None:
+        if self.reference_library is None or self.reference_targets is None:
             raise ModelAdapterError("Trajectory reference library is not fitted")
         maximum_points = int(self.hyperparameters["max_points"])
         warping_window = int(self.hyperparameters["warping_window"])
@@ -230,9 +250,7 @@ class TrajectoryDTWKNNAdapter(ModelAdapter):
             )
             if np.isfinite(distance):
                 remaining = float(
-                    self.reference_library.remaining_life[reference_number][
-                        endpoint_index
-                    ]
+                    self.reference_targets[reference_number][endpoint_index]
                 )
                 matches.append((distance, remaining))
 

@@ -45,6 +45,35 @@ def main() -> None:
         raise RuntimeError("Trajectory DTW-kNN prediction length changed")
     if not np.isfinite(predictions).all():
         raise RuntimeError("Trajectory DTW-kNN produced non-finite predictions")
+
+    # The reference library stores raw remaining life. The run's target policy
+    # is applied to it at fitting time, so this family fits the same target as
+    # every other family. Under a cap that means no neighbour average, and
+    # therefore no prediction, may exceed the cap.
+    if model.reference_targets is None:
+        raise RuntimeError("Trajectory DTW-kNN did not build its fitting targets")
+    policy = model.target_policy
+    print(f"Target policy: {policy.mode}")
+    if policy.mode == "piecewise_cap":
+        maximum = float(policy.maximum_rul)
+        library_maximum = max(
+            float(np.max(values)) for values in model.reference_targets
+        )
+        raw_maximum = max(
+            float(np.max(values))
+            for values in split.training.reference_library.remaining_life
+        )
+        if library_maximum > maximum + 1e-9:
+            raise RuntimeError("Trajectory fitting targets ignore the RUL cap")
+        if raw_maximum <= maximum:
+            raise RuntimeError(
+                "This split cannot test the cap: no raw remaining life exceeds it"
+            )
+        if predictions.max() > maximum + 1e-9:
+            raise RuntimeError("Trajectory DTW-kNN predicted above the RUL cap")
+        print(f"Raw reference maximum: {raw_maximum:.1f}")
+        print(f"Capped fitting maximum: {library_maximum:.1f} (cap {maximum:.1f})")
+        print(f"Prediction maximum: {predictions.max():.1f}")
     path = STEP_DIR / ".trajectory_dtw_knn_verification.joblib"
     try:
         model.save(path)
