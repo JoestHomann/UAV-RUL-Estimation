@@ -1,0 +1,35 @@
+[study]
+name = "PE_41_v13_difference_reference"
+run = "run_1"
+source = "other_pipelines/uav_rul_pipeline_v13.py"
+feature_contract = "3_final_model_training_and_inference/runs/run_9/3_final_training_contract/artifacts/final_training_contract.json"
+train = "data/train.csv"
+test_cutoffs = "data/test.csv"
+outer_folds = 5
+stopping_uav_fraction = 0.10
+stopping_seed = 0
+evaluation_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+bootstrap_repetitions = 10000
+bootstrap_seed = 35
+
+# The two feature families under test. Each is a suffix on the v13 column names.
+# baseline_delta   = current value minus the channel's first observed value.
+# last_minus_hist_mean = current value minus the expanding mean so far.
+baseline_difference_suffix = "baseline_delta"
+history_difference_suffix = "last_minus_hist_mean"
+
+# PE_39 fitted this exact baseline under this exact protocol. PE_41 refits it
+# rather than importing it and checks bitwise reproduction. Set to "" to skip.
+reproduction_check = "2_architecture_experiments/1_pipeline_experiments/experiments/PE_39/runs/run_1"
+
+# Pre-declared secondary contrasts, treatment first, adjusted over their own family.
+#   1. The matched head-to-head at equal feature count: which single reference wins.
+#   2-3. The marginal cost of dropping the second family once the first is gone.
+secondary_contrasts = [
+    ["drop_baseline_difference", "drop_history_difference_matched"],
+    ["drop_both", "drop_history_difference"],
+    ["drop_both", "drop_baseline_difference"],
+]
+
+# Tree settings, cap, rolling windows and weighting formulas are imported from
+# v13 and recorded in the run registration. No parameter search or specialist.
