@@ -553,6 +553,25 @@ and checks bitwise reproduction against that run. Four arms and 20 fits:
 
 Use `--check` for setup validation without training.
 
+## PE_40: how training rows are weighted
+
+v13 trains on every cycle of every UAV, so a UAV's influence scales with its
+lifetime, and lifetimes differ by a factor of 3.62. Its similarity weights
+correct for cycle position, not for UAV; the Phase-2 pipeline instead resamples
+`current20` prefixes with equal total weight per UAV, and the two have never been
+compared. [PE_40](experiments/PE_40/README.md) crosses the two factors -
+similarity weights on/off against per-UAV normalisation on/off - over four arms
+and 20 fits, with an explicit interaction term, following PE_2's precedent that
+these factors can each hurt alone and help together. The per-row training weight
+is the only thing that varies.
+
+```powershell
+.venv/Scripts/python.exe -u 2_architecture_experiments/1_pipeline_experiments/experiments/PE_40/run.py
+```
+
+Use `--check` for setup validation without training; it also writes
+`weight_diagnostics.csv` so each arm's weights can be inspected before fitting.
+
 ## Compare and record scores
 
 [PE_37](experiments/PE_37/README.md) complements the removal studies with eight

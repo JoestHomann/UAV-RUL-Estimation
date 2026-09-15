@@ -1,0 +1,24 @@
+[study]
+name = "PE_40_v13_training_row_weighting"
+run = "run_1"
+source = "other_pipelines/uav_rul_pipeline_v13.py"
+feature_contract = "3_final_model_training_and_inference/runs/run_9/3_final_training_contract/artifacts/final_training_contract.json"
+train = "data/train.csv"
+test_cutoffs = "data/test.csv"
+outer_folds = 5
+stopping_uav_fraction = 0.10
+stopping_seed = 0
+evaluation_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+bootstrap_repetitions = 10000
+bootstrap_seed = 35
+
+# Pre-declared secondary contrasts, treatment first. The 2x2 has one interaction
+# worth naming and one question the main effects do not answer on their own.
+secondary_contrasts = [
+    ["uav_equal_only", "unweighted"],
+    ["baseline", "unweighted"],
+]
+
+# Every arm uses the identical 153-feature contract and identical tree settings.
+# The ONLY thing that varies is the per-row training weight. Feature weights,
+# folds, endpoints and the unweighted early-stopping rule are held fixed.
